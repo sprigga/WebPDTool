@@ -1,0 +1,40 @@
+version: '3.8'
+
+# Development override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # Backend with hot-reload
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DEBUG: "true"
+    volumes:
+      - ./backend:/app
+      - /app/.venv  # Prevent overwriting container's venv
+    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  # Frontend with development server (instead of nginx)
+  frontend-dev:
+    image: node:18-alpine
+    container_name: webpdtool-frontend-dev
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # Prevent overwriting node_modules
+    ports:
+      - "8349:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8347
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    networks:
+      - webpdtool-network
+    depends_on:
+      - backend
+
+  # Remove production frontend in dev mode
+  frontend:
+    profiles:
+      - production

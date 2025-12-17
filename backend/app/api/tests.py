@@ -1,0 +1,454 @@
+"""
+Test Execution API Endpoints
+"""
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
+from typing import List
+from datetime import datetime
+
+from app.core.database import get_db
+from app.dependencies import get_current_active_user
+from app.models.test_session import TestSession as TestSessionModel
+from app.models.test_result import TestResult as TestResultModel
+from app.models.station import Station
+from app.models.testplan import TestPlan
+from app.schemas.test_session import (
+    TestSession,
+    TestSessionCreate,
+    TestSessionComplete,
+    TestSessionStatus,
+    TestSessionDetail
+)
+from app.schemas.test_result import (
+    TestResult,
+    TestResultCreate,
+    TestResultBatch
+)
+from app.services.test_engine import test_engine
+from app.services.instrument_manager import instrument_manager
+
+router = APIRouter()
+
+
+@router.post("/sessions", response_model=TestSession, status_code=status.HTTP_201_CREATED)
+async def create_test_session(
+    session_data: TestSessionCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Create a new test session
+
+    Args:
+        session_data: Test session creation data
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        Created test session
+    """
+    # Verify station exists
+    station = db.query(Station).filter(Station.id == session_data.station_id).first()
+    if not station:
+        raise HTTPException(status_code=404, detail="Station not found")
+
+    # Create test session
+    db_session = TestSessionModel(
+        serial_number=session_data.serial_number,
+        station_id=session_data.station_id,
+        user_id=current_user.get("id")
+    )
+
+    db.add(db_session)
+    db.commit()
+    db.refresh(db_session)
+
+    return db_session
+
+
+@router.post("/sessions/{session_id}/start", response_model=dict)
+async def start_test_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Start test execution for a session
+
+    Args:
+        session_id: Test session ID
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        Test execution status
+    """
+    # Verify session exists
+    session = db.query(TestSessionModel).filter(TestSessionModel.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Test session not found")
+
+    # Check if session already completed
+    if session.end_time:
+        raise HTTPException(
+            status_code=400,
+            detail="Test session already completed"
+        )
+
+    # Start test execution
+    try:
+        result = await test_engine.start_test_session(
+            session_id=session_id,
+            serial_number=session.serial_number,
+            station_id=session.station_id,
+            db=db
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error starting test: {str(e)}")
+
+
+@router.post("/sessions/{session_id}/stop", response_model=dict)
+async def stop_test_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Stop a running test session
+
+    Args:
+        session_id: Test session ID
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        Stop status
+    """
+    try:
+        result = await test_engine.stop_test_session(session_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error stopping test: {str(e)}")
+
+
+@router.get("/sessions/{session_id}", response_model=TestSession)
+async def get_test_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """Get test session by ID"""
+    session = db.query(TestSessionModel).filter(TestSessionModel.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Test session not found")
+
+    return session
+
+
+@router.get("/sessions/{session_id}/status", response_model=TestSessionStatus)
+async def get_test_session_status(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Get real-time test session status
+
+    Args:
+        session_id: Test session ID
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        Test session status with progress information
+    """
+    session = db.query(TestSessionModel).filter(TestSessionModel.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Test session not found")
+
+    # Get result counts
+    results = db.query(TestResultModel).filter(TestResultModel.session_id == session_id).all()
+    total_items = len(results)
+    pass_items = sum(1 for r in results if r.result == "PASS")
+    fail_items = sum(1 for r in results if r.result == "FAIL")
+
+    # Calculate elapsed time
+    elapsed_time = None
+    if session.start_time:
+        end = session.end_time if session.end_time else datetime.utcnow()
+        elapsed_time = int((end - session.start_time).total_seconds())
+
+    # Determine status
+    if session.end_time:
+        test_status = "COMPLETED" if session.final_result != "ABORT" else "ABORTED"
+    else:
+        test_status = "RUNNING"
+
+    return TestSessionStatus(
+        session_id=session.id,
+        status=test_status,
+        current_item=total_items,
+        total_items=session.total_items,
+        pass_items=pass_items,
+        fail_items=fail_items,
+        elapsed_time_seconds=elapsed_time
+    )
+
+
+@router.post("/sessions/{session_id}/results", response_model=TestResult, status_code=status.HTTP_201_CREATED)
+async def create_test_result(
+    session_id: int,
+    result_data: TestResultCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Upload a single test result
+
+    Args:
+        session_id: Test session ID
+        result_data: Test result data
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        Created test result
+    """
+    # Verify session exists
+    session = db.query(TestSessionModel).filter(TestSessionModel.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Test session not found")
+
+    # Ensure session_id matches
+    if result_data.session_id != session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="session_id in URL and body must match"
+        )
+
+    # Create test result
+    db_result = TestResultModel(**result_data.dict())
+    db.add(db_result)
+    db.commit()
+    db.refresh(db_result)
+
+    return db_result
+
+
+@router.post("/sessions/{session_id}/results/batch", response_model=dict)
+async def create_test_results_batch(
+    session_id: int,
+    batch_data: TestResultBatch,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Batch upload multiple test results
+
+    Args:
+        session_id: Test session ID
+        batch_data: Batch of test results
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        Number of results created
+    """
+    # Verify session exists
+    session = db.query(TestSessionModel).filter(TestSessionModel.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Test session not found")
+
+    # Ensure session_id matches
+    if batch_data.session_id != session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="session_id in URL and body must match"
+        )
+
+    # Create test results
+    created_count = 0
+    for result_data in batch_data.results:
+        db_result = TestResultModel(**result_data.dict())
+        db.add(db_result)
+        created_count += 1
+
+    db.commit()
+
+    return {
+        "message": "Test results created successfully",
+        "created_count": created_count
+    }
+
+
+@router.post("/sessions/{session_id}/complete", response_model=TestSession)
+async def complete_test_session(
+    session_id: int,
+    complete_data: TestSessionComplete,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Complete a test session
+
+    Args:
+        session_id: Test session ID
+        complete_data: Test completion data
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        Updated test session
+    """
+    # Get test session
+    session = db.query(TestSessionModel).filter(TestSessionModel.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Test session not found")
+
+    # Check if already completed
+    if session.end_time:
+        raise HTTPException(
+            status_code=400,
+            detail="Test session already completed"
+        )
+
+    # Update session
+    session.end_time = datetime.utcnow()
+    session.final_result = complete_data.final_result
+    session.total_items = complete_data.total_items
+    session.pass_items = complete_data.pass_items
+    session.fail_items = complete_data.fail_items
+    session.test_duration_seconds = complete_data.test_duration_seconds
+
+    db.commit()
+    db.refresh(session)
+
+    return session
+
+
+@router.get("/instruments/status", response_model=dict)
+async def get_instruments_status(
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Get status of all instruments
+
+    Args:
+        current_user: Current authenticated user
+
+    Returns:
+        Instrument status information
+    """
+    try:
+        status = instrument_manager.get_status()
+        return status
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting instrument status: {str(e)}"
+        )
+
+
+@router.post("/instruments/{instrument_id}/reset", response_model=dict)
+async def reset_instrument(
+    instrument_id: str,
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Reset a specific instrument
+
+    Args:
+        instrument_id: Instrument ID to reset
+        current_user: Current authenticated user
+
+    Returns:
+        Reset status
+    """
+    try:
+        await instrument_manager.reset_instrument(instrument_id)
+        return {
+            "instrument_id": instrument_id,
+            "status": "reset_completed",
+            "message": f"Instrument {instrument_id} has been reset"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error resetting instrument: {str(e)}"
+        )
+
+    return session
+
+
+@router.get("/sessions/{session_id}/results", response_model=List[TestResult])
+async def get_session_results(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Get all test results for a session
+
+    Args:
+        session_id: Test session ID
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        List of test results ordered by item_no
+    """
+    # Verify session exists
+    session = db.query(TestSessionModel).filter(TestSessionModel.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Test session not found")
+
+    # Get results
+    results = db.query(TestResultModel).filter(
+        TestResultModel.session_id == session_id
+    ).order_by(TestResultModel.item_no).all()
+
+    return results
+
+
+@router.get("/sessions", response_model=List[TestSession])
+async def list_test_sessions(
+    station_id: int = None,
+    serial_number: str = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    List test sessions with optional filtering
+
+    Args:
+        station_id: Filter by station ID
+        serial_number: Filter by serial number (partial match)
+        limit: Maximum number of results
+        offset: Number of results to skip
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        List of test sessions ordered by start_time descending
+    """
+    query = db.query(TestSessionModel)
+
+    if station_id:
+        query = query.filter(TestSessionModel.station_id == station_id)
+
+    if serial_number:
+        query = query.filter(TestSessionModel.serial_number.like(f"%{serial_number}%"))
+
+    sessions = query.order_by(
+        desc(TestSessionModel.start_time)
+    ).limit(limit).offset(offset).all()
+
+    return sessions

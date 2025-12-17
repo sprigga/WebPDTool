@@ -1,0 +1,962 @@
+<template>
+  <div class="test-main-container">
+    <!-- Top Info Bar -->
+    <el-card class="info-card" shadow="never">
+      <el-row :gutter="20" align="middle">
+        <el-col :span="5">
+          <div class="info-item">
+            <span class="info-label">專案:</span>
+            <span class="info-value">{{ currentProject?.project_code || '-' }}</span>
+          </div>
+        </el-col>
+        <el-col :span="5">
+          <div class="info-item">
+            <span class="info-label">站別:</span>
+            <span class="info-value">{{ currentStation?.station_code || '-' }}</span>
+          </div>
+        </el-col>
+        <el-col :span="5">
+          <div class="info-item">
+            <span class="info-label">使用者:</span>
+            <span class="info-value">{{ currentUser?.username || '-' }}</span>
+          </div>
+        </el-col>
+        <el-col :span="5">
+          <div class="info-item">
+            <span class="info-label">版本:</span>
+            <span class="info-value">v1.0.0</span>
+          </div>
+        </el-col>
+        <el-col :span="4" style="text-align: right">
+          <el-button type="danger" @click="handleLogout">
+            登出
+          </el-button>
+        </el-col>
+      </el-row>
+    </el-card>
+
+    <!-- Configuration Panel -->
+    <el-card class="config-card">
+      <el-row :gutter="20" align="middle">
+        <el-col :span="6">
+          <el-button 
+            type="primary" 
+            size="large"
+            @click="showSFCConfig = true"
+            style="width: 100%"
+          >
+            SFC 設定
+          </el-button>
+        </el-col>
+        <el-col :span="6">
+          <el-checkbox 
+            v-model="sfcEnabled" 
+            size="large"
+            @change="handleSFCToggle"
+          >
+            啟用 SFC
+          </el-checkbox>
+          <el-checkbox 
+            v-model="runAllTests" 
+            size="large"
+            style="margin-left: 20px"
+          >
+            全測模式
+          </el-checkbox>
+        </el-col>
+        <el-col :span="4">
+          <div class="loop-counter">
+            <span class="loop-label">Loop:</span>
+            <div class="loop-display">{{ loopCount }}</div>
+          </div>
+        </el-col>
+        <el-col :span="8">
+          <el-select
+            v-model="selectedTestPlan"
+            placeholder="選擇測試計劃"
+            size="large"
+            style="width: 100%"
+            @change="handleTestPlanChange"
+          >
+            <el-option
+              v-for="plan in testPlans"
+              :key="plan.id"
+              :label="plan.plan_name"
+              :value="plan.id"
+            />
+          </el-select>
+        </el-col>
+      </el-row>
+    </el-card>
+
+    <!-- Main Content -->
+    <el-row :gutter="20" style="margin-top: 20px">
+      <!-- Left Panel: Test Plan Table -->
+      <el-col :span="16">
+        <el-card class="test-plan-card" shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <h3>測試計劃</h3>
+              <el-tag v-if="testPlanItems.length > 0" type="info">
+                共 {{ testPlanItems.length }} 項
+              </el-tag>
+            </div>
+          </template>
+          
+          <el-table
+            :data="testPlanItems"
+            :height="400"
+            stripe
+            highlight-current-row
+            :row-class-name="getRowClassName"
+          >
+            <el-table-column prop="item_no" label="序號" width="70" align="center" />
+            <el-table-column prop="item_name" label="測試項目" min-width="180" />
+            <el-table-column prop="test_command" label="測試指令" width="140" />
+            <el-table-column label="下限" width="100" align="right">
+              <template #default="{ row }">
+                {{ formatNumber(row.lower_limit) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="上限" width="100" align="right">
+              <template #default="{ row }">
+                {{ formatNumber(row.upper_limit) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="unit" label="單位" width="80" align="center" />
+            <el-table-column label="狀態" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.status" :type="getStatusTagType(row.status)" size="small">
+                  {{ row.status }}
+                </el-tag>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="測量值" width="120" align="right">
+              <template #default="{ row }">
+                <span v-if="row.measured_value !== null" :class="getValueClass(row)">
+                  {{ formatNumber(row.measured_value) }}
+                </span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-col>
+
+      <!-- Right Panel: Control & Status -->
+      <el-col :span="8">
+        <!-- Barcode Input & Control -->
+        <el-card class="control-card" shadow="hover">
+          <template #header>
+            <h3>測試控制</h3>
+          </template>
+          
+          <div class="barcode-section">
+            <el-input
+              v-model="barcode"
+              placeholder="請掃描或輸入產品序號"
+              size="large"
+              :disabled="testing"
+              @keyup.enter="handleStartTest"
+              clearable
+            >
+              <template #prepend>
+                <el-icon><Document /></el-icon>
+              </template>
+            </el-input>
+          </div>
+
+          <div class="control-buttons">
+            <el-button
+              type="success"
+              size="large"
+              :loading="testing"
+              :disabled="!barcode || testing"
+              @click="handleStartTest"
+              style="width: 100%"
+            >
+              <el-icon v-if="!testing"><VideoPlay /></el-icon>
+              {{ testing ? '測試進行中...' : '開始測試' }}
+            </el-button>
+            
+            <el-button
+              v-if="testing"
+              type="danger"
+              size="large"
+              @click="handleStopTest"
+              style="width: 100%; margin-top: 10px"
+            >
+              <el-icon><VideoPause /></el-icon>
+              停止測試
+            </el-button>
+          </div>
+
+          <!-- Test Progress -->
+          <div v-if="currentSession" class="progress-section">
+            <el-divider />
+            <div class="progress-info">
+              <div class="progress-item">
+                <span class="progress-label">進度:</span>
+                <span class="progress-value">
+                  {{ testStatus.current_item || 0 }} / {{ testStatus.total_items || 0 }}
+                </span>
+              </div>
+              <div class="progress-item">
+                <span class="progress-label">通過:</span>
+                <span class="progress-value success">{{ testStatus.pass_items || 0 }}</span>
+              </div>
+              <div class="progress-item">
+                <span class="progress-label">失敗:</span>
+                <span class="progress-value fail">{{ testStatus.fail_items || 0 }}</span>
+              </div>
+              <div class="progress-item">
+                <span class="progress-label">時間:</span>
+                <span class="progress-value">{{ formatElapsedTime(testStatus.elapsed_time_seconds) }}</span>
+              </div>
+            </div>
+            <el-progress
+              :percentage="progressPercentage"
+              :status="progressStatus"
+              :stroke-width="15"
+              style="margin-top: 10px"
+            />
+          </div>
+
+          <!-- Test Result Display -->
+          <div v-if="testCompleted" class="result-display">
+            <el-divider />
+            <div :class="['result-banner', finalResult.toLowerCase()]">
+              <el-icon v-if="finalResult === 'PASS'" class="result-icon"><CircleCheck /></el-icon>
+              <el-icon v-else class="result-icon"><CircleClose /></el-icon>
+              <span class="result-text">{{ finalResult }}</span>
+            </div>
+          </div>
+        </el-card>
+
+        <!-- Status Display -->
+        <el-card class="status-card" shadow="hover" style="margin-top: 20px">
+          <template #header>
+            <h3>系統狀態</h3>
+          </template>
+          
+          <div class="status-content">
+            <el-scrollbar height="200px">
+              <div
+                v-for="(msg, index) in statusMessages"
+                :key="index"
+                :class="['status-message', msg.type]"
+              >
+                <span class="status-time">{{ msg.time }}</span>
+                <span class="status-text">{{ msg.text }}</span>
+              </div>
+            </el-scrollbar>
+          </div>
+        </el-card>
+
+        <!-- Error Display -->
+        <el-card v-if="errorCode" class="error-card" shadow="hover" style="margin-top: 20px">
+          <template #header>
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <h3>錯誤訊息</h3>
+              <el-button size="small" @click="errorCode = ''">清除</el-button>
+            </div>
+          </template>
+          <div class="error-content">
+            {{ errorCode }}
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- SFC Configuration Dialog -->
+    <el-dialog
+      v-model="showSFCConfig"
+      title="SFC 配置"
+      width="600px"
+    >
+      <el-form :model="sfcConfig" label-width="120px">
+        <el-form-item label="SFC 路徑">
+          <el-input v-model="sfcConfig.path" />
+        </el-form-item>
+        <el-form-item label="站點 ID">
+          <el-input v-model="sfcConfig.stationID" />
+        </el-form-item>
+        <el-form-item label="線路名稱">
+          <el-input v-model="sfcConfig.lineName" />
+        </el-form-item>
+        <el-form-item label="治具 ID">
+          <el-input v-model="sfcConfig.fixtureID" />
+        </el-form-item>
+        <el-form-item label="資料庫">
+          <el-input v-model="sfcConfig.database" />
+        </el-form-item>
+        <el-form-item label="日誌路徑">
+          <el-input v-model="sfcConfig.logPath" />
+        </el-form-item>
+        <el-form-item label="Loop 測試">
+          <el-switch v-model="sfcConfig.loopEnabled" />
+          <el-input-number
+            v-if="sfcConfig.loopEnabled"
+            v-model="sfcConfig.loopCount"
+            :min="1"
+            :max="9999"
+            style="margin-left: 10px"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showSFCConfig = false">取消</el-button>
+        <el-button type="primary" @click="saveSFCConfig">儲存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { 
+  Document, 
+  VideoPlay, 
+  VideoPause, 
+  CircleCheck, 
+  CircleClose 
+} from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
+import { useProjectStore } from '@/stores/project'
+import {
+  createTestSession,
+  startTestExecution,
+  stopTestExecution,
+  getTestSessionStatus,
+  getSessionResults
+} from '@/api/tests'
+import { getStationTestPlan } from '@/api/testplans'
+
+const router = useRouter()
+const authStore = useAuthStore()
+const projectStore = useProjectStore()
+
+// Current user and station
+const currentUser = computed(() => authStore.user)
+const currentProject = computed(() => projectStore.currentProject)
+const currentStation = computed(() => projectStore.currentStation)
+
+// Configuration
+const sfcEnabled = ref(false)
+const runAllTests = ref(false)
+const loopCount = ref(0)
+const showSFCConfig = ref(false)
+const sfcConfig = reactive({
+  path: '',
+  stationID: '',
+  lineName: '',
+  fixtureID: '',
+  database: '',
+  logPath: '',
+  loopEnabled: false,
+  loopCount: 1
+})
+
+// Test plan
+const testPlans = ref([])
+const selectedTestPlan = ref(null)
+const testPlanItems = ref([])
+
+// Test control
+const barcode = ref('')
+const testing = ref(false)
+const testCompleted = ref(false)
+const currentSession = ref(null)
+const testStatus = ref({
+  status: 'IDLE',
+  current_item: 0,
+  total_items: 0,
+  pass_items: 0,
+  fail_items: 0,
+  elapsed_time_seconds: 0
+})
+const finalResult = ref('')
+
+// Status messages
+const statusMessages = ref([])
+const errorCode = ref('')
+
+// Polling
+let statusPollInterval = null
+
+// Computed
+const progressPercentage = computed(() => {
+  if (!testStatus.value.total_items) return 0
+  return Math.round((testStatus.value.current_item / testStatus.value.total_items) * 100)
+})
+
+const progressStatus = computed(() => {
+  if (testStatus.value.status === 'COMPLETED') {
+    return finalResult.value === 'PASS' ? 'success' : 'exception'
+  }
+  if (testStatus.value.status === 'ABORTED') return 'exception'
+  return undefined
+})
+
+// Methods
+const formatNumber = (value) => {
+  if (value === null || value === undefined) return '-'
+  return Number(value).toFixed(3)
+}
+
+const formatElapsedTime = (seconds) => {
+  if (!seconds) return '00:00'
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+}
+
+const getStatusTagType = (status) => {
+  const typeMap = {
+    'PASS': 'success',
+    'FAIL': 'danger',
+    'SKIP': 'info',
+    'ERROR': 'warning'
+  }
+  return typeMap[status] || 'info'
+}
+
+const getRowClassName = ({ row }) => {
+  if (row.status === 'PASS') return 'row-pass'
+  if (row.status === 'FAIL') return 'row-fail'
+  if (row.status === 'ERROR') return 'row-error'
+  return ''
+}
+
+const getValueClass = (row) => {
+  if (row.status === 'PASS') return 'value-pass'
+  if (row.status === 'FAIL') return 'value-fail'
+  return ''
+}
+
+const addStatusMessage = (text, type = 'info') => {
+  const time = new Date().toLocaleTimeString()
+  statusMessages.value.unshift({ time, text, type })
+  if (statusMessages.value.length > 100) {
+    statusMessages.value.pop()
+  }
+}
+
+const loadTestPlan = async () => {
+  if (!currentStation.value) {
+    addStatusMessage('請先選擇站別', 'warning')
+    return
+  }
+
+  try {
+    addStatusMessage('載入測試計劃...', 'info')
+    const items = await getStationTestPlan(currentStation.value.id)
+    testPlanItems.value = items.map(item => ({
+      ...item,
+      status: null,
+      measured_value: null
+    }))
+    testStatus.value.total_items = items.length
+    addStatusMessage(`已載入 ${items.length} 個測試項目`, 'success')
+  } catch (error) {
+    console.error('Failed to load test plan:', error)
+    addStatusMessage('載入測試計劃失敗: ' + error.message, 'error')
+    ElMessage.error('載入測試計劃失敗')
+  }
+}
+
+const handleTestPlanChange = () => {
+  loadTestPlan()
+}
+
+const handleSFCToggle = () => {
+  if (sfcEnabled.value) {
+    addStatusMessage('SFC 已啟用', 'success')
+  } else {
+    addStatusMessage('SFC 已停用', 'info')
+  }
+}
+
+const saveSFCConfig = () => {
+  ElMessage.success('SFC 配置已儲存')
+  showSFCConfig.value = false
+  addStatusMessage('SFC 配置已更新', 'success')
+}
+
+const handleStartTest = async () => {
+  if (!barcode.value.trim()) {
+    ElMessage.warning('請輸入產品序號')
+    return
+  }
+
+  if (!currentStation.value) {
+    ElMessage.warning('請先選擇站別')
+    return
+  }
+
+  if (testPlanItems.value.length === 0) {
+    ElMessage.warning('請先載入測試計劃')
+    return
+  }
+
+  testing.value = true
+  testCompleted.value = false
+  errorCode.value = ''
+  
+  // Reset test plan items status
+  testPlanItems.value.forEach(item => {
+    item.status = null
+    item.measured_value = null
+  })
+
+  try {
+    addStatusMessage(`開始測試: ${barcode.value}`, 'info')
+    
+    // Create test session
+    const session = await createTestSession({
+      serial_number: barcode.value.trim(),
+      station_id: currentStation.value.id
+    })
+    
+    currentSession.value = session
+    addStatusMessage(`測試會話已創建 (ID: ${session.id})`, 'success')
+
+    // Start test execution
+    await startTestExecution(session.id)
+    addStatusMessage('測試執行已啟動', 'success')
+    
+    testStatus.value.status = 'RUNNING'
+
+    // Start polling
+    startStatusPolling()
+
+  } catch (error) {
+    console.error('Failed to start test:', error)
+    const errorMsg = error.response?.data?.detail || error.message || '未知錯誤'
+    addStatusMessage(`開始測試失敗: ${errorMsg}`, 'error')
+    errorCode.value = `啟動失敗: ${errorMsg}`
+    ElMessage.error('開始測試失敗')
+    testing.value = false
+    currentSession.value = null
+  }
+}
+
+const handleStopTest = async () => {
+  if (!currentSession.value) return
+
+  try {
+    await ElMessageBox.confirm('確定要停止測試嗎？', '確認', {
+      confirmButtonText: '確定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+
+    await stopTestExecution(currentSession.value.id)
+    addStatusMessage('測試已停止', 'warning')
+    stopStatusPolling()
+    testing.value = false
+    testStatus.value.status = 'ABORTED'
+    
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Failed to stop test:', error)
+      addStatusMessage('停止測試失敗: ' + error.message, 'error')
+      ElMessage.error('停止測試失敗')
+    }
+  }
+}
+
+const startStatusPolling = () => {
+  if (statusPollInterval) {
+    clearInterval(statusPollInterval)
+  }
+
+  statusPollInterval = setInterval(async () => {
+    if (!currentSession.value) return
+
+    try {
+      // Get status
+      const status = await getTestSessionStatus(currentSession.value.id)
+      testStatus.value = status
+
+      // Get results
+      const results = await getSessionResults(currentSession.value.id)
+      
+      // Update test plan items with results
+      results.forEach(result => {
+        const item = testPlanItems.value.find(i => i.item_no === result.item_no)
+        if (item) {
+          item.status = result.result
+          item.measured_value = result.measured_value
+        }
+      })
+
+      // Check if completed
+      if (status.status === 'COMPLETED' || status.status === 'ABORTED') {
+        stopStatusPolling()
+        testing.value = false
+        testCompleted.value = true
+        
+        // Determine final result
+        if (status.status === 'ABORTED') {
+          finalResult.value = 'ABORT'
+          addStatusMessage('測試已中止', 'warning')
+        } else if (status.fail_items > 0) {
+          finalResult.value = 'FAIL'
+          addStatusMessage(`測試完成: FAIL (${status.pass_items}/${status.total_items} 通過)`, 'error')
+          errorCode.value = `測試失敗: ${status.fail_items} 項未通過`
+        } else {
+          finalResult.value = 'PASS'
+          addStatusMessage(`測試完成: PASS (${status.pass_items}/${status.total_items} 通過)`, 'success')
+        }
+
+        // Increment loop counter
+        if (sfcConfig.loopEnabled) {
+          loopCount.value++
+        }
+
+        // Clear barcode after test
+        setTimeout(() => {
+          barcode.value = ''
+        }, 2000)
+      }
+
+    } catch (error) {
+      console.error('Failed to poll status:', error)
+      // Don't stop polling on error, just log it
+    }
+  }, 1000) // Poll every second
+}
+
+const stopStatusPolling = () => {
+  if (statusPollInterval) {
+    clearInterval(statusPollInterval)
+    statusPollInterval = null
+  }
+}
+
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('確定要登出嗎？', '確認', {
+      confirmButtonText: '確定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+
+    authStore.logout()
+    router.push('/login')
+  } catch (error) {
+    // User cancelled
+  }
+}
+
+// Watchers
+watch(() => currentStation.value, (newVal) => {
+  if (newVal) {
+    loadTestPlan()
+  }
+})
+
+// Lifecycle
+onMounted(() => {
+  addStatusMessage('系統就緒', 'success')
+  
+  if (currentStation.value) {
+    loadTestPlan()
+  }
+  
+  // Load SFC config from localStorage
+  const savedConfig = localStorage.getItem('sfcConfig')
+  if (savedConfig) {
+    Object.assign(sfcConfig, JSON.parse(savedConfig))
+  }
+})
+
+onUnmounted(() => {
+  stopStatusPolling()
+  
+  // Save SFC config to localStorage
+  localStorage.setItem('sfcConfig', JSON.stringify(sfcConfig))
+})
+</script>
+
+<style scoped>
+.test-main-container {
+  padding: 20px;
+  background-color: #f5f7fa;
+  min-height: calc(100vh - 60px);
+}
+
+/* Info Card */
+.info-card {
+  margin-bottom: 20px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  font-size: 15px;
+}
+
+.info-label {
+  font-weight: bold;
+  color: #606266;
+  margin-right: 8px;
+}
+
+.info-value {
+  color: #409eff;
+  font-weight: 500;
+}
+
+/* Config Card */
+.config-card {
+  margin-bottom: 20px;
+}
+
+.loop-counter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.loop-label {
+  font-size: 16px;
+  font-weight: bold;
+  color: #606266;
+}
+
+.loop-display {
+  background: linear-gradient(to bottom, #1e3c72, #2a5298);
+  color: #00ff00;
+  font-family: 'Courier New', monospace;
+  font-size: 28px;
+  font-weight: bold;
+  padding: 5px 20px;
+  border-radius: 4px;
+  border: 2px solid #333;
+  min-width: 80px;
+  text-align: center;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+/* Card Headers */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: bold;
+  color: #303133;
+}
+
+/* Test Plan Table */
+.test-plan-card :deep(.el-table) {
+  font-size: 13px;
+}
+
+.test-plan-card :deep(.el-table th) {
+  background-color: #f5f7fa;
+  font-weight: bold;
+}
+
+.test-plan-card :deep(.row-pass) {
+  background-color: #f0f9ff;
+}
+
+.test-plan-card :deep(.row-fail) {
+  background-color: #fef0f0;
+}
+
+.test-plan-card :deep(.row-error) {
+  background-color: #fdf6ec;
+}
+
+.value-pass {
+  color: #67c23a;
+  font-weight: bold;
+}
+
+.value-fail {
+  color: #f56c6c;
+  font-weight: bold;
+}
+
+/* Control Card */
+.control-card {
+  height: fit-content;
+}
+
+.barcode-section {
+  margin-bottom: 20px;
+}
+
+.control-buttons {
+  margin-bottom: 10px;
+}
+
+/* Progress Section */
+.progress-section {
+  margin-top: 10px;
+}
+
+.progress-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.progress-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+}
+
+.progress-label {
+  font-size: 14px;
+  color: #606266;
+  font-weight: 500;
+}
+
+.progress-value {
+  font-size: 16px;
+  font-weight: bold;
+  color: #303133;
+}
+
+.progress-value.success {
+  color: #67c23a;
+}
+
+.progress-value.fail {
+  color: #f56c6c;
+}
+
+/* Result Display */
+.result-display {
+  margin-top: 10px;
+}
+
+.result-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  border-radius: 8px;
+  font-size: 28px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.result-banner.pass {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.result-banner.fail {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(245, 87, 108, 0.4);
+}
+
+.result-banner.abort {
+  background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+  color: #333;
+}
+
+.result-icon {
+  font-size: 36px;
+  margin-right: 12px;
+}
+
+.result-text {
+  letter-spacing: 2px;
+}
+
+/* Status Card */
+.status-card {
+  height: fit-content;
+}
+
+.status-content {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.status-message {
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  border-radius: 3px;
+  display: flex;
+  gap: 10px;
+}
+
+.status-message.info {
+  background-color: #f0f9ff;
+  color: #0284c7;
+}
+
+.status-message.success {
+  background-color: #f0fdf4;
+  color: #15803d;
+}
+
+.status-message.warning {
+  background-color: #fffbeb;
+  color: #b45309;
+}
+
+.status-message.error {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.status-time {
+  font-weight: bold;
+  min-width: 70px;
+}
+
+.status-text {
+  flex: 1;
+}
+
+/* Error Card */
+.error-card {
+  border: 2px solid #f56c6c;
+}
+
+.error-content {
+  background-color: #fef0f0;
+  color: #f56c6c;
+  padding: 15px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .info-item {
+    font-size: 13px;
+  }
+  
+  .loop-display {
+    font-size: 24px;
+    min-width: 60px;
+  }
+}
+</style>
