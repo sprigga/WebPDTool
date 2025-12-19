@@ -8,13 +8,14 @@
             <el-button
               type="primary"
               :icon="Upload"
-              @click="showUploadDialog = true"
+              @click="handleShowUploadDialog"
             >
               上傳 CSV
             </el-button>
             <el-button
               type="success"
               :icon="Plus"
+              :disabled="!currentStation"
               @click="handleAddItem"
             >
               新增項目
@@ -53,20 +54,39 @@
 
         <el-table-column prop="sequence_order" label="序號" width="80" sortable />
 
-        <el-table-column prop="item_name" label="測試項目" min-width="200" />
+        <el-table-column prop="item_name" label="測試項目" min-width="150" />
+
+        <el-table-column prop="item_key" label="項目鍵值" width="120" />
 
         <el-table-column prop="test_type" label="測試類型" width="120" />
+
+        <el-table-column prop="execute_name" label="執行名稱" width="120" />
+
+        <el-table-column prop="case_type" label="案例類型" width="100" />
+
+        <el-table-column prop="value_type" label="數值類型" width="100" />
+
+        <el-table-column prop="limit_type" label="限制類型" width="100" />
 
         <el-table-column label="限制值" width="180">
           <template #default="{ row }">
             <span v-if="row.lower_limit !== null || row.upper_limit !== null">
               {{ row.lower_limit ?? '-' }} ~ {{ row.upper_limit ?? '-' }}
             </span>
+            <span v-else-if="row.eq_limit">= {{ row.eq_limit }}</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="狀態" width="80">
+        <el-table-column prop="command" label="命令" min-width="200" show-overflow-tooltip />
+
+        <el-table-column prop="timeout" label="超時(ms)" width="100" />
+
+        <el-table-column prop="wait_msec" label="等待(ms)" width="100" />
+
+        <el-table-column prop="use_result" label="使用結果" width="120" />
+
+        <el-table-column label="狀態" width="80" fixed="right">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'">
               {{ row.enabled ? '啟用' : '停用' }}
@@ -107,6 +127,50 @@
       width="500px"
     >
       <el-form :model="uploadForm" label-width="120px">
+        <!-- 新增: 選擇專案 -->
+        <el-form-item label="選擇專案">
+          <el-select
+            v-model="uploadForm.projectId"
+            placeholder="請選擇專案"
+            style="width: 100%"
+            filterable
+            @change="handleProjectChange"
+          >
+            <el-option
+              v-for="project in projectStore.projects"
+              :key="project.id"
+              :label="`${project.project_code} - ${project.project_name}`"
+              :value="project.id"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="選擇站別">
+          <el-select
+            v-model="uploadForm.stationId"
+            placeholder="請選擇站別"
+            style="width: 100%"
+            filterable
+            :disabled="!uploadForm.projectId"
+          >
+            <el-option
+              v-for="station in filteredStations"
+              :key="station.id"
+              :label="`${station.station_code} - ${station.station_name}`"
+              :value="station.id"
+            />
+          </el-select>
+        </el-form-item>
+
+        <!-- 新增: 測試計劃名稱 -->
+        <el-form-item label="測試計劃名稱">
+          <el-input
+            v-model="uploadForm.testPlanName"
+            placeholder="請輸入測試計劃名稱(選填)"
+            style="width: 100%"
+          />
+        </el-form-item>
+
         <el-form-item label="CSV 檔案">
           <el-upload
             ref="uploadRef"
@@ -138,7 +202,7 @@
         <el-button
           type="primary"
           :loading="uploading"
-          :disabled="!uploadForm.file"
+          :disabled="!uploadForm.file || !uploadForm.stationId || !uploadForm.projectId"
           @click="handleUpload"
         >
           上傳
@@ -150,7 +214,7 @@
     <el-dialog
       v-model="showEditDialog"
       :title="editingItem.id ? '編輯測試項目' : '新增測試項目'"
-      width="600px"
+      width="800px"
     >
       <el-form
         ref="editFormRef"
@@ -158,45 +222,143 @@
         :rules="editFormRules"
         label-width="120px"
       >
-        <el-form-item label="測試項目名稱" prop="item_name">
-          <el-input v-model="editingItem.item_name" />
+        <el-divider content-position="left">基本資訊</el-divider>
+
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="測試項目名稱" prop="item_name">
+              <el-input v-model="editingItem.item_name" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="項目鍵值">
+              <el-input v-model="editingItem.item_key" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="測試類型" prop="test_type">
+              <el-input v-model="editingItem.test_type" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="執行名稱">
+              <el-input v-model="editingItem.execute_name" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="案例類型">
+              <el-input v-model="editingItem.case_type" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="序號" prop="sequence_order">
+              <el-input-number v-model="editingItem.sequence_order" :min="1" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-divider content-position="left">數值與限制</el-divider>
+
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="數值類型">
+              <el-input v-model="editingItem.value_type" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="限制類型">
+              <el-input v-model="editingItem.limit_type" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="下限值">
+              <el-input-number
+                v-model="editingItem.lower_limit"
+                :precision="6"
+                :controls="false"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="上限值">
+              <el-input-number
+                v-model="editingItem.upper_limit"
+                :precision="6"
+                :controls="false"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="等於限制">
+              <el-input v-model="editingItem.eq_limit" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="單位">
+              <el-input v-model="editingItem.unit" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="測量值">
+              <el-input v-model="editingItem.measure_value" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-divider content-position="left">執行設定</el-divider>
+
+        <el-form-item label="命令">
+          <el-input v-model="editingItem.command" type="textarea" :rows="2" />
         </el-form-item>
 
-        <el-form-item label="測試類型" prop="test_type">
-          <el-input v-model="editingItem.test_type" />
-        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="超時時間(ms)">
+              <el-input-number v-model="editingItem.timeout" :min="0" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="等待時間(ms)">
+              <el-input-number v-model="editingItem.wait_msec" :min="0" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="使用結果">
+              <el-input v-model="editingItem.use_result" />
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-        <el-form-item label="下限值">
-          <el-input-number
-            v-model="editingItem.lower_limit"
-            :precision="6"
-            :controls="false"
-          />
-        </el-form-item>
-
-        <el-form-item label="上限值">
-          <el-input-number
-            v-model="editingItem.upper_limit"
-            :precision="6"
-            :controls="false"
-          />
-        </el-form-item>
-
-        <el-form-item label="單位">
-          <el-input v-model="editingItem.unit" />
-        </el-form-item>
-
-        <el-form-item label="序號" prop="sequence_order">
-          <el-input-number v-model="editingItem.sequence_order" :min="1" />
-        </el-form-item>
-
-        <el-form-item label="狀態">
-          <el-switch
-            v-model="editingItem.enabled"
-            active-text="啟用"
-            inactive-text="停用"
-          />
-        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="通過/失敗">
+              <el-input v-model="editingItem.pass_or_fail" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="狀態">
+              <el-switch
+                v-model="editingItem.enabled"
+                active-text="啟用"
+                inactive-text="停用"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
 
       <template #footer>
@@ -224,6 +386,12 @@ import {
 const projectStore = useProjectStore()
 const currentStation = computed(() => projectStore.currentStation)
 
+// 新增: 根據選擇的專案過濾站別
+const filteredStations = computed(() => {
+  if (!uploadForm.projectId) return []
+  return projectStore.stations.filter(station => station.project_id === uploadForm.projectId)
+})
+
 const testPlanItems = ref([])
 const selectedItems = ref([])
 const loading = ref(false)
@@ -233,6 +401,9 @@ const showEditDialog = ref(false)
 
 const uploadForm = reactive({
   file: null,
+  projectId: null,  // 新增 projectId
+  stationId: null,
+  testPlanName: '',  // 新增 testPlanName
   replaceExisting: true
 })
 
@@ -244,7 +415,20 @@ const editingItem = reactive({
   upper_limit: null,
   unit: '',
   sequence_order: 1,
-  enabled: true
+  enabled: true,
+  // 新增欄位
+  item_key: '',
+  value_type: '',
+  limit_type: '',
+  eq_limit: '',
+  pass_or_fail: '',
+  measure_value: '',
+  execute_name: '',
+  case_type: '',
+  command: '',
+  timeout: null,
+  use_result: '',
+  wait_msec: null
 })
 
 const editFormRules = {
@@ -275,6 +459,30 @@ const loadTestPlan = async () => {
   }
 }
 
+// Handle show upload dialog
+const handleShowUploadDialog = () => {
+  // 設定預設專案和站別為當前專案和站別(如果有的話)
+  uploadForm.projectId = projectStore.currentProject?.id || null
+  uploadForm.stationId = currentStation.value?.id || null
+  showUploadDialog.value = true
+}
+
+// 新增: 處理專案變更
+const handleProjectChange = async (projectId) => {
+  // 清空站別選擇
+  uploadForm.stationId = null
+
+  // 載入該專案的站別列表
+  if (projectId) {
+    try {
+      await projectStore.fetchProjectStations(projectId)
+    } catch (error) {
+      console.error('Failed to load stations:', error)
+      ElMessage.error('載入站別列表失敗')
+    }
+  }
+}
+
 // Handle file selection
 const handleFileChange = (file) => {
   uploadForm.file = file.raw
@@ -286,6 +494,17 @@ const handleFileRemove = () => {
 
 // Handle CSV upload
 const handleUpload = async () => {
+  // 修正: 檢查是否選擇專案、站別和檔案
+  if (!uploadForm.projectId) {
+    ElMessage.warning('請選擇專案')
+    return
+  }
+
+  if (!uploadForm.stationId) {
+    ElMessage.warning('請選擇站別')
+    return
+  }
+
   if (!uploadForm.file) {
     ElMessage.warning('請選擇檔案')
     return
@@ -294,8 +513,10 @@ const handleUpload = async () => {
   uploading.value = true
   try {
     const response = await uploadTestPlanCSV(
-      currentStation.value.id,
+      uploadForm.stationId,
       uploadForm.file,
+      uploadForm.projectId,  // 新增: 傳遞 projectId
+      uploadForm.testPlanName,  // 新增: 傳遞 testPlanName
       uploadForm.replaceExisting
     )
 
@@ -303,10 +524,38 @@ const handleUpload = async () => {
       `上傳成功！共 ${response.total_items} 項，成功 ${response.created_items} 項`
     )
 
+    // 儲存上傳的站別和專案 ID
+    const uploadedStationId = uploadForm.stationId
+    const uploadedProjectId = uploadForm.projectId
+
     showUploadDialog.value = false
     uploadForm.file = null
     uploadRef.value?.clearFiles()
+
+    // 修正: 上傳後切換到該站別並載入測試計劃
+    // 如果上傳的專案不是當前專案,先切換專案
+    if (!projectStore.currentProject || projectStore.currentProject.id !== uploadedProjectId) {
+      const project = projectStore.projects.find(p => p.id === uploadedProjectId)
+      if (project) {
+        await projectStore.setCurrentProject(project)
+        await projectStore.fetchProjectStations(project.id)
+      }
+    }
+
+    // 切換到上傳的站別
+    if (!currentStation.value || currentStation.value.id !== uploadedStationId) {
+      const station = projectStore.stations.find(s => s.id === uploadedStationId)
+      if (station) {
+        await projectStore.setCurrentStation(station)
+      }
+    }
+
+    // 重新載入測試計劃
     await loadTestPlan()
+
+    // 清空上傳表單的選擇
+    uploadForm.projectId = null
+    uploadForm.stationId = null
   } catch (error) {
     console.error('Upload failed:', error)
     ElMessage.error(error.response?.data?.detail || '上傳失敗')
@@ -330,7 +579,20 @@ const handleAddItem = () => {
     upper_limit: null,
     unit: '',
     sequence_order: testPlanItems.value.length + 1,
-    enabled: true
+    enabled: true,
+    // 重置新增欄位
+    item_key: '',
+    value_type: '',
+    limit_type: '',
+    eq_limit: '',
+    pass_or_fail: '',
+    measure_value: '',
+    execute_name: '',
+    case_type: '',
+    command: '',
+    timeout: null,
+    use_result: '',
+    wait_msec: null
   })
   showEditDialog.value = true
 }
@@ -349,30 +611,42 @@ const handleSaveItem = async () => {
     if (!valid) return
 
     try {
+      // 準備更新/新增資料 (包含所有欄位)
+      const itemData = {
+        item_name: editingItem.item_name,
+        test_type: editingItem.test_type,
+        lower_limit: editingItem.lower_limit,
+        upper_limit: editingItem.upper_limit,
+        unit: editingItem.unit,
+        sequence_order: editingItem.sequence_order,
+        enabled: editingItem.enabled,
+        // 新增欄位
+        item_key: editingItem.item_key,
+        value_type: editingItem.value_type,
+        limit_type: editingItem.limit_type,
+        eq_limit: editingItem.eq_limit,
+        pass_or_fail: editingItem.pass_or_fail,
+        measure_value: editingItem.measure_value,
+        execute_name: editingItem.execute_name,
+        case_type: editingItem.case_type,
+        command: editingItem.command,
+        timeout: editingItem.timeout,
+        use_result: editingItem.use_result,
+        wait_msec: editingItem.wait_msec
+      }
+
       if (editingItem.id) {
         // Update existing item
-        await updateTestPlanItem(editingItem.id, {
-          item_name: editingItem.item_name,
-          test_type: editingItem.test_type,
-          lower_limit: editingItem.lower_limit,
-          upper_limit: editingItem.upper_limit,
-          unit: editingItem.unit,
-          sequence_order: editingItem.sequence_order,
-          enabled: editingItem.enabled
-        })
+        await updateTestPlanItem(editingItem.id, itemData)
         ElMessage.success('更新成功')
       } else {
         // Create new item
+        // 新增: 加入 project_id
         await createTestPlanItem({
+          project_id: projectStore.currentProject?.id || currentStation.value.project_id,
           station_id: currentStation.value.id,
           item_no: editingItem.sequence_order,
-          item_name: editingItem.item_name,
-          test_type: editingItem.test_type,
-          lower_limit: editingItem.lower_limit,
-          upper_limit: editingItem.upper_limit,
-          unit: editingItem.unit,
-          sequence_order: editingItem.sequence_order,
-          enabled: editingItem.enabled,
+          ...itemData,
           parameters: {}
         })
         ElMessage.success('新增成功')
@@ -448,7 +722,29 @@ const handleBulkDelete = async () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 從 localStorage 載入當前專案和站別
+  projectStore.loadFromStorage()
+
+  // 新增: 載入所有專案列表 (用於上傳對話框的專案選擇)
+  if (projectStore.projects.length === 0) {
+    try {
+      await projectStore.fetchProjects()
+    } catch (error) {
+      console.error('Failed to load projects:', error)
+    }
+  }
+
+  // 如果有當前專案,載入站別列表
+  if (projectStore.currentProject) {
+    try {
+      await projectStore.fetchProjectStations(projectStore.currentProject.id)
+    } catch (error) {
+      console.error('Failed to load stations:', error)
+    }
+  }
+
+  // 載入測試計劃
   loadTestPlan()
 })
 </script>

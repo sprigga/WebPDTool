@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class TestPlanBase(BaseModel):
     """Base schema for test plan items"""
+    # Original fields (保留原有欄位)
     item_no: int = Field(..., description="Test item sequence number")
     item_name: str = Field(..., description="Test item name/ID")
     test_type: str = Field(..., description="Test type (e.g., CommandTest, OPjudge, Other)")
@@ -17,15 +18,33 @@ class TestPlanBase(BaseModel):
     unit: Optional[str] = Field(default=None, description="Measurement unit")
     enabled: bool = Field(default=True, description="Whether the test item is enabled")
     sequence_order: int = Field(..., description="Execution order in the test plan")
+    # 新增 test_plan_name 欄位
+    test_plan_name: Optional[str] = Field(default=None, description="Test plan name")
+
+    # New fields from CSV (新增欄位對應 CSV)
+    item_key: Optional[str] = Field(default=None, description="ItemKey - 項目鍵值")
+    value_type: Optional[str] = Field(default=None, description="ValueType - 數值類型")
+    limit_type: Optional[str] = Field(default=None, description="LimitType - 限制類型")
+    eq_limit: Optional[str] = Field(default=None, description="EqLimit - 等於限制")
+    pass_or_fail: Optional[str] = Field(default=None, description="PassOrFail - 通過或失敗")
+    measure_value: Optional[str] = Field(default=None, description="measureValue - 測量值")
+    execute_name: Optional[str] = Field(default=None, description="ExecuteName - 執行名稱")
+    case_type: Optional[str] = Field(default=None, description="case - 案例類型")
+    command: Optional[str] = Field(default=None, description="Command - 命令")
+    timeout: Optional[int] = Field(default=None, description="Timeout - 超時時間(毫秒)")
+    use_result: Optional[str] = Field(default=None, description="UseResult - 使用結果")
+    wait_msec: Optional[int] = Field(default=None, description="WaitmSec - 等待毫秒")
 
 
 class TestPlanCreate(TestPlanBase):
     """Schema for creating a test plan item"""
+    project_id: int = Field(..., description="Project ID this test plan belongs to")  # 新增 project_id
     station_id: int = Field(..., description="Station ID this test plan belongs to")
 
 
 class TestPlanUpdate(BaseModel):
     """Schema for updating a test plan item"""
+    # Original fields (保留原有欄位)
     item_name: Optional[str] = None
     test_type: Optional[str] = None
     parameters: Optional[Dict[str, Any]] = None
@@ -34,11 +53,28 @@ class TestPlanUpdate(BaseModel):
     unit: Optional[str] = None
     enabled: Optional[bool] = None
     sequence_order: Optional[int] = None
+    # 新增 test_plan_name 欄位
+    test_plan_name: Optional[str] = None
+
+    # New fields from CSV (新增欄位對應 CSV)
+    item_key: Optional[str] = None
+    value_type: Optional[str] = None
+    limit_type: Optional[str] = None
+    eq_limit: Optional[str] = None
+    pass_or_fail: Optional[str] = None
+    measure_value: Optional[str] = None
+    execute_name: Optional[str] = None
+    case_type: Optional[str] = None
+    command: Optional[str] = None
+    timeout: Optional[int] = None
+    use_result: Optional[str] = None
+    wait_msec: Optional[int] = None
 
 
 class TestPlan(TestPlanBase):
     """Schema for test plan item response"""
     id: int
+    project_id: int  # 新增 project_id
     station_id: int
     created_at: datetime
     updated_at: datetime
@@ -65,6 +101,7 @@ class TestPlanCSVRow(BaseModel):
     Command: str = Field(default="", alias="Command")
     InitialCommand: str = Field(default="", alias="InitialCommand")
     Timeout: str = Field(default="", alias="Timeout")
+    UseResult: str = Field(default="", alias="UseResult")  # 新增 UseResult 欄位
     WaitmSec: str = Field(default="", alias="WaitmSec")
     Instrument: str = Field(default="", alias="Instrument")
     Channel: str = Field(default="", alias="Channel")
@@ -83,6 +120,7 @@ class TestPlanCSVRow(BaseModel):
 class TestPlanUploadResponse(BaseModel):
     """Response schema for test plan upload"""
     message: str
+    project_id: int  # 新增 project_id
     station_id: int
     total_items: int
     created_items: int

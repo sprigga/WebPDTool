@@ -71,18 +71,20 @@
           </div>
         </el-col>
         <el-col :span="8">
+          <!-- 新增: 測試計劃名稱選擇器 -->
           <el-select
-            v-model="selectedTestPlan"
+            v-model="selectedTestPlanName"
             placeholder="選擇測試計劃"
             size="large"
             style="width: 100%"
+            clearable
             @change="handleTestPlanChange"
           >
             <el-option
-              v-for="plan in testPlans"
-              :key="plan.id"
-              :label="plan.plan_name"
-              :value="plan.id"
+              v-for="planName in testPlanNames"
+              :key="planName"
+              :label="planName"
+              :value="planName"
             />
           </el-select>
         </el-col>
@@ -333,7 +335,7 @@ import {
   getTestSessionStatus,
   getSessionResults
 } from '@/api/tests'
-import { getStationTestPlan } from '@/api/testplans'
+import { getStationTestPlan, getStationTestPlanNames } from '@/api/testplans'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -361,8 +363,12 @@ const sfcConfig = reactive({
 })
 
 // Test plan
-const testPlans = ref([])
-const selectedTestPlan = ref(null)
+// 移除測試計劃列表相關變數，因為系統架構中沒有獨立的測試計劃實體
+// const testPlans = ref([])
+// const selectedTestPlan = ref(null)
+// 新增: 測試計劃名稱列表和選擇的測試計劃名稱
+const testPlanNames = ref([])
+const selectedTestPlanName = ref(null)
 const testPlanItems = ref([])
 
 // Test control
@@ -445,7 +451,32 @@ const addStatusMessage = (text, type = 'info') => {
   }
 }
 
-const loadTestPlan = async () => {
+// 新增: 載入測試計劃名稱列表
+const loadTestPlanNames = async () => {
+  if (!currentStation.value) {
+    return
+  }
+
+  try {
+    const names = await getStationTestPlanNames(currentStation.value.id)
+    testPlanNames.value = names
+
+    // 從 localStorage 讀取上次選擇的測試計劃名稱
+    const lastSelectedPlanName = localStorage.getItem(`lastTestPlanName_station_${currentStation.value.id}`)
+    if (lastSelectedPlanName && names.includes(lastSelectedPlanName)) {
+      selectedTestPlanName.value = lastSelectedPlanName
+    } else if (names.length === 1) {
+      // 如果只有一個測試計劃，自動選擇
+      selectedTestPlanName.value = names[0]
+    }
+  } catch (error) {
+    console.error('Failed to load test plan names:', error)
+    addStatusMessage('載入測試計劃名稱失敗: ' + error.message, 'error')
+  }
+}
+
+// 直接載入當前站別的測試項目
+const loadTestPlanItems = async () => {
   if (!currentStation.value) {
     addStatusMessage('請先選擇站別', 'warning')
     return
@@ -453,14 +484,20 @@ const loadTestPlan = async () => {
 
   try {
     addStatusMessage('載入測試計劃...', 'info')
-    const items = await getStationTestPlan(currentStation.value.id)
+    // 新增: 傳遞選擇的測試計劃名稱
+    const items = await getStationTestPlan(currentStation.value.id, true, selectedTestPlanName.value)
     testPlanItems.value = items.map(item => ({
       ...item,
       status: null,
       measured_value: null
     }))
     testStatus.value.total_items = items.length
-    addStatusMessage(`已載入 ${items.length} 個測試項目`, 'success')
+
+    if (selectedTestPlanName.value) {
+      addStatusMessage(`已載入測試計劃「${selectedTestPlanName.value}」: ${items.length} 個測試項目`, 'success')
+    } else {
+      addStatusMessage(`已載入 ${items.length} 個測試項目`, 'success')
+    }
   } catch (error) {
     console.error('Failed to load test plan:', error)
     addStatusMessage('載入測試計劃失敗: ' + error.message, 'error')
@@ -468,9 +505,60 @@ const loadTestPlan = async () => {
   }
 }
 
+// 新增: 當測試計劃改變時，保存選擇並重新載入
 const handleTestPlanChange = () => {
-  loadTestPlan()
+  if (selectedTestPlanName.value && currentStation.value) {
+    // 保存到 localStorage
+    localStorage.setItem(`lastTestPlanName_station_${currentStation.value.id}`, selectedTestPlanName.value)
+    addStatusMessage(`已切換測試計劃: ${selectedTestPlanName.value}`, 'info')
+  } else if (currentStation.value) {
+    // 清除選擇時移除 localStorage
+    localStorage.removeItem(`lastTestPlanName_station_${currentStation.value.id}`)
+    addStatusMessage('已清除測試計劃選擇', 'info')
+  }
+  loadTestPlanItems()
 }
+
+// 移除測試計劃列表相關函數，因為系統架構中沒有獨立的測試計劃實體
+/*
+// 新增: 載入測試計劃列表並恢復上次選擇
+const loadTestPlanList = async () => {
+  if (!currentStation.value) return
+
+  try {
+    // TODO: 這裡應該調用 API 獲取該站別的所有測試計劃列表
+    // 暫時使用空陣列，因為後端可能還沒有對應的 API
+    testPlans.value = []
+
+    // 從 localStorage 讀取上次選擇的測試計劃 ID
+    const lastSelectedPlan = localStorage.getItem(`lastTestPlan_station_${currentStation.value.id}`)
+
+    if (lastSelectedPlan && testPlans.value.length > 0) {
+      const planId = parseInt(lastSelectedPlan)
+      const plan = testPlans.value.find(p => p.id === planId)
+      if (plan) {
+        selectedTestPlan.value = planId
+        addStatusMessage(`已恢復上次選擇的測試計劃: ${plan.plan_name}`, 'info')
+      }
+    }
+
+    // 載入測試項目
+    await loadTestPlanItems()
+  } catch (error) {
+    console.error('Failed to load test plan list:', error)
+  }
+}
+
+// 修改: 當測試計劃改變時，保存選擇並重新載入
+const handleTestPlanChange = () => {
+  if (selectedTestPlan.value && currentStation.value) {
+    // 保存到 localStorage
+    localStorage.setItem(`lastTestPlan_station_${currentStation.value.id}`, selectedTestPlan.value.toString())
+    addStatusMessage(`已切換測試計劃`, 'info')
+  }
+  loadTestPlanItems()
+}
+*/
 
 const handleSFCToggle = () => {
   if (sfcEnabled.value) {
@@ -654,20 +742,24 @@ const handleLogout = async () => {
 }
 
 // Watchers
-watch(() => currentStation.value, (newVal) => {
+// 當站別改變時，載入測試計劃名稱和測試項目
+watch(() => currentStation.value, async (newVal) => {
   if (newVal) {
-    loadTestPlan()
+    await loadTestPlanNames()
+    await loadTestPlanItems()
   }
 })
 
 // Lifecycle
-onMounted(() => {
+onMounted(async () => {
   addStatusMessage('系統就緒', 'success')
-  
+
+  // 載入當前站別的測試計劃名稱和測試項目
   if (currentStation.value) {
-    loadTestPlan()
+    await loadTestPlanNames()
+    await loadTestPlanItems()
   }
-  
+
   // Load SFC config from localStorage
   const savedConfig = localStorage.getItem('sfcConfig')
   if (savedConfig) {

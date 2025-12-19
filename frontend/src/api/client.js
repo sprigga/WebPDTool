@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 
 // 修改: 使用空字串作為 baseURL,讓請求通過 Vite proxy
-// Vite 會將 /api/* 請求代理到 http://localhost:9100
+// Vite 會將 /api/* 請求代理到 http://localhost:8765 (參考 vite.config.js)
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 10000,

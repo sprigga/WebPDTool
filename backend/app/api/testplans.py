@@ -27,6 +27,7 @@ router = APIRouter()
 async def get_station_testplan(
     station_id: int,
     enabled_only: bool = True,
+    test_plan_name: Optional[str] = None,  # 新增: 可選的測試計劃名稱過濾
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
 ):
@@ -36,6 +37,7 @@ async def get_station_testplan(
     Args:
         station_id: Station ID
         enabled_only: Return only enabled test items (default: True)
+        test_plan_name: Optional test plan name to filter by
         db: Database session
         current_user: Current authenticated user
 
@@ -53,16 +55,56 @@ async def get_station_testplan(
     if enabled_only:
         query = query.filter(TestPlan.enabled == True)
 
+    # 新增: 根據測試計劃名稱過濾
+    if test_plan_name:
+        query = query.filter(TestPlan.test_plan_name == test_plan_name)
+
     # Order by sequence
     test_plans = query.order_by(TestPlan.sequence_order).all()
 
     return test_plans
 
 
+@router.get("/stations/{station_id}/testplan-names", response_model=List[str])
+async def get_station_testplan_names(
+    station_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Get distinct test plan names for a specific station
+
+    Args:
+        station_id: Station ID
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        List of distinct test plan names
+    """
+    # Verify station exists
+    station = db.query(Station).filter(Station.id == station_id).first()
+    if not station:
+        raise HTTPException(status_code=404, detail="Station not found")
+
+    # Get distinct test plan names
+    test_plan_names = db.query(TestPlan.test_plan_name)\
+        .filter(TestPlan.station_id == station_id)\
+        .filter(TestPlan.test_plan_name.isnot(None))\
+        .filter(TestPlan.test_plan_name != '')\
+        .distinct()\
+        .all()
+
+    # Extract names from tuples
+    return [name[0] for name in test_plan_names]
+
+
 @router.post("/stations/{station_id}/testplan/upload", response_model=TestPlanUploadResponse)
 async def upload_testplan_csv(
     station_id: int,
     file: UploadFile = File(..., description="CSV test plan file"),
+    project_id: int = Form(..., description="Project ID this test plan belongs to"),  # 新增 project_id 參數
+    test_plan_name: Optional[str] = Form(None, description="Test plan name"),  # 新增 test_plan_name 參數
     replace_existing: bool = Form(default=True, description="Replace existing test plan"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -73,6 +115,7 @@ async def upload_testplan_csv(
     Args:
         station_id: Station ID to upload test plan for
         file: CSV file upload
+        project_id: Project ID this test plan belongs to
         replace_existing: Whether to replace existing test plan (default: True)
         db: Database session
         current_user: Current authenticated user
@@ -108,8 +151,11 @@ async def upload_testplan_csv(
         test_plan_dicts = TestPlanCSVParser.parse_and_convert(file_content)
 
         # If replace_existing, delete old test plan
+        # 修改: 根據 project_id 和 station_id 刪除舊測試計劃
         if replace_existing:
-            db.query(TestPlan).filter(TestPlan.station_id == station_id).delete()
+            db.query(TestPlan).filter(
+                and_(TestPlan.project_id == project_id, TestPlan.station_id == station_id)
+            ).delete()
 
         # Insert new test plan items
         created_count = 0
@@ -117,10 +163,16 @@ async def upload_testplan_csv(
 
         for plan_dict in test_plan_dicts:
             try:
-                test_plan = TestPlan(
-                    station_id=station_id,
-                    **plan_dict
-                )
+                # 新增: 加入 project_id 和 test_plan_name
+                # 修正: 先展開 plan_dict，再覆蓋 project_id、station_id 和 test_plan_name
+                # 以確保這些欄位不會被 plan_dict 中的值覆蓋
+                test_plan_data = {
+                    **plan_dict,
+                    'project_id': project_id,
+                    'station_id': station_id,
+                    'test_plan_name': test_plan_name
+                }
+                test_plan = TestPlan(**test_plan_data)
                 db.add(test_plan)
                 created_count += 1
             except Exception as e:
@@ -131,6 +183,7 @@ async def upload_testplan_csv(
 
         return TestPlanUploadResponse(
             message="Test plan uploaded successfully",
+            project_id=project_id,  # 新增: 返回 project_id
             station_id=station_id,
             total_items=len(test_plan_dicts),
             created_items=created_count,

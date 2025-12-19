@@ -13,10 +13,10 @@ export default defineConfig({
   // root: '.', // Set the project root to current directory (修改: Vite 會自動從根目錄尋找 index.html)
   publicDir: 'public', // Explicitly set the public directory
   server: {
-    port: 5173,
+    port: 5678, // 使用冷門 port 避免與其他容器衝突
     proxy: {
       '/api': {
-        target: 'http://localhost:9100',
+        target: 'http://localhost:8765', // 對應 backend 的冷門 port
         changeOrigin: true
       }
     }

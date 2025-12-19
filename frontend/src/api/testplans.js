@@ -7,24 +7,42 @@ import apiClient from './client'
  * Get test plan for a station
  * @param {number} stationId - Station ID
  * @param {boolean} enabledOnly - Return only enabled items
+ * @param {string} testPlanName - Optional test plan name to filter by
  * @returns {Promise} Test plan items
  */
-export const getStationTestPlan = (stationId, enabledOnly = true) => {
-  return apiClient.get(`/api/stations/${stationId}/testplan`, {
-    params: { enabled_only: enabledOnly }
-  })
+export const getStationTestPlan = (stationId, enabledOnly = true, testPlanName = null) => {
+  const params = { enabled_only: enabledOnly }
+  if (testPlanName) {
+    params.test_plan_name = testPlanName
+  }
+  return apiClient.get(`/api/stations/${stationId}/testplan`, { params })
+}
+
+/**
+ * Get distinct test plan names for a station
+ * @param {number} stationId - Station ID
+ * @returns {Promise} List of test plan names
+ */
+export const getStationTestPlanNames = (stationId) => {
+  return apiClient.get(`/api/stations/${stationId}/testplan-names`)
 }
 
 /**
  * Upload CSV test plan file
  * @param {number} stationId - Station ID
  * @param {File} file - CSV file
+ * @param {number} projectId - Project ID (新增)
+ * @param {string} testPlanName - Test plan name (新增)
  * @param {boolean} replaceExisting - Replace existing test plan
  * @returns {Promise} Upload response
  */
-export const uploadTestPlanCSV = (stationId, file, replaceExisting = true) => {
+export const uploadTestPlanCSV = (stationId, file, projectId, testPlanName = '', replaceExisting = true) => {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('project_id', projectId)  // 新增 project_id
+  if (testPlanName) {
+    formData.append('test_plan_name', testPlanName)  // 新增 test_plan_name
+  }
   formData.append('replace_existing', replaceExisting)
 
   return apiClient.post(`/api/stations/${stationId}/testplan/upload`, formData, {
