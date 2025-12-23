@@ -4,7 +4,7 @@
 
 ## 專案概述
 
-WebPDTool 是一個 Web 化的產品測試系統，用於執行自動化測試、記錄測試結果、整合 SFC 系統和 Modbus 通訊。系統採用前後端分離架構，提供完整的測試管理、執行和結果查詢功能。
+WebPDTool 是一個 Web 化的產品測試系統，用於執行自動化測試、記錄測試結果。系統採用前後端分離架構，提供完整的測試管理、執行和結果查詢功能。目前專案完成度約 70%，核心架構已建立，部分功能仍待實作。
 
 ## 技術堆疊
 
@@ -59,14 +59,16 @@ WebPDTool/
 │   │   │   ├── test_session.py    # 測試會話模型
 │   │   │   ├── test_result.py     # 測試結果模型
 │   │   │   └── sfc_log.py         # SFC 日誌模型
-│   │   ├── services/          # 業務邏輯層 (4 服務)
+│   │   ├── services/          # 業務邏輯層 (5 服務)
 │   │   │   ├── auth.py        # 認證服務
 │   │   │   ├── measurement_service.py  # 測量服務
 │   │   │   ├── test_engine.py         # 測試引擎
-│   │   │   └── instrument_manager.py  # 儀器管理器
-│   │   ├── measurements/      # 測量模組 (2 模組)
+│   │   │   ├── instrument_manager.py  # 儀器管理器
+│   │   │   └── sfc_service.py         # SFC 服務
+│   │   ├── measurements/      # 測量模組 (3 模組)
 │   │   │   ├── base.py        # 測量基礎類別 (BaseMeasurement)
-│   │   │   └── implementations.py  # 測量實作 (4 種測試類型)
+│   │   │   ├── implementations.py  # 測量實作 (含 PDTool4 驗證邏輯)
+│   │   │   └── registry.py    # 測量類型註冊表
 │   │   ├── schemas/           # Pydantic 資料驗證模型
 │   │   ├── core/              # 核心功能 (日誌、資料庫)
 │   │   ├── utils/             # 工具函數
@@ -147,15 +149,19 @@ WebPDTool/
 
 #### 測量模組層 (backend/app/measurements/)
 - **base.py**: BaseMeasurement 抽象基礎類別
-  - 定義測量介面規範
+  - 定義測量介面規範 (prepare/execute/cleanup)
   - MeasurementResult 資料結構
-  - 結果驗證機制
+  - 結果驗證機制 (支援 PDTool4 所有 limit 類型)
+  - 值類型轉換 (string/integer/float)
 - **implementations.py**: 測量實作
-  - DummyMeasurement (測試用)
-  - CommandTestMeasurement (命令執行測試)
-  - PowerReadMeasurement (功率讀取測試)
-  - PowerSetMeasurement (功率設定測試)
-  - MEASUREMENT_REGISTRY (測量類型註冊表)
+  - PowerSet (電源供應器控制)
+  - PowerRead (電壓/電流讀取)
+  - CommandTest (命令執行測試)
+  - SFCtest (SFC 整合測試)
+  - getSN (序號取得)
+  - OPjudge (操作員確認)
+  - Other (自定義實作)
+- **registry.py**: MEASUREMENT_REGISTRY 測量類型註冊表
 
 ### 前端架構
 
@@ -221,6 +227,8 @@ WebPDTool/
 
 ### 測試計劃 API (/api)
 - `GET /stations/{station_id}/testplan` - 取得站別的測試計劃
+- `GET /stations/{station_id}/testplan-names` - 取得測試計劃名稱列表
+- `GET /stations/{station_id}/testplan-map` - 取得測試點映射
 - `POST /stations/{station_id}/testplan/upload` - 上傳 CSV 測試計劃
 - `POST /testplans` - 建立測試項目
 - `GET /testplans/{testplan_id}` - 取得測試項目詳情
@@ -228,29 +236,27 @@ WebPDTool/
 - `DELETE /testplans/{testplan_id}` - 刪除測試項目
 - `POST /testplans/bulk-delete` - 批量刪除測試項目
 - `POST /testplans/reorder` - 重新排序測試項目
+- `POST /testplans/validate-test-point` - 驗證測試點
+- `GET /sessions/{session_id}/test-results` - 取得會話測試結果
 
 ### 測試執行 API (/api/tests)
 - `POST /sessions` - 建立測試會話
 - `POST /sessions/{session_id}/start` - 開始測試執行
 - `POST /sessions/{session_id}/stop` - 停止測試執行
-- `GET /sessions/{session_id}` - 取得測試會話詳情
 - `GET /sessions/{session_id}/status` - 取得測試會話即時狀態
-- `POST /sessions/{session_id}/results` - 上傳單筆測試結果
-- `POST /sessions/{session_id}/results/batch` - 批量上傳測試結果
-- `POST /sessions/{session_id}/complete` - 完成測試會話
 - `GET /sessions/{session_id}/results` - 取得測試會話的所有結果
-- `GET /sessions` - 查詢測試會話列表
-- `GET /instruments/status` - 取得儀器狀態
-- `POST /instruments/{instrument_id}/reset` - 重置儀器連線
 
 ### 測量執行 API (/api/measurements)
 - `POST /execute` - 執行單個測量
 - `POST /batch-execute` - 批量執行測量
 - `GET /types` - 取得支援的測量類型
 - `GET /instruments` - 取得儀器狀態列表
+- `GET /instruments/available` - 取得可用儀器列表
 - `POST /instruments/{instrument_id}/reset` - 重置儀器
 - `GET /session/{session_id}/results` - 取得會話測量結果
 - `POST /validate-params` - 驗證測量參數
+- `GET /measurement-templates` - 取得測量模板
+- `POST /execute-with-dependencies` - 執行具相依性的測量
 
 ### 測試結果查詢 API (/api/measurement-results)
 - `GET /sessions` - 查詢測試會話 (支援篩選與分頁)
@@ -260,6 +266,7 @@ WebPDTool/
 - `GET /export/csv/{session_id}` - 匯出測試結果為 CSV
 - `DELETE /sessions/{session_id}` - 刪除測試會話與結果
 - `POST /cleanup` - 清理舊測試資料
+- 測量結果 CRUD 操作
 
 ## 開發進度
 
@@ -296,11 +303,15 @@ WebPDTool/
 - [x] 批量刪除和排序功能
 - [x] 測試計劃表格顯示與操作
 
-### ✅ 階段 5: 測試執行引擎 (核心已完成)
+### ✅ 階段 5: 測試執行引擎 (核心架構完成)
 - [x] 測試會話資料模型 (TestSession)
 - [x] 測試結果資料模型 (TestResult)
 - [x] BaseMeasurement 抽象基礎類別
-- [x] 測量實作模組 (4 種測試類型)
+- [x] 測量實作模組 (含 PDTool4 驗證邏輯)
+  - [x] PowerSet, PowerRead, CommandTest
+  - [x] SFCtest, getSN, OPjudge, Other
+  - [x] 完整的 limit 類型支援 (lower/upper/both/equality 等)
+  - [x] 值類型轉換 (string/integer/float)
 - [x] TestEngine 測試編排引擎
   - [x] 非同步測試執行
   - [x] 測試會話狀態管理
@@ -309,9 +320,10 @@ WebPDTool/
   - [x] Singleton 模式實作
   - [x] 儀器連線池管理
   - [x] 儀器狀態追蹤
-- [x] 測試執行 API 端點 (12 個)
+- [x] 測試執行相關 API (5+ 端點)
+- [x] 測量執行相關 API (10 端點)
 - [x] 測試會話管理 API
-- [x] 測試結果上傳與查詢 API
+- [x] 測試結果查詢與匯出 API
 - [x] 前端測試執行主介面 (TestMain.vue)
   - [x] PDTool4 風格 UI 設計
   - [x] 測試控制面板
@@ -321,36 +333,38 @@ WebPDTool/
 - [x] 即時狀態輪詢機制
 - [x] 儀器狀態查詢與重置
 - [x] MEASUREMENT_REGISTRY 測量類型註冊表
-- ⚠️ 實際儀器驅動實作 (目前為 stub 實作)
+- ⚠️ 實際儀器驅動實作 (目前為 stub/dummy 實作)
 - ⏳ WebSocket 即時通訊 (計劃中，目前使用輪詢)
+- ⏳ 前端測試歷史查詢介面完整實作
+- ⏳ 圖表分析功能
+- ⏳ PDF 報表生成
 
 
-### ⏳ 階段 6: Modbus 通訊整合 (待實作)
+### ⏳ 階段 6: 進階功能 (待實作)
+- [ ] 實際儀器驅動實作 (取代 dummy implementations)
+- [ ] WebSocket 即時通訊機制
 - [ ] Modbus TCP/RTU 通訊模組
 - [ ] Modbus 設備配置管理
 - [ ] Modbus 讀寫操作 API
-- [ ] 前端 Modbus 監控介面
-
-### ⏳ 階段 7: SFC 系統整合 (待實作)
-- [ ] SFC WebService 客戶端
-- [ ] SFC 日誌資料模型
-- [ ] SFC 通訊 API
-- [ ] 前端 SFC 配置與狀態顯示
-
-### ⏳ 階段 8: 測試結果查詢與報表 (部分完成)
-- [x] 測試結果查詢 API (含篩選與分頁)
-- [x] 測試結果統計 API
-- [x] CSV 匯出功能
-- [ ] 前端測試歷史查詢介面 (UI 待實作)
-- [ ] 圖表分析功能
+- [ ] SFC WebService 客戶端實作
+- [ ] SFC 連線測試與錯誤處理
+- [ ] 前端測試歷史查詢完整介面
+- [ ] 測試結果趨勢分析與圖表
 - [ ] PDF 報表生成
-
-### ⏳ 階段 9-12: 進階功能 (待實作)
-- [ ] 測試結果趨勢分析
 - [ ] 儀器校驗管理
-- [ ] 系統日誌與審計
+- [ ] 系統日誌與審計功能
 - [ ] 權限細粒度控制
 - [ ] 多語系支援
+- [ ] 自動化測試覆蓋
+
+
+### ⏳ 階段 7: 生產環境優化 (待實作)
+- [ ] 安全性強化 (輸入驗證、SQL 注入防護)
+- [ ] 效能優化 (資料庫查詢、快取機制)
+- [ ] 錯誤處理完善
+- [ ] API 速率限制
+- [ ] 監控與告警機制
+- [ ] 備份與恢復策略
 
 ## 快速開始
 
@@ -585,16 +599,19 @@ docker-compose exec backend python -c "import app; print('Backend OK')"
 | 變數名稱 | 說明 | 預設值 | 必填 |
 |---------|------|--------|------|
 | `DATABASE_URL` | 資料庫連線字串 | - | ✅ |
-| `SECRET_KEY` | JWT 加密金鑰 | - | ✅ |
+| `SECRET_KEY` | JWT 加密金鑰 (最少 32 字元) | - | ✅ |
 | `ALGORITHM` | JWT 演算法 | HS256 | ❌ |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token 過期時間 | 30 | ❌ |
 | `PORT` | 後端服務端口 | 9100 | ❌ |
 | `CORS_ORIGINS` | 允許的前端來源 | http://localhost:9080 | ❌ |
 | `MYSQL_ROOT_PASSWORD` | MySQL root 密碼 | - | ✅ |
 | `MYSQL_DATABASE` | 資料庫名稱 | webpdtool | ❌ |
-| `MYSQL_USER` | 資料庫使用者 | webpdtool | ❌ |
+| `MYSQL_USER` | 資料庫使用者 | pdtool | ❌ |
 | `MYSQL_PASSWORD` | 資料庫密碼 | - | ✅ |
 | `VITE_API_BASE_URL` | 前端 API 基礎 URL | http://localhost:9100 | ❌ |
+| `DEBUG` | 除錯模式 | false | ❌ |
+| `FRONTEND_PORT` | 前端服務端口 | 9080 | ❌ |
+| `BACKEND_PORT` | 後端服務端口 | 9100 | ❌ |
 
 ### 端口配置
 
@@ -625,11 +642,12 @@ docker-compose exec backend python -c "import app; print('Backend OK')"
 6. **PDTool4 風格**: 測試執行介面仿照原桌面應用設計
 
 ### 測試引擎特色
-1. **BaseMeasurement 抽象類別**: 
+1. **BaseMeasurement 抽象類別**:
    - 標準化測量介面 (`prepare()`, `execute()`, `cleanup()`)
-   - 內建結果驗證 (`validate_result()`)
+   - 內建結果驗證 (`validate_result()`) - 支援 PDTool4 所有 limit 類型
+   - 值類型轉換 (string/integer/float)
    - 錯誤處理機制
-   
+
 2. **TestEngine 測試編排器**:
    - 非同步測試執行 (`asyncio`)
    - 測試會話狀態管理
@@ -646,6 +664,11 @@ docker-compose exec backend python -c "import app; print('Backend OK')"
    - 測量類型動態註冊
    - 支援擴充新測量類型
    - 類型驗證與參數檢查
+
+5. **PDTool4 相容性**:
+   - 完整的測試點驗證邏輯遷移
+   - 支援所有 limit 類型 (下限/上限/範圍/等於/不等於/包含/不包含)
+   - Run-all-test 功能整合
 
 ## 故障排除
 
@@ -753,19 +776,59 @@ docker-compose logs -f backend | grep ERROR
 - [Modbus 通訊](docs/modbus_communication.md) - Modbus 整合方案
 - [SFC 整合](docs/sfc_integration.md) - SFC 系統整合
 
+## 專案狀態與待辦事項
+
+### 目前狀態
+- **完成度**: 約 70%
+- **核心架構**: ✅ 已完成
+- **API 層**: ✅ 已完成
+- **前端介面**: ⚠️ 部分完成
+- **儀器驅動**: ⚠️ Stub 實作，需實際驅動
+- **生產就緒**: ❌ 需要更多測試與優化
+
+### 已知限制
+1. **儀器驅動**: 目前使用 dummy 實作，需要實際儀器驅動
+2. **即時通訊**: 使用輪詢機制，WebSocket 待實作
+3. **測試覆蓋**: 缺少自動化測試
+4. **前端功能**: 測試歷史查詢介面待完善
+5. **錯誤處理**: 部分 API 需要更完善的錯誤處理
+6. **安全性**: 預設密碼需要修改，輸入驗證需要加強
+
+### 優先待辦事項
+1. **高優先級**:
+   - 實作實際儀器驅動 (Power Supply, DMM, Serial 通訊)
+   - 完善錯誤處理機制
+   - 新增自動化測試
+   - 修改預設密碼和安全性設定
+
+2. **中優先級**:
+   - WebSocket 即時通訊實作
+   - 前端測試歷史查詢完整介面
+   - 圖表與趨勢分析功能
+   - PDF 報表生成
+
+3. **低優先級**:
+   - Modbus 整合
+   - SFC 實際連線實作
+   - 多語系支援
+   - 系統監控與告警
+
 ## 更新日誌
 
 ### v0.5.0 (最新) - 2024
 - ✅ 完成測試執行引擎核心架構
-- ✅ 實作 BaseMeasurement 抽象基礎類別
+- ✅ 實作 BaseMeasurement 抽象基礎類別 (含 PDTool4 驗證邏輯)
 - ✅ 實作 TestEngine 測試編排器
 - ✅ 實作 InstrumentManager 儀器管理器
 - ✅ 完成 TestMain.vue 主測試介面 (PDTool4 風格)
-- ✅ 12 個測試執行相關 API 端點
+- ✅ 擴展測試執行 API (5+ 端點)
+- ✅ 擴展測量執行 API (10 端點)
 - ✅ 測試會話狀態管理與輪詢機制
 - ✅ 儀器狀態查詢與重置功能
 - ✅ 測試結果查詢與 CSV 匯出 API
+- ✅ 新增測試計劃名稱與映射 API
 - ✅ Docker 端口配置優化 (9080/9100/33306)
+- ✅ 新增 SFC 服務模組
 
 ### v0.4.0 - 測試計劃管理
 - ✅ CSV 測試計劃上傳功能
@@ -791,4 +854,4 @@ docker-compose logs -f backend | grep ERROR
 ---
 
 **Last Updated**: 2024
-**Status**: Phase 5 Core Complete, Phase 6-12 Pending
+**Status**: Phase 1-5 Core Complete (~70%), Phase 6-7 Pending
