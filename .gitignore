@@ -232,3 +232,6 @@ htmlcov/
 *~
 *.bak
 *.tmp
+
+# Terminal Paste Image folder
+.cp-images/

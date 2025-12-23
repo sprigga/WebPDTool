@@ -1,4 +1,5 @@
 """Authentication API endpoints"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -15,10 +16,7 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(
-    login_data: LoginRequest,
-    db: Session = Depends(get_db)
-):
+async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     """
     User login endpoint
 
@@ -41,24 +39,21 @@ async def login(
     # Create access token
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username, "role": user.role.value},
-        expires_delta=access_token_expires
+        data={"sub": user.username, "role": user.role.value, "id": user.id},
+        expires_delta=access_token_expires,
     )
 
     # Convert user to schema
     user_schema = UserSchema.from_orm(user)
 
     return LoginResponse(
-        access_token=access_token,
-        token_type="bearer",
-        user=user_schema
+        access_token=access_token, token_type="bearer", user=user_schema
     )
 
 
 @router.post("/login-form", response_model=Token)
 async def login_form(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
+    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
     """
     Login endpoint for OAuth2 password flow
@@ -75,8 +70,8 @@ async def login_form(
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username, "role": user.role.value},
-        expires_delta=access_token_expires
+        data={"sub": user.username, "role": user.role.value, "id": user.id},
+        expires_delta=access_token_expires,
     )
 
     return Token(access_token=access_token, token_type="bearer")
@@ -96,8 +91,7 @@ async def logout(current_user: dict = Depends(get_current_active_user)):
 
 @router.get("/me", response_model=UserSchema)
 async def get_current_user_info(
-    current_user: dict = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(get_current_active_user), db: Session = Depends(get_db)
 ):
     """
     Get current authenticated user information
@@ -116,8 +110,12 @@ async def refresh_token(current_user: dict = Depends(get_current_active_user)):
     """
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": current_user["username"], "role": current_user.get("role")},
-        expires_delta=access_token_expires
+        data={
+            "sub": current_user["username"],
+            "role": current_user.get("role"),
+            "id": current_user.get("id"),
+        },
+        expires_delta=access_token_expires,
     )
 
     return Token(access_token=access_token, token_type="bearer")

@@ -158,37 +158,143 @@ class PowerSetMeasurement(BaseMeasurement):
     Sets voltage/current on power supplies
     (Simplified version - to be expanded based on PDTool4 implementation)
     """
-    
+
     async def execute(self) -> MeasurementResult:
         """Execute power set measurement"""
         try:
             # Extract parameters
             params = self.test_params
             instrument = params.get("Instrument")
-            voltage = params.get("Voltage")
-            current = params.get("Current")
-            
+            voltage = params.get("Voltage") or params.get("SetVolt")
+            current = params.get("Current") or params.get("SetCurr")
+
             if not instrument:
                 return self.create_result(
                     result="ERROR",
                     error_message="Missing required parameter: Instrument"
                 )
-            
+
             self.logger.info(
                 f"Setting power on {instrument}: V={voltage}, I={current}"
             )
-            
+
             # Simulate power set
             await asyncio.sleep(0.2)
-            
-            # Power set typically doesn't return a measured value
+
+            # Power set typically doesn't return a measured value but indicates success
             return self.create_result(
                 result="PASS",
                 measured_value=Decimal("1.0")  # Success indicator
             )
-            
+
         except Exception as e:
             self.logger.error(f"Error in power set: {e}")
+            return self.create_result(
+                result="ERROR",
+                error_message=str(e)
+            )
+
+
+class SFCMeasurement(BaseMeasurement):
+    """
+    SFC (Shop Floor Control) Test Measurement
+    Integrates with manufacturing execution systems
+    (Simplified version - to be expanded based on PDTool4 implementation)
+    """
+
+    async def execute(self) -> MeasurementResult:
+        """Execute SFC test measurement"""
+        try:
+            # Extract parameters
+            params = self.test_params
+            sfc_mode = params.get("Mode", "webStep1_2")  # Default mode
+
+            self.logger.info(f"Executing SFC test with mode: {sfc_mode}")
+
+            # Simulate SFC communication delay
+            await asyncio.sleep(0.5)
+
+            # In real implementation, this would call the SFC system
+            # For now, simulate a successful response
+            result_status = "PASS"
+
+            return self.create_result(
+                result=result_status,
+                measured_value=Decimal("1.0")  # Success indicator
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error in SFC test: {e}")
+            return self.create_result(
+                result="ERROR",
+                error_message=str(e)
+            )
+
+
+class GetSNMeasurement(BaseMeasurement):
+    """
+    Get Serial Number Measurement
+    Acquires device serial numbers via various methods
+    (Simplified version - to be expanded based on PDTool4 implementation)
+    """
+
+    async def execute(self) -> MeasurementResult:
+        """Execute serial number acquisition measurement"""
+        try:
+            # Extract parameters
+            params = self.test_params
+            sn_type = params.get("Type", "SN")  # SN, IMEI, MAC, etc.
+
+            self.logger.info(f"Acquiring {sn_type} from device")
+
+            # Simulate serial number read delay
+            await asyncio.sleep(0.1)
+
+            # In real implementation, this would read from actual source
+            # For now, return a placeholder
+            sn_value = params.get("SerialNumber", f"SN{random.randint(100000, 999999)}")
+
+            return self.create_result(
+                result="PASS",
+                measured_value=Decimal("1.0")  # Success indicator
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error in serial number acquisition: {e}")
+            return self.create_result(
+                result="ERROR",
+                error_message=str(e)
+            )
+
+
+class OPJudgeMeasurement(BaseMeasurement):
+    """
+    Operator Judgment Measurement
+    Awaits operator confirmation for subjective tests
+    (Simplified version - to be expanded based on PDTool4 implementation)
+    """
+
+    async def execute(self) -> MeasurementResult:
+        """Execute operator judgment measurement"""
+        try:
+            # Extract parameters
+            params = self.test_params
+            judgment_type = params.get("Type", "YorN")  # YorN, confirm, etc.
+
+            self.logger.info(f"Awaiting operator judgment: {judgment_type}")
+
+            # In real implementation, this would prompt the operator
+            # For now, simulate based on test parameters
+            expected_result = params.get("Expected", "PASS")
+            actual_result = params.get("Result", expected_result)
+
+            return self.create_result(
+                result=actual_result,
+                measured_value=Decimal("1.0") if actual_result == "PASS" else Decimal("0.0")
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error in operator judgment: {e}")
             return self.create_result(
                 result="ERROR",
                 error_message=str(e)
@@ -201,17 +307,35 @@ MEASUREMENT_REGISTRY = {
     "COMMAND_TEST": CommandTestMeasurement,
     "POWER_READ": PowerReadMeasurement,
     "POWER_SET": PowerSetMeasurement,
+    "SFC_TEST": SFCMeasurement,
+    "GET_SN": GetSNMeasurement,
+    "OP_JUDGE": OPJudgeMeasurement,
+    "OTHER": DummyMeasurement,
+    "FINAL": DummyMeasurement,
 }
 
 
 def get_measurement_class(test_command: str):
     """
     Get measurement class by command name
-    
+
     Args:
         test_command: Test command string
-        
+
     Returns:
         Measurement class or None
     """
-    return MEASUREMENT_REGISTRY.get(test_command.upper())
+    # Convert PDTool4-style names to registry keys
+    command_map = {
+        "SFCtest": "SFC_TEST",
+        "getSN": "GET_SN",
+        "OPjudge": "OP_JUDGE",
+        "Other": "OTHER",
+        "Final": "FINAL",
+        "CommandTest": "COMMAND_TEST",
+        "PowerRead": "POWER_READ",
+        "PowerSet": "POWER_SET"
+    }
+
+    registry_key = command_map.get(test_command, test_command.upper())
+    return MEASUREMENT_REGISTRY.get(registry_key)

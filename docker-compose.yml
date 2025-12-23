@@ -66,7 +66,9 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:9100/health')"]
+      # 原本: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:9100/health')"]
+      # 修正: requests 模組未安裝，改用 Python 標準庫 urllib
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9100/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -86,7 +88,10 @@ services:
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      # 原本: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      # 修正: wget 預設使用 IPv6 localhost (::1)，但 nginx 只監聽 IPv4
+      # 解決方案: 使用 curl 或指定 IPv4 位址
+      test: ["CMD", "curl", "-f", "http://127.0.0.1/"]
       interval: 30s
       timeout: 3s
       retries: 3

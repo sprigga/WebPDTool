@@ -6,12 +6,16 @@ import apiClient from './client'
 /**
  * Get test plan for a station
  * @param {number} stationId - Station ID
+ * @param {number} projectId - Project ID
  * @param {boolean} enabledOnly - Return only enabled items
  * @param {string} testPlanName - Optional test plan name to filter by
  * @returns {Promise} Test plan items
  */
-export const getStationTestPlan = (stationId, enabledOnly = true, testPlanName = null) => {
-  const params = { enabled_only: enabledOnly }
+export const getStationTestPlan = (stationId, projectId, enabledOnly = true, testPlanName = null) => {
+  const params = {
+    enabled_only: enabledOnly,
+    project_id: projectId  // 原有程式碼缺少 project_id 參數導致後端 API 報錯
+  }
   if (testPlanName) {
     params.test_plan_name = testPlanName
   }
@@ -21,10 +25,12 @@ export const getStationTestPlan = (stationId, enabledOnly = true, testPlanName =
 /**
  * Get distinct test plan names for a station
  * @param {number} stationId - Station ID
+ * @param {number} projectId - Project ID
  * @returns {Promise} List of test plan names
  */
-export const getStationTestPlanNames = (stationId) => {
-  return apiClient.get(`/api/stations/${stationId}/testplan-names`)
+export const getStationTestPlanNames = (stationId, projectId) => {
+  const params = { project_id: projectId }  // 原有程式碼缺少 project_id 參數導致後端 API 報錯
+  return apiClient.get(`/api/stations/${stationId}/testplan-names`, { params })
 }
 
 /**

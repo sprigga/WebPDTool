@@ -4,8 +4,8 @@ import { getProjects, getProjectStations } from '@/api/projects'
 
 export const useProjectStore = defineStore('project', () => {
   const projects = ref([])
-  const currentProject = ref(null)
-  const currentStation = ref(null)
+  const currentProject = ref(JSON.parse(localStorage.getItem('currentProject') || 'null'))
+  const currentStation = ref(JSON.parse(localStorage.getItem('currentStation') || 'null'))
   const stations = ref([])
 
   async function fetchProjects() {
@@ -32,24 +32,27 @@ export const useProjectStore = defineStore('project', () => {
 
   function setCurrentProject(project) {
     currentProject.value = project
-    localStorage.setItem('currentProject', JSON.stringify(project))
+    if (project) {
+      localStorage.setItem('currentProject', JSON.stringify(project))
+    } else {
+      localStorage.removeItem('currentProject')
+    }
   }
 
   function setCurrentStation(station) {
     currentStation.value = station
-    localStorage.setItem('currentStation', JSON.stringify(station))
+    if (station) {
+      localStorage.setItem('currentStation', JSON.stringify(station))
+    } else {
+      localStorage.removeItem('currentStation')
+    }
   }
 
-  function loadFromStorage() {
-    const savedProject = localStorage.getItem('currentProject')
-    const savedStation = localStorage.getItem('currentStation')
-
-    if (savedProject) {
-      currentProject.value = JSON.parse(savedProject)
-    }
-    if (savedStation) {
-      currentStation.value = JSON.parse(savedStation)
-    }
+  function clearCurrentSelection() {
+    currentProject.value = null
+    currentStation.value = null
+    localStorage.removeItem('currentProject')
+    localStorage.removeItem('currentStation')
   }
 
   return {
@@ -61,6 +64,6 @@ export const useProjectStore = defineStore('project', () => {
     fetchProjectStations,
     setCurrentProject,
     setCurrentStation,
-    loadFromStorage
+    clearCurrentSelection
   }
 })

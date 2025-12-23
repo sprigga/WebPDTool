@@ -47,14 +47,17 @@ class MeasurementService:
         # Instrument reset mapping (equivalent to PDTool4's used_instruments cleanup)
         self.instrument_reset_map = {
             'DAQ973A': 'DAQ973A_test.py',
-            'MODEL2303': '2303_test.py', 
+            'MODEL2303': '2303_test.py',
+            'MODEL2306': '2306_test.py',
             'IT6723C': 'IT6723C.py',
             'PSW3072': 'PSW3072.py',
             '2260B': '2260B.py',
             'APS7050': 'APS7050.py',
             '34970A': '34970A.py',
-            '2015': 'Keithley2015.py',
-            '6510': 'DAQ6510.py'
+            'KEITHLEY2015': 'Keithley2015.py',
+            'DAQ6510': 'DAQ6510.py',
+            'MDO34': 'MDO34.py',
+            'MT8872A_INF': 'MT8872A_INF.py'
         }
         
     async def execute_single_measurement(
@@ -206,7 +209,7 @@ class MeasurementService:
                 self.active_sessions[session_id]["error"] = str(e)
     
     async def _execute_power_set(
-        self, 
+        self,
         test_point_id: str,
         switch_mode: str,
         test_params: Dict[str, Any],
@@ -216,7 +219,7 @@ class MeasurementService:
         Execute power setting measurement (based on PowerSetMeasurement.py)
         """
         try:
-            if switch_mode == 'DAQ973A':
+            if switch_mode in ['DAQ973A', '34970A', 'APS7050', 'DAQ6510']:
                 # Validate required parameters
                 required_params = ['Instrument', 'Channel', 'Item']
                 missing = [p for p in required_params if p not in test_params]
@@ -227,14 +230,22 @@ class MeasurementService:
                         result="ERROR",
                         error_message=f"Missing parameters: {missing}"
                     )
-                
+
+                # Map switch mode to script file
+                script_map = {
+                    'DAQ973A': 'DAQ973A_test.py',
+                    '34970A': '34970A.py',
+                    'APS7050': 'APS7050.py',
+                    'DAQ6510': 'DAQ6510.py'
+                }
+
                 # Execute instrument command via subprocess (PDTool4 style)
                 result = await self._execute_instrument_command(
-                    script_path='./src/lowsheen_lib/DAQ973A_test.py',
+                    script_path=f'./src/lowsheen_lib/{script_map[switch_mode]}',
                     test_point_id=test_point_id,
                     test_params=test_params
                 )
-                
+
                 # Process response
                 if '1' in result:
                     return MeasurementResult(
@@ -247,13 +258,13 @@ class MeasurementService:
                     return MeasurementResult(
                         item_no=0,
                         item_name=test_point_id,
-                        result="FAIL", 
+                        result="FAIL",
                         measured_value=Decimal('0')
                     )
-            
-            elif switch_mode == 'MODEL2303':
-                # Similar implementation for MODEL2303
-                required_params = ['Instrument', 'Volt', 'Curr']
+
+            elif switch_mode in ['MODEL2303', 'MODEL2306', '2260B', 'IT6723C', 'PSW3072']:
+                # Similar implementation for power supplies
+                required_params = ['Instrument', 'SetVolt', 'SetCurr']
                 missing = [p for p in required_params if p not in test_params]
                 if missing:
                     return MeasurementResult(
@@ -262,19 +273,51 @@ class MeasurementService:
                         result="ERROR",
                         error_message=f"Missing parameters: {missing}"
                     )
-                
+
+                # Map switch mode to script file
+                script_map = {
+                    'MODEL2303': '2303_test.py',
+                    'MODEL2306': '2306_test.py',
+                    '2260B': '2260B.py',
+                    'IT6723C': 'IT6723C.py',
+                    'PSW3072': 'PSW3072.py'
+                }
+
                 result = await self._execute_instrument_command(
-                    script_path='./src/lowsheen_lib/2303_test.py',
+                    script_path=f'./src/lowsheen_lib/{script_map[switch_mode]}',
                     test_point_id=test_point_id,
                     test_params=test_params
                 )
-                
+
                 return MeasurementResult(
                     item_no=0,
                     item_name=test_point_id,
                     result="PASS" if "success" in result.lower() else "FAIL"
                 )
-            
+
+            elif switch_mode == 'KEITHLEY2015':
+                required_params = ['Instrument', 'Command']
+                missing = [p for p in required_params if p not in test_params]
+                if missing:
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="ERROR",
+                        error_message=f"Missing parameters: {missing}"
+                    )
+
+                result = await self._execute_instrument_command(
+                    script_path='./src/lowsheen_lib/Keithley2015.py',
+                    test_point_id=test_point_id,
+                    test_params=test_params
+                )
+
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="PASS" if "success" in result.lower() else "FAIL"
+                )
+
             else:
                 return MeasurementResult(
                     item_no=0,
@@ -282,7 +325,7 @@ class MeasurementService:
                     result="ERROR",
                     error_message=f"Unsupported switch mode: {switch_mode}"
                 )
-                
+
         except Exception as e:
             return MeasurementResult(
                 item_no=0,
@@ -294,7 +337,7 @@ class MeasurementService:
     async def _execute_power_read(
         self,
         test_point_id: str,
-        switch_mode: str, 
+        switch_mode: str,
         test_params: Dict[str, Any],
         run_all_test: bool
     ) -> MeasurementResult:
@@ -302,8 +345,12 @@ class MeasurementService:
         Execute power reading measurement (based on PowerReadMeasurement.py)
         """
         try:
-            if switch_mode == 'DAQ973A':
-                required_params = ['Instrument', 'Channel', 'Item', 'Type']
+            if switch_mode in ['DAQ973A', '34970A', 'DAQ6510', 'MDO34']:
+                required_params = ['Instrument', 'Channel', 'Item']
+                # Add 'Type' parameter only for DAQ973A if Item is volt or curr
+                if switch_mode == 'DAQ973A' and ('Item' in test_params and (test_params['Item'] == 'volt' or test_params['Item'] == 'curr')):
+                    required_params.append('Type')
+
                 missing = [p for p in required_params if p not in test_params]
                 if missing:
                     return MeasurementResult(
@@ -312,16 +359,26 @@ class MeasurementService:
                         result="ERROR",
                         error_message=f"Missing parameters: {missing}"
                     )
-                
+
+                # Map switch mode to script file
+                script_map = {
+                    'DAQ973A': 'DAQ973A_test.py',
+                    '34970A': '34970A.py',
+                    'DAQ6510': 'DAQ6510.py',
+                    'MDO34': 'MDO34.py'
+                }
+
                 result = await self._execute_instrument_command(
-                    script_path='./src/lowsheen_lib/DAQ973A_test.py',
+                    script_path=f'./src/lowsheen_lib/{script_map[switch_mode]}',
                     test_point_id=test_point_id,
                     test_params=test_params
                 )
-                
+
                 # Parse numeric result
                 try:
-                    measured_value = Decimal(str(float(result.strip())))
+                    # Clean up result string
+                    cleaned_result = result.replace('\n', '').replace('\r', '').strip()
+                    measured_value = Decimal(str(float(cleaned_result)))
                     return MeasurementResult(
                         item_no=0,
                         item_name=test_point_id,
@@ -335,7 +392,89 @@ class MeasurementService:
                         result="ERROR",
                         error_message=f"Invalid measurement result: {result}"
                     )
-                    
+
+            elif switch_mode in ['APS7050', 'KEITHLEY2015']:
+                if switch_mode == 'KEITHLEY2015':
+                    required_params = ['Instrument', 'Command']
+                else:
+                    required_params = ['Instrument', 'Item']  # For APS7050
+
+                missing = [p for p in required_params if p not in test_params]
+                if missing:
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="ERROR",
+                        error_message=f"Missing parameters: {missing}"
+                    )
+
+                # Map switch mode to script file
+                script_map = {
+                    'APS7050': 'APS7050.py',
+                    'KEITHLEY2015': 'Keithley2015.py'
+                }
+
+                result = await self._execute_instrument_command(
+                    script_path=f'./src/lowsheen_lib/{script_map[switch_mode]}',
+                    test_point_id=test_point_id,
+                    test_params=test_params
+                )
+
+                # Parse numeric result
+                try:
+                    # Clean up result string
+                    cleaned_result = result.replace('\n', '').replace('\r', '').strip()
+                    measured_value = Decimal(str(float(cleaned_result)))
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="PASS",  # Will be validated against limits later
+                        measured_value=measured_value
+                    )
+                except (ValueError, TypeError):
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="ERROR",
+                        error_message=f"Invalid measurement result: {result}"
+                    )
+
+            elif switch_mode == 'MT8870A_INF':
+                required_params = ['Instrument', 'Item']
+                missing = [p for p in required_params if p not in test_params]
+                if missing:
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="ERROR",
+                        error_message=f"Missing parameters: {missing}"
+                    )
+
+                result = await self._execute_instrument_command(
+                    script_path='./src/lowsheen_lib/RF_tool/MT8872A_INF.py',
+                    test_point_id=test_point_id,
+                    test_params=test_params
+                )
+
+                # Parse numeric result
+                try:
+                    # Clean up result string
+                    cleaned_result = result.replace('\n', '').replace('\r', '').strip()
+                    measured_value = Decimal(str(float(cleaned_result)))
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="PASS",  # Will be validated against limits later
+                        measured_value=measured_value
+                    )
+                except (ValueError, TypeError):
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="ERROR",
+                        error_message=f"Invalid measurement result: {result}"
+                    )
+
             else:
                 return MeasurementResult(
                     item_no=0,
@@ -343,7 +482,7 @@ class MeasurementService:
                     result="ERROR",
                     error_message=f"Unsupported switch mode: {switch_mode}"
                 )
-                
+
         except Exception as e:
             return MeasurementResult(
                 item_no=0,
@@ -356,18 +495,33 @@ class MeasurementService:
         self,
         test_point_id: str,
         switch_mode: str,
-        test_params: Dict[str, Any], 
+        test_params: Dict[str, Any],
         run_all_test: bool
     ) -> MeasurementResult:
         """
         Execute command test measurement (based on CommandTestMeasurement.py)
         """
         try:
-            if switch_mode == 'comport':
-                required_params = ['Port', 'Baud', 'Command']
+            if switch_mode in ['comport', 'console', 'tcpip', 'PEAK']:
+                if switch_mode == 'comport':
+                    script_file = 'ComPortCommand.py'
+                    required_params = ['Port', 'Baud', 'Command']
+                elif switch_mode == 'console':
+                    script_file = 'ConSoleCommand.py'
+                    required_params = ['Command']
+                elif switch_mode == 'tcpip':
+                    script_file = 'TCPIPCommand.py'
+                    required_params = ['Command']
+                elif switch_mode == 'PEAK':
+                    script_file = 'PEAK_API/PEAK.py'
+                    required_params = ['Command']
+
+                # Add conditional parameters if keyword extraction is specified
                 if 'keyWord' in test_params:
                     required_params.extend(['keyWord', 'spiltCount', 'splitLength'])
-                
+                elif 'EqLimit' in test_params:
+                    required_params.append('EqLimit')
+
                 missing = [p for p in required_params if p not in test_params]
                 if missing:
                     return MeasurementResult(
@@ -376,13 +530,13 @@ class MeasurementService:
                         result="ERROR",
                         error_message=f"Missing parameters: {missing}"
                     )
-                
+
                 result = await self._execute_instrument_command(
-                    script_path='./src/lowsheen_lib/ComPortCommand.py',
+                    script_path=f'./src/lowsheen_lib/{script_file}',
                     test_point_id=test_point_id,
                     test_params=test_params
                 )
-                
+
                 # Process keyword extraction if specified
                 if 'keyWord' in test_params:
                     processed_result = self._process_keyword_extraction(result, test_params)
@@ -401,13 +555,66 @@ class MeasurementService:
                             result="ERROR",
                             error_message=f"Could not parse extracted value: {processed_result}"
                         )
-                else:
+                # Process EqLimit if specified
+                elif 'EqLimit' in test_params:
+                    # Extract the line containing EqLimit
+                    lines = result.replace('\r\n', '\n').split('\n')
+                    eq_limit_val = test_params['EqLimit']
+                    found_line = ""
+
+                    for line in lines:
+                        if eq_limit_val in line:
+                            found_line = line.strip()
+                            break
+
+                    if not found_line:
+                        # Look for error condition
+                        for line in lines:
+                            if "Failed" in line:
+                                found_line = line.strip()
+                                break
+                        if not found_line:
+                            found_line = f"[{eq_limit_val}] not found in output"
+
                     return MeasurementResult(
                         item_no=0,
                         item_name=test_point_id,
-                        result="PASS" if result else "FAIL"
+                        result="PASS" if "Failed" not in found_line else "FAIL",
+                        error_message=found_line if "Failed" in found_line else None
                     )
-                    
+                else:
+                    # Basic response check
+                    cleaned_result = result.replace('\n', '').replace('\r', '').strip()
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="PASS" if cleaned_result and cleaned_result != "console output is empty" else "FAIL",
+                        measured_value=Decimal('1') if (cleaned_result and cleaned_result != "console output is empty") else None
+                    )
+
+            elif switch_mode in ['android_adb']:
+                required_params = ['Command']
+                missing = [p for p in required_params if p not in test_params]
+                if missing:
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="ERROR",
+                        error_message=f"Missing parameters: {missing}"
+                    )
+
+                result = await self._execute_instrument_command(
+                    script_path='./src/lowsheen_lib/AndroidAdbCommand.py',
+                    test_point_id=test_point_id,
+                    test_params=test_params
+                )
+
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="PASS" if result else "FAIL"
+                )
+
             else:
                 return MeasurementResult(
                     item_no=0,
@@ -415,7 +622,7 @@ class MeasurementService:
                     result="ERROR",
                     error_message=f"Unsupported switch mode: {switch_mode}"
                 )
-                
+
         except Exception as e:
             return MeasurementResult(
                 item_no=0,
@@ -676,23 +883,31 @@ class MeasurementService:
         validation_rules = {
             'PowerSet': {
                 'DAQ973A': ['Instrument', 'Channel', 'Item'],
-                'MODEL2303': ['Instrument', 'Volt', 'Curr'],
-                'IT6723C': ['Instrument', 'Channel', 'Volt', 'Curr'],
-                'PSW3072': ['Instrument', 'Channel', 'Volt', 'Curr'],
-                '2260B': ['Instrument', 'Channel', 'Volt', 'Curr'],
-                'APS7050': ['Instrument', 'Channel', 'Volt', 'Curr']
+                'MODEL2303': ['Instrument', 'SetVolt', 'SetCurr'],
+                'MODEL2306': ['Instrument', 'Channel', 'SetVolt', 'SetCurr'],
+                'IT6723C': ['Instrument', 'SetVolt', 'SetCurr'],
+                'PSW3072': ['Instrument', 'SetVolt', 'SetCurr'],
+                '2260B': ['Instrument', 'SetVolt', 'SetCurr'],
+                'APS7050': ['Instrument', 'Channel', 'SetVolt', 'SetCurr'],
+                '34970A': ['Instrument', 'Channel', 'Item'],
+                'KEITHLEY2015': ['Instrument', 'Command']
             },
             'PowerRead': {
                 'DAQ973A': ['Instrument', 'Channel', 'Item', 'Type'],
                 '34970A': ['Instrument', 'Channel', 'Item'],
-                '2015': ['Instrument', 'Item'],
-                '6510': ['Instrument', 'Item']
+                '2015': ['Instrument', 'Command'],
+                '6510': ['Instrument', 'Item'],
+                'APS7050': ['Instrument', 'Item'],
+                'MDO34': ['Instrument', 'Channel', 'Item'],
+                'MT8870A_INF': ['Instrument', 'Item'],
+                'KEITHLEY2015': ['Instrument', 'Command']
             },
             'CommandTest': {
                 'comport': ['Port', 'Baud', 'Command'],
                 'tcpip': ['Host', 'Port', 'Command'],
                 'console': ['Command'],
-                'android_adb': ['Command']
+                'android_adb': ['Command'],
+                'PEAK': ['Command']
             },
             'SFCtest': {
                 'webStep1_2': [],
@@ -730,9 +945,13 @@ class MeasurementService:
         missing_params = [param for param in required_params if param not in test_params]
         
         # Additional validation for CommandTest with keyword extraction
-        if measurement_type == 'CommandTest' and 'keyWord' in test_params:
-            additional_required = ['spiltCount', 'splitLength']
-            missing_params.extend([param for param in additional_required if param not in test_params])
+        if measurement_type == 'CommandTest' and switch_mode in ['comport', 'console', 'tcpip', 'PEAK']:
+            if 'keyWord' in test_params:
+                additional_required = ['spiltCount', 'splitLength']
+                missing_params.extend([param for param in additional_required if param not in test_params])
+            elif 'EqLimit' in test_params:
+                # EqLimit doesn't require additional parameters beyond itself
+                pass
         
         return {
             "valid": len(missing_params) == 0,

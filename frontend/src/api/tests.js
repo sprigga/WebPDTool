@@ -115,3 +115,46 @@ export const getInstrumentStatus = () => {
 export const resetInstrument = (instrumentId) => {
   return apiClient.post(`/api/tests/instruments/${instrumentId}/reset`)
 }
+
+/**
+ * Execute a single measurement
+ * @param {Object} measurementData - Measurement data
+ * @returns {Promise} Measurement result
+ */
+export const executeSingleMeasurement = (measurementData) => {
+  return apiClient.post('/api/measurements/execute', measurementData)
+}
+
+/**
+ * Execute batch measurements
+ * @param {Object} batchData - Batch measurement data
+ * @returns {Promise} Batch execution status
+ */
+export const executeBatchMeasurements = (batchData) => {
+  return apiClient.post('/api/measurements/batch-execute', batchData)
+}
+
+/**
+ * Get available measurement types
+ * @returns {Promise} List of measurement types
+ */
+export const getMeasurementTypes = () => {
+  return apiClient.get('/api/measurements/types')
+}
+
+/**
+ * Validate measurement parameters
+ * @param {string} measurementType - Measurement type
+ * @param {string} switchMode - Switch mode
+ * @param {Object} testParams - Test parameters
+ * @returns {Promise} Validation result
+ */
+export const validateMeasurementParams = (measurementType, switchMode, testParams) => {
+  return apiClient.post('/api/measurements/validate-params', null, {
+    params: {
+      measurement_type: measurementType,
+      switch_mode: switchMode
+    },
+    data: testParams
+  })
+}

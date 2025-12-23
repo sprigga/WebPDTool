@@ -333,7 +333,9 @@ import {
   startTestExecution,
   stopTestExecution,
   getTestSessionStatus,
-  getSessionResults
+  getSessionResults,
+  executeSingleMeasurement,
+  resetInstrument
 } from '@/api/tests'
 import { getStationTestPlan, getStationTestPlanNames } from '@/api/testplans'
 
@@ -389,6 +391,10 @@ const finalResult = ref('')
 // Status messages
 const statusMessages = ref([])
 const errorCode = ref('')
+
+// Measurement execution tracking (PDTool4 style)
+const testResults = ref({}) // 蒐集各測項測量值 {'ID':'value','ID2':'value2',....}
+const usedInstruments = ref({}) // 蒐集有使用的儀器 {'儀器位置':'儀器類型'}
 
 // Polling
 let statusPollInterval = null
@@ -458,7 +464,8 @@ const loadTestPlanNames = async () => {
   }
 
   try {
-    const names = await getStationTestPlanNames(currentStation.value.id)
+    // 原有程式碼缺少 project_id 參數,導致後端 API 報錯,需傳遞 currentProject.value.id
+    const names = await getStationTestPlanNames(currentStation.value.id, currentProject.value.id)
     testPlanNames.value = names
 
     // 從 localStorage 讀取上次選擇的測試計劃名稱
@@ -484,8 +491,9 @@ const loadTestPlanItems = async () => {
 
   try {
     addStatusMessage('載入測試計劃...', 'info')
+    // 原有程式碼缺少 project_id 參數,導致後端 API 報錯,需傳遞 currentProject.value.id
     // 新增: 傳遞選擇的測試計劃名稱
-    const items = await getStationTestPlan(currentStation.value.id, true, selectedTestPlanName.value)
+    const items = await getStationTestPlan(currentStation.value.id, currentProject.value.id, true, selectedTestPlanName.value)
     testPlanItems.value = items.map(item => ({
       ...item,
       status: null,
@@ -517,6 +525,208 @@ const handleTestPlanChange = () => {
     addStatusMessage('已清除測試計劃選擇', 'info')
   }
   loadTestPlanItems()
+}
+
+// 新增: 執行量測功能 (參考 oneCSV_atlas_2.py)
+const executeMeasurements = async () => {
+  try {
+    addStatusMessage('開始執行測試項目...', 'info')
+
+    // Reset tracking variables
+    testResults.value = {}
+    usedInstruments.value = {}
+
+    let passCount = 0
+    let failCount = 0
+
+    // Execute each test item sequentially (參考 oneCSV_atlas_2.py:131-191)
+    for (let index = 0; index < testPlanItems.value.length; index++) {
+      const item = testPlanItems.value[index]
+
+      // Update current item status
+      testStatus.value.current_item = index + 1
+
+      // Check if should stop
+      if (!testing.value) {
+        addStatusMessage('測試已中止', 'warning')
+        break
+      }
+
+      try {
+        // Execute single measurement
+        const result = await executeSingleItem(item, index)
+
+        // Update item with result
+        item.status = result.result
+        item.measured_value = result.measured_value
+
+        // Update statistics
+        if (result.result === 'PASS') {
+          passCount++
+        } else if (result.result === 'FAIL') {
+          failCount++
+
+          // Stop on fail if not in runAllTest mode
+          if (!runAllTests.value) {
+            addStatusMessage(`測試失敗於項目 ${item.item_name}，停止執行`, 'error')
+            break
+          }
+        }
+
+        // Update test status
+        testStatus.value.pass_items = passCount
+        testStatus.value.fail_items = failCount
+
+        // Store result for dependency usage (UseResult機制)
+        if (result.measured_value !== null) {
+          testResults.value[item.item_no] = String(result.measured_value)
+        }
+
+        addStatusMessage(`項目 ${item.item_no}: ${item.item_name} - ${result.result}`,
+                        result.result === 'PASS' ? 'success' : 'error')
+
+      } catch (error) {
+        console.error(`Failed to execute item ${item.item_no}:`, error)
+        item.status = 'ERROR'
+        item.measured_value = null
+        failCount++
+        testStatus.value.fail_items = failCount
+
+        addStatusMessage(`項目 ${item.item_no} 執行錯誤: ${error.message}`, 'error')
+        errorCode.value = `項目 ${item.item_no} 執行錯誤: ${error.message}`
+
+        if (!runAllTests.value) {
+          break
+        }
+      }
+    }
+
+    // Cleanup instruments (參考 oneCSV_atlas_2.py:244-265)
+    await cleanupInstruments()
+
+    // Update final status - 檢查是否有任何 ERROR 狀態的項目
+    const hasError = testPlanItems.value.some(item => item.status === 'ERROR')
+    const hasFail = testPlanItems.value.some(item => item.status === 'FAIL')
+
+    // 修正: 如果有 ERROR 或 FAIL,最終結果應該是 FAIL
+    if (hasError || hasFail) {
+      testStatus.value.status = 'COMPLETED'
+      finalResult.value = 'FAIL'
+    } else {
+      testStatus.value.status = 'COMPLETED'
+      finalResult.value = 'PASS'
+    }
+    testCompleted.value = true
+
+    addStatusMessage(
+      `測試完成: ${finalResult.value} (${passCount}/${testStatus.value.total_items} 通過)`,
+      finalResult.value === 'PASS' ? 'success' : 'error'
+    )
+
+  } catch (error) {
+    console.error('Failed to execute measurements:', error)
+    addStatusMessage('執行測試時發生錯誤: ' + error.message, 'error')
+    errorCode.value = '執行測試時發生錯誤: ' + error.message
+    testStatus.value.status = 'ERROR'
+  } finally {
+    testing.value = false
+    stopStatusPolling()
+  }
+}
+
+// 新增: 執行單一測試項目 (參考 oneCSV_atlas_2.py 的量測分發邏輯)
+const executeSingleItem = async (item, index) => {
+  try {
+    // Parse test parameters from CSV columns
+    const testParams = {}
+
+    // Extract parameters based on ExecuteName
+    const executeName = item.test_command // 假設 test_command 就是 ExecuteName
+    const caseMode = item.case || item.switch_mode // Switch/case mode
+
+    // Build test parameters (參考 oneCSV_atlas_2.py:134-155)
+    // 這裡需要根據實際的 CSV 欄位來構建參數
+    // 簡化版本：將所有額外欄位作為參數傳遞
+    Object.keys(item).forEach(key => {
+      if (!['item_no', 'item_name', 'test_command', 'lower_limit', 'upper_limit',
+            'unit', 'status', 'measured_value'].includes(key)) {
+        if (item[key] && item[key] !== '') {
+          testParams[key] = item[key]
+        }
+      }
+    })
+
+    // Handle UseResult dependency (參考 oneCSV_atlas_2.py:146-155)
+    if (testParams.UseResult && testResults.value[testParams.UseResult]) {
+      const useResultValue = testResults.value[testParams.UseResult]
+      if (testParams.Command) {
+        testParams.Command = testParams.Command + ' ' + useResultValue
+      }
+    }
+
+    // Track used instruments
+    if (testParams.Instrument) {
+      usedInstruments.value[testParams.Instrument] = executeName
+    }
+
+    // Execute measurement via API
+    const measurementData = {
+      measurement_type: executeName || 'Other',
+      test_point_id: String(item.item_no),
+      switch_mode: caseMode || 'default',
+      test_params: testParams,
+      run_all_test: runAllTests.value
+    }
+
+    const response = await executeSingleMeasurement(measurementData)
+
+    // Validate against limits
+    let result = response.result
+    if (response.measured_value !== null && response.measured_value !== undefined) {
+      const measuredValue = Number(response.measured_value)
+      const lowerLimit = item.lower_limit !== null ? Number(item.lower_limit) : null
+      const upperLimit = item.upper_limit !== null ? Number(item.upper_limit) : null
+
+      if (lowerLimit !== null && measuredValue < lowerLimit) {
+        result = 'FAIL'
+      } else if (upperLimit !== null && measuredValue > upperLimit) {
+        result = 'FAIL'
+      } else if (lowerLimit !== null || upperLimit !== null) {
+        result = 'PASS'
+      }
+    }
+
+    return {
+      result: result,
+      measured_value: response.measured_value,
+      error_message: response.error_message
+    }
+
+  } catch (error) {
+    throw new Error(`量測執行失敗: ${error.response?.data?.detail || error.message}`)
+  }
+}
+
+// 新增: 清理儀器 (參考 oneCSV_atlas_2.py:244-265)
+const cleanupInstruments = async () => {
+  if (Object.keys(usedInstruments.value).length === 0) {
+    return
+  }
+
+  addStatusMessage('開始儀器初始化...', 'info')
+
+  for (const [instrumentLocation, instrumentType] of Object.entries(usedInstruments.value)) {
+    try {
+      await resetInstrument(instrumentLocation)
+      addStatusMessage(`儀器 ${instrumentLocation} 已重置`, 'success')
+    } catch (error) {
+      console.error(`Failed to reset instrument ${instrumentLocation}:`, error)
+      addStatusMessage(`儀器 ${instrumentLocation} 重置失敗: ${error.message}`, 'warning')
+    }
+  }
+
+  addStatusMessage('儀器初始化完成', 'success')
+  usedInstruments.value = {}
 }
 
 // 移除測試計劃列表相關函數，因為系統架構中沒有獨立的測試計劃實體
@@ -593,7 +803,7 @@ const handleStartTest = async () => {
   testing.value = true
   testCompleted.value = false
   errorCode.value = ''
-  
+
   // Reset test plan items status
   testPlanItems.value.forEach(item => {
     item.status = null
@@ -602,24 +812,25 @@ const handleStartTest = async () => {
 
   try {
     addStatusMessage(`開始測試: ${barcode.value}`, 'info')
-    
+
     // Create test session
     const session = await createTestSession({
       serial_number: barcode.value.trim(),
       station_id: currentStation.value.id
     })
-    
+
     currentSession.value = session
     addStatusMessage(`測試會話已創建 (ID: ${session.id})`, 'success')
 
-    // Start test execution
-    await startTestExecution(session.id)
-    addStatusMessage('測試執行已啟動', 'success')
-    
+    // 新增: 直接執行量測 (參考 PDTool4/oneCSV_atlas_2.py 的執行模式)
+    // 不使用 startTestExecution API，而是直接在前端執行量測邏輯
     testStatus.value.status = 'RUNNING'
 
-    // Start polling
-    startStatusPolling()
+    // Execute measurements sequentially
+    await executeMeasurements()
+
+    // Note: executeMeasurements 會在完成時自動設定 finalResult 和 testCompleted
+    // 不再需要輪詢機制
 
   } catch (error) {
     console.error('Failed to start test:', error)
@@ -642,12 +853,20 @@ const handleStopTest = async () => {
       type: 'warning'
     })
 
-    await stopTestExecution(currentSession.value.id)
-    addStatusMessage('測試已停止', 'warning')
-    stopStatusPolling()
+    // 新增: 直接設定 testing 為 false，executeMeasurements 會檢查這個標誌
     testing.value = false
+    addStatusMessage('測試已停止', 'warning')
     testStatus.value.status = 'ABORTED'
-    
+    finalResult.value = 'ABORT'
+
+    // 仍然呼叫 API 停止後端會話（如果有的話）
+    try {
+      await stopTestExecution(currentSession.value.id)
+    } catch (apiError) {
+      // 忽略 API 錯誤，因為可能前端執行模式下後端沒有在運行
+      console.log('Backend stop API call failed (expected in frontend-only execution mode):', apiError)
+    }
+
   } catch (error) {
     if (error !== 'cancel') {
       console.error('Failed to stop test:', error)
@@ -726,19 +945,14 @@ const stopStatusPolling = () => {
   }
 }
 
+// 修正: 移除確認對話框,直接執行登出,避免需要點擊兩次的問題
 const handleLogout = async () => {
-  try {
-    await ElMessageBox.confirm('確定要登出嗎？', '確認', {
-      confirmButtonText: '確定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
+  // Clear project and station selection
+  projectStore.clearCurrentSelection()
 
-    authStore.logout()
-    router.push('/login')
-  } catch (error) {
-    // User cancelled
-  }
+  // Logout and redirect
+  authStore.logout()
+  router.push('/login')
 }
 
 // Watchers
