@@ -139,69 +139,113 @@ class MeasurementService:
         session_id: int,
         measurements: List[Dict[str, Any]],
         stop_on_fail: bool = True,
+        run_all_test: bool = False,
         user_id: Optional[str] = None,
         db: Optional[Session] = None
     ):
         """
         Execute batch measurements asynchronously
-        
+
         Implements PDTool4's CSV-driven sequential execution with dependency management.
+
+        Args:
+            session_id: 測試會話 ID
+            measurements: 測量請求列表
+            stop_on_fail: 失敗時是否停止 (True=停止, False=繼續)
+            run_all_test: PDTool4 runAllTest 模式 (遇到錯誤繼續執行)
+            user_id: 使用者 ID
+            db: 資料庫 session
         """
         try:
             self.logger.info(f"Starting batch execution for session {session_id}")
-            
+            if run_all_test:
+                self.logger.info("PDTool4 runAllTest mode: ENABLED - will continue on errors")
+
             # Initialize session tracking
             self.active_sessions[session_id] = {
                 "status": "RUNNING",
                 "current_index": 0,
                 "total_count": len(measurements),
                 "results": [],
-                "test_results": {}  # PDTool4-style result collection
+                "test_results": {},  # PDTool4-style result collection
+                "errors": [],  # 收集所有錯誤 (runAllTest 模式)
+                "run_all_test": run_all_test
             }
-            
+
             session_data = self.active_sessions[session_id]
-            
+
             for index, measurement_request in enumerate(measurements):
                 session_data["current_index"] = index
-                
+
                 # Check for stop request
                 if session_data.get("should_stop", False):
                     session_data["status"] = "STOPPED"
                     break
-                
-                # Execute measurement
+
+                # 執行測量 - 傳遞 run_all_test 參數
                 result = await self.execute_single_measurement(
                     measurement_type=measurement_request["measurement_type"],
                     test_point_id=measurement_request["test_point_id"],
                     switch_mode=measurement_request["switch_mode"],
                     test_params=measurement_request["test_params"],
-                    run_all_test=measurement_request.get("run_all_test", False),
+                    run_all_test=run_all_test or measurement_request.get("run_all_test", False),
                     user_id=user_id
                 )
-                
+
                 # Store result
                 session_data["results"].append(result)
                 session_data["test_results"][measurement_request["test_point_id"]] = result.measured_value
-                
+
+                # PDTool4 runAllTest: 收集錯誤但不停止
+                if result.result == "ERROR":
+                    error_msg = f"Item {result.item_name}: {result.error_message}"
+                    session_data["errors"].append(error_msg)
+                    if run_all_test:
+                        self.logger.warning(f"[runAllTest] Error at {result.item_name}: {result.error_message} - Continuing...")
+
                 # Save to database if provided
                 if db:
                     await self._save_measurement_result(db, session_id, result)
-                
-                # Check if should stop on failure
-                if stop_on_fail and result.result == "FAIL":
-                    self.logger.warning(f"Stopping batch execution due to failure at {result.item_name}")
-                    session_data["status"] = "FAILED"
+
+                # 判斷是否停止:
+                # - 如果啟用 runAllTest，遇到 FAIL 或 ERROR 都繼續
+                # - 如果 stop_on_fail=True 且未啟用 runAllTest，遇到 FAIL 停止
+                # - ERROR 總是會被記錄，但在 runAllTest 模式下不停止
+                should_stop = False
+
+                if result.result == "FAIL":
+                    if stop_on_fail and not run_all_test:
+                        self.logger.warning(f"Stopping batch execution due to failure at {result.item_name}")
+                        session_data["status"] = "FAILED"
+                        should_stop = True
+
+                if result.result == "ERROR":
+                    # runAllTest 模式下，ERROR 不會停止執行
+                    if not run_all_test and not stop_on_fail:
+                        self.logger.error(f"Stopping batch execution due to error at {result.item_name}")
+                        session_data["status"] = "ERROR"
+                        should_stop = True
+
+                if should_stop:
                     break
-            
+
             # Complete session if not stopped
             if session_data["status"] == "RUNNING":
                 session_data["status"] = "COMPLETED"
-            
+                self.logger.info(f"Batch execution completed successfully")
+
             # Cleanup instruments (PDTool4 style)
             await self._cleanup_used_instruments(session_data.get("used_instruments", {}))
-            
+
+            # Log summary
+            total_errors = len(session_data.get("errors", []))
+            if run_all_test and total_errors > 0:
+                self.logger.warning(f"[runAllTest] Completed with {total_errors} errors")
+                for err in session_data["errors"][:5]:  # 只顯示前 5 個錯誤
+                    self.logger.warning(f"  - {err}")
+
             self.logger.info(f"Batch execution for session {session_id} completed with status: {session_data['status']}")
-            
+
         except Exception as e:
             self.logger.error(f"Batch execution failed for session {session_id}: {e}")
             if session_id in self.active_sessions:
@@ -500,135 +544,241 @@ class MeasurementService:
     ) -> MeasurementResult:
         """
         Execute command test measurement (based on CommandTestMeasurement.py)
+
+        支援多種通信方式: comport, console, tcpip, PEAK, android_adb
+        可從資料庫 test_plans 表的 command 欄位讀取自訂腳本路徑
+
+        參數說明:
+        - switch_mode: 通信類型 (comport, console, tcpip, PEAK, android_adb, 或自定義腳本名稱)
+        - test_params['Command']: 通信命令或腳本參數
+        - test_params['command']: 從資料庫 command 欄位傳入的自訂腳本路徑 (當 switch_mode 不在預設列表時使用)
+        - test_params['keyWord']: 關鍵字提取參數 (可選)
+        - test_params['spiltCount']: 分割計數 (可選,配合 keyWord 使用)
+        - test_params['splitLength']: 分割長度 (可選,配合 keyWord 使用)
+        - test_params['EqLimit']: 等於限制值檢查 (可選)
         """
         try:
-            if switch_mode in ['comport', 'console', 'tcpip', 'PEAK']:
-                if switch_mode == 'comport':
-                    script_file = 'ComPortCommand.py'
-                    required_params = ['Port', 'Baud', 'Command']
-                elif switch_mode == 'console':
-                    script_file = 'ConSoleCommand.py'
-                    required_params = ['Command']
-                elif switch_mode == 'tcpip':
-                    script_file = 'TCPIPCommand.py'
-                    required_params = ['Command']
-                elif switch_mode == 'PEAK':
-                    script_file = 'PEAK_API/PEAK.py'
-                    required_params = ['Command']
+            # 定義預設的腳本映射和必要參數
+            script_config = {
+                'comport': {
+                    'script': 'ComPortCommand.py',
+                    'required_params': ['Port', 'Baud', 'Command']
+                },
+                'console': {
+                    'script': 'ConSoleCommand.py',
+                    'required_params': ['Command']
+                },
+                'tcpip': {
+                    'script': 'TCPIPCommand.py',
+                    'required_params': ['Command']
+                },
+                'PEAK': {
+                    'script': 'PEAK_API/PEAK.py',
+                    'required_params': ['Command']
+                },
+                'android_adb': {
+                    'script': 'AndroidAdbCommand.py',
+                    'required_params': ['Command']
+                }
+            }
 
-                # Add conditional parameters if keyword extraction is specified
-                if 'keyWord' in test_params:
-                    required_params.extend(['keyWord', 'spiltCount', 'splitLength'])
-                elif 'EqLimit' in test_params:
-                    required_params.append('EqLimit')
+            # 檢查是否為預設的 switch_mode
+            if switch_mode in script_config:
+                config = script_config[switch_mode]
+                script_file = config['script']
+                required_params = config['required_params'].copy()
 
-                missing = [p for p in required_params if p not in test_params]
+                # 檢查必要參數
+                missing = [p for p in required_params if p not in test_params or not test_params[p]]
                 if missing:
                     return MeasurementResult(
                         item_no=0,
                         item_name=test_point_id,
                         result="ERROR",
-                        error_message=f"Missing parameters: {missing}"
+                        error_message=f"Missing required parameters: {missing}"
                     )
 
+                # 添加條件參數到必要參數列表
+                if 'keyWord' in test_params:
+                    required_params.extend(['keyWord', 'spiltCount', 'splitLength'])
+                elif 'EqLimit' in test_params:
+                    required_params.append('EqLimit')
+
+                # 執行預設腳本
                 result = await self._execute_instrument_command(
                     script_path=f'./src/lowsheen_lib/{script_file}',
                     test_point_id=test_point_id,
                     test_params=test_params
                 )
 
-                # Process keyword extraction if specified
-                if 'keyWord' in test_params:
-                    processed_result = self._process_keyword_extraction(result, test_params)
-                    try:
-                        measured_value = Decimal(str(float(processed_result)))
-                        return MeasurementResult(
-                            item_no=0,
-                            item_name=test_point_id,
-                            result="PASS",
-                            measured_value=measured_value
-                        )
-                    except (ValueError, TypeError):
-                        return MeasurementResult(
-                            item_no=0,
-                            item_name=test_point_id,
-                            result="ERROR",
-                            error_message=f"Could not parse extracted value: {processed_result}"
-                        )
-                # Process EqLimit if specified
-                elif 'EqLimit' in test_params:
-                    # Extract the line containing EqLimit
-                    lines = result.replace('\r\n', '\n').split('\n')
-                    eq_limit_val = test_params['EqLimit']
-                    found_line = ""
+                # 處理輸出結果
+                return self._process_command_result(result, test_params, test_point_id)
 
-                    for line in lines:
-                        if eq_limit_val in line:
-                            found_line = line.strip()
-                            break
+            # 支援自定義腳本 (從資料庫 command 欄位讀取)
+            else:
+                # 優先級 1: 使用 test_params 中明確指定的 script_path
+                script_path = test_params.get('script_path')
 
-                    if not found_line:
-                        # Look for error condition
-                        for line in lines:
-                            if "Failed" in line:
-                                found_line = line.strip()
-                                break
-                        if not found_line:
-                            found_line = f"[{eq_limit_val}] not found in output"
+                # 優先級 2: 使用 test_params 中的 command (來自資料庫 test_plans.command)
+                if not script_path:
+                    script_path = test_params.get('command')
 
-                    return MeasurementResult(
-                        item_no=0,
-                        item_name=test_point_id,
-                        result="PASS" if "Failed" not in found_line else "FAIL",
-                        error_message=found_line if "Failed" in found_line else None
-                    )
-                else:
-                    # Basic response check
-                    cleaned_result = result.replace('\n', '').replace('\r', '').strip()
-                    return MeasurementResult(
-                        item_no=0,
-                        item_name=test_point_id,
-                        result="PASS" if cleaned_result and cleaned_result != "console output is empty" else "FAIL",
-                        measured_value=Decimal('1') if (cleaned_result and cleaned_result != "console output is empty") else None
-                    )
-
-            elif switch_mode in ['android_adb']:
-                required_params = ['Command']
-                missing = [p for p in required_params if p not in test_params]
-                if missing:
+                # 如果都沒有，返回錯誤
+                if not script_path:
                     return MeasurementResult(
                         item_no=0,
                         item_name=test_point_id,
                         result="ERROR",
-                        error_message=f"Missing parameters: {missing}"
+                        error_message=f"No script path specified for CommandTest with switch_mode='{switch_mode}'. "
+                                     f"Please provide 'script_path' or 'command' in test_params, "
+                                     f"or use a predefined switch_mode: {list(script_config.keys())}"
                     )
 
+                # 檢查腳本檔案是否存在
+                import os
+                if not os.path.exists(script_path):
+                    # 嘗試相對於 backend 目錄的路徑
+                    relative_path = os.path.join('/home/ubuntu/WebPDTool/backend', script_path)
+                    if os.path.exists(relative_path):
+                        script_path = relative_path
+                    else:
+                        return MeasurementResult(
+                            item_no=0,
+                            item_name=test_point_id,
+                            result="ERROR",
+                            error_message=f"Script not found: {script_path}"
+                        )
+
+                # 執行自訂腳本
+                self.logger.info(f"Executing custom script: {script_path} for {test_point_id}")
                 result = await self._execute_instrument_command(
-                    script_path='./src/lowsheen_lib/AndroidAdbCommand.py',
+                    script_path=script_path,
                     test_point_id=test_point_id,
                     test_params=test_params
                 )
 
-                return MeasurementResult(
-                    item_no=0,
-                    item_name=test_point_id,
-                    result="PASS" if result else "FAIL"
-                )
-
-            else:
-                return MeasurementResult(
-                    item_no=0,
-                    item_name=test_point_id,
-                    result="ERROR",
-                    error_message=f"Unsupported switch mode: {switch_mode}"
-                )
+                # 處理輸出結果
+                return self._process_command_result(result, test_params, test_point_id)
 
         except Exception as e:
+            self.logger.error(f"CommandTest execution failed: {e}")
             return MeasurementResult(
                 item_no=0,
                 item_name=test_point_id,
                 result="ERROR",
                 error_message=str(e)
+            )
+
+    def _process_command_result(
+        self,
+        result: str,
+        test_params: Dict[str, Any],
+        test_point_id: str
+    ) -> MeasurementResult:
+        """
+        處理 CommandTest 的執行結果 (仿照 PDTool4 CommandTestMeasurement.py)
+
+        支援三種結果處理方式:
+        1. keyWord: 關鍵字提取
+        2. EqLimit: 等於限制值檢查
+        3. default: 基本回應檢查
+        """
+        try:
+            # 模式 1: 關鍵字提取 (keyWord + spiltCount + splitLength)
+            if 'keyWord' in test_params and test_params['keyWord']:
+                processed_result = self._process_keyword_extraction(result, test_params)
+                try:
+                    measured_value = Decimal(str(float(processed_result)))
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="PASS",
+                        measured_value=measured_value
+                    )
+                except (ValueError, TypeError):
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="ERROR",
+                        error_message=f"Could not parse extracted value: {processed_result}"
+                    )
+
+            # 模式 2: 等於限制值檢查 (EqLimit)
+            elif 'EqLimit' in test_params and test_params['EqLimit']:
+                # 提取包含 EqLimit 的行
+                lines = result.replace('\r\n', '\n').split('\n')
+                eq_limit_val = test_params['EqLimit']
+                found_line = ""
+
+                for line in lines:
+                    if eq_limit_val in line:
+                        found_line = line.strip()
+                        break
+
+                if not found_line:
+                    # 尋找錯誤條件
+                    for line in lines:
+                        if "Failed" in line or "Error" in line:
+                            found_line = line.strip()
+                            break
+                    if not found_line:
+                        found_line = f"[{eq_limit_val}] not found in output"
+
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="PASS" if "Failed" not in found_line and "Error" not in found_line else "FAIL",
+                    error_message=found_line if ("Failed" in found_line or "Error" in found_line) else None
+                )
+
+            # 模式 3: 基本回應檢查 (default)
+            else:
+                # 清理輸出結果
+                cleaned_result = result.replace('\n', '').replace('\r', '').strip()
+
+                # 檢查是否為空輸出
+                if not cleaned_result or cleaned_result == "console output is empty":
+                    # 如果 LimitType 是 none，則空輸出也算 PASS
+                    if test_params.get('LimitType') == 'none':
+                        return MeasurementResult(
+                            item_no=0,
+                            item_name=test_point_id,
+                            result="PASS",
+                            measured_value=None
+                        )
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="FAIL",
+                        error_message="Empty output"
+                    )
+
+                # 嘗試解析為數值
+                try:
+                    measured_value = Decimal(str(float(cleaned_result)))
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="PASS",
+                        measured_value=measured_value
+                    )
+                except (ValueError, TypeError):
+                    # 無法解析為數值，返回字串作為 PASS
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="PASS",
+                        measured_value=None,
+                        error_message=f"Output: {cleaned_result}"
+                    )
+
+        except Exception as e:
+            self.logger.error(f"Failed to process command result: {e}")
+            return MeasurementResult(
+                item_no=0,
+                item_name=test_point_id,
+                result="ERROR",
+                error_message=f"Result processing failed: {str(e)}"
             )
     
     async def _execute_sfc_test(
@@ -752,16 +902,113 @@ class MeasurementService:
     ) -> MeasurementResult:
         """
         Execute other/custom measurements (based on OtherMeasurement.py)
+
+        支援執行自定義 Python 測試腳本，腳本路徑從資料庫 test_plans 表的 command 欄位獲取
+
+        參數說明:
+        - switch_mode: 腳本類型或自定義識別符 (例如: 'test123', 'custom_script')
+        - test_params['script_path']: 腳本完整路徑 (優先使用，如果提供)
+        - test_params['command']: 從資料庫 command 欄位傳入的腳本路徑 (次選)
+        - test_params['arg']: 傳遞給腳本的命令行參數 (可選)
         """
         try:
-            # Placeholder for custom measurements
+            # 優先級 1: 使用 test_params 中明確指定的 script_path
+            script_path = test_params.get('script_path')
+
+            # 優先級 2: 使用 test_params 中的 command (來自資料庫 test_plans.command)
+            if not script_path:
+                script_path = test_params.get('command')
+
+            # 優先級 3: 如果是 test123，使用預設路徑 (向後相容)
+            if not script_path and switch_mode == 'test123':
+                script_path = './scripts/test123.py'
+
+            # 如果都沒有，返回錯誤
+            if not script_path:
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    error_message=f"No script path specified. Please provide 'script_path' or 'command' in test_params, or set command in database test_plans table."
+                )
+
+            # 原有程式碼: 構建命令行參數
+            # 原始腳本邏輯: 如果第一個參數是 '123'，輸出 '456'，否則輸出 '123'
+            command = ['python', script_path]
+
+            # 如果有指定參數，則傳入
+            if 'arg' in test_params:
+                command.append(test_params['arg'])
+
+            # 執行腳本
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd='/home/ubuntu/WebPDTool/backend'
+            )
+
+            if result.returncode != 0:
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    error_message=f"Script failed: {result.stderr}"
+                )
+
+            # 解析輸出
+            output = result.stdout.strip()
+
+            # 原有程式碼: 根據輸出決定結果
+            # 123.py 邏輯: 參數為 '123' 時輸出 '456'，否則輸出 '123'
+            if output == '456':
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="PASS",
+                    measured_value=Decimal('456')
+                )
+            elif output == '123':
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="PASS",
+                    measured_value=Decimal('123')
+                )
+            # 嘗試解析為數字 (通用處理)
+            else:
+                try:
+                    numeric_value = Decimal(str(float(output)))
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="PASS",
+                        measured_value=numeric_value
+                    )
+                except (ValueError, TypeError):
+                    # 如果無法解析為數字，返回原始輸出作為 PASS
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="PASS",
+                        error_message=f"Script output: {output}"
+                    )
+
+        except subprocess.TimeoutExpired:
             return MeasurementResult(
                 item_no=0,
                 item_name=test_point_id,
-                result="PASS",
-                measured_value=Decimal('1')
+                result="ERROR",
+                error_message="Script timeout"
             )
-                
+        except FileNotFoundError:
+            return MeasurementResult(
+                item_no=0,
+                item_name=test_point_id,
+                result="ERROR",
+                error_message=f"Script not found: {script_path}"
+            )
         except Exception as e:
             return MeasurementResult(
                 item_no=0,
@@ -907,7 +1154,9 @@ class MeasurementService:
                 'tcpip': ['Host', 'Port', 'Command'],
                 'console': ['Command'],
                 'android_adb': ['Command'],
-                'PEAK': ['Command']
+                'PEAK': ['Command'],
+                # 自定義腳本模式 - 只要有 command 或 script_path 即可
+                'custom': ['command']  # command 欄位可選,如果沒有則使用 script_path
             },
             'SFCtest': {
                 'webStep1_2': [],
@@ -922,6 +1171,11 @@ class MeasurementService:
             'OPjudge': {
                 'YorN': [],
                 'confirm': []
+            },
+            # 新增: test123 測試腳本支援
+            'Other': {
+                'test123': [],  # test123.py 不需要任何必需參數，可選 arg 參數
+                'custom': []
             }
         }
         
@@ -934,12 +1188,34 @@ class MeasurementService:
             }
         
         if switch_mode not in validation_rules[measurement_type]:
-            return {
-                "valid": False,
-                "missing_params": [],
-                "invalid_params": [],
-                "suggestions": [f"Unknown switch mode '{switch_mode}' for {measurement_type}"]
-            }
+            # 对于 CommandTest,未知的 switch_mode 可能是自定義腳本
+            if measurement_type == 'CommandTest':
+                # 檢查是否有 command 或 script_path
+                if 'command' not in test_params and 'script_path' not in test_params:
+                    return {
+                        "valid": False,
+                        "missing_params": ['command or script_path'],
+                        "invalid_params": [],
+                        "suggestions": [
+                            f"Custom switch_mode '{switch_mode}' requires 'command' (script path from database) "
+                            f"or 'script_path' in test_params. Use predefined modes: {list(validation_rules[measurement_type].keys())}"
+                        ]
+                    }
+                else:
+                    # 自定義腳本模式 - 參數檢查通過
+                    return {
+                        "valid": True,
+                        "missing_params": [],
+                        "invalid_params": [],
+                        "suggestions": []
+                    }
+            else:
+                return {
+                    "valid": False,
+                    "missing_params": [],
+                    "invalid_params": [],
+                    "suggestions": [f"Unknown switch mode '{switch_mode}' for {measurement_type}"]
+                }
         
         required_params = validation_rules[measurement_type][switch_mode]
         missing_params = [param for param in required_params if param not in test_params]

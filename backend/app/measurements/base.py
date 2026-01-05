@@ -95,7 +95,11 @@ class STRING_VALUE_TYPE(ValueType):
 class INTEGER_VALUE_TYPE(ValueType):
     @staticmethod
     def cast_call(in_obj):
-        return int(in_obj, 0)
+        # 如果已經是 int，直接返回
+        if isinstance(in_obj, int):
+            return in_obj
+        # 否則先轉成字串再轉 int
+        return int(str(in_obj), 0)
 
 
 class FLOAT_VALUE_TYPE(ValueType):
@@ -243,6 +247,10 @@ class BaseMeasurement(ABC):
         - partial: 包含檢查 (字串包含)
         - inequality: 不相等檢查
 
+        特殊錯誤檢查 (PDTool4 runAllTest 模式):
+        - "No instrument found" -> 失敗
+        - "Error:" 開頭 -> 失敗
+
         Args:
             measured_value: 測量值
             run_all_test: "ON" 繼續執行, "OFF" 遇到錯誤停止
@@ -252,6 +260,15 @@ class BaseMeasurement(ABC):
             Tuple[bool, Optional[str]]: (通過/失敗, 錯誤訊息)
         """
         try:
+            # PDTool4 runAllTest: 檢查儀器錯誤
+            if measured_value and isinstance(measured_value, str):
+                if measured_value == "No instrument found":
+                    self.logger.error("Instrument not found")
+                    return False, "No instrument found"
+                if "Error: " in measured_value:
+                    self.logger.error(f"Instrument error: {measured_value}")
+                    return False, f"Instrument error: {measured_value}"
+
             # 檢查測量值類型轉換
             if not is_empty_limit(measured_value):
                 # 根據 value_type 轉換
@@ -281,6 +298,9 @@ class BaseMeasurement(ABC):
                 result = str(self.eq_limit) in str(measured_value)
                 if not result and raise_on_fail:
                     logger.warning(f"Partial_limit : {self.eq_limit}")
+                    if run_all_test == "ON":
+                        # runAllTest 模式: 記錄錯誤但不中斷
+                        logger.error(f"TestPointEqualityLimitFailure: {repr(measured_value)} does not contain {repr(self.eq_limit)}")
                     return False, f"Failed partial limit: {repr(measured_value)} does not contain {repr(self.eq_limit)}"
                 return result, None if result else f"Partial check failed: '{self.eq_limit}' not in '{measured_value}'"
 
