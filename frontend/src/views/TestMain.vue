@@ -114,7 +114,7 @@
           >
             <el-table-column prop="item_no" label="序號" width="70" align="center" />
             <el-table-column prop="item_name" label="測試項目" min-width="180" />
-            <el-table-column prop="test_command" label="測試指令" width="140" />
+            <el-table-column prop="execute_name" label="測試指令" width="140" />
             <el-table-column label="下限" width="100" align="right">
               <template #default="{ row }">
                 {{ formatNumber(row.lower_limit) }}
@@ -527,10 +527,14 @@ const handleTestPlanChange = () => {
   loadTestPlanItems()
 }
 
-// 新增: 執行量測功能 (參考 oneCSV_atlas_2.py)
+// 新增: 執行量測功能 (參考 PDTool4 oneCSV_atlas_2.py)
+// 整合 runAllTest 模式 - 遇到錯誤時記錄但繼續執行
 const executeMeasurements = async () => {
   try {
     addStatusMessage('開始執行測試項目...', 'info')
+    if (runAllTests.value) {
+      addStatusMessage('PDTool4 runAllTest 模式: 已啟用 - 將在錯誤時繼續執行', 'info')
+    }
 
     // Reset tracking variables
     testResults.value = {}
@@ -538,6 +542,8 @@ const executeMeasurements = async () => {
 
     let passCount = 0
     let failCount = 0
+    let errorCount = 0
+    const errorItems = [] // PDTool4 runAllTest: 收集錯誤項目
 
     // Execute each test item sequentially (參考 oneCSV_atlas_2.py:131-191)
     for (let index = 0; index < testPlanItems.value.length; index++) {
@@ -566,10 +572,27 @@ const executeMeasurements = async () => {
         } else if (result.result === 'FAIL') {
           failCount++
 
-          // Stop on fail if not in runAllTest mode
+          // PDTool4 runAllTest: 記錄失敗但繼續
           if (!runAllTests.value) {
             addStatusMessage(`測試失敗於項目 ${item.item_name}，停止執行`, 'error')
             break
+          } else {
+            addStatusMessage(`[runAllTest] 項目 ${item.item_name} 失敗 - 繼續執行`, 'warning')
+          }
+        } else if (result.result === 'ERROR') {
+          errorCount++
+          errorItems.push({
+            item_no: item.item_no,
+            item_name: item.item_name,
+            error: result.error_message
+          })
+
+          // PDTool4 runAllTest: 記錄錯誤但繼續
+          if (!runAllTests.value) {
+            addStatusMessage(`測試錯誤於項目 ${item.item_name}，停止執行`, 'error')
+            break
+          } else {
+            addStatusMessage(`[runAllTest] 項目 ${item.item_name} 錯誤 - 繼續執行`, 'warning')
           }
         }
 
@@ -589,14 +612,23 @@ const executeMeasurements = async () => {
         console.error(`Failed to execute item ${item.item_no}:`, error)
         item.status = 'ERROR'
         item.measured_value = null
-        failCount++
-        testStatus.value.fail_items = failCount
+        errorCount++
+        errorItems.push({
+          item_no: item.item_no,
+          item_name: item.item_name,
+          error: error.message
+        })
+
+        testStatus.value.fail_items = failCount + errorCount
 
         addStatusMessage(`項目 ${item.item_no} 執行錯誤: ${error.message}`, 'error')
         errorCode.value = `項目 ${item.item_no} 執行錯誤: ${error.message}`
 
+        // PDTool4 runAllTest: 遇到異常也繼續
         if (!runAllTests.value) {
           break
+        } else {
+          addStatusMessage(`[runAllTest] 項目 ${item.item_no} 異常 - 繼續執行`, 'warning')
         }
       }
     }
@@ -604,11 +636,22 @@ const executeMeasurements = async () => {
     // Cleanup instruments (參考 oneCSV_atlas_2.py:244-265)
     await cleanupInstruments()
 
-    // Update final status - 檢查是否有任何 ERROR 狀態的項目
+    // Update final status - 檢查是否有任何 ERROR 或 FAIL 狀態的項目
     const hasError = testPlanItems.value.some(item => item.status === 'ERROR')
     const hasFail = testPlanItems.value.some(item => item.status === 'FAIL')
 
-    // 修正: 如果有 ERROR 或 FAIL,最終結果應該是 FAIL
+    // PDTool4 runAllTest: 顯示錯誤摘要
+    if (runAllTests.value && errorItems.length > 0) {
+      addStatusMessage(`[runAllTest] 完成，但有 ${errorItems.length} 個錯誤項目:`, 'warning')
+      errorItems.slice(0, 5).forEach(err => {
+        addStatusMessage(`  - ${err.item_no}: ${err.item_name}: ${err.error}`, 'warning')
+      })
+      if (errorItems.length > 5) {
+        addStatusMessage(`  ... 還有 ${errorItems.length - 5} 個錯誤未顯示`, 'warning')
+      }
+    }
+
+    // 最終結果判定
     if (hasError || hasFail) {
       testStatus.value.status = 'COMPLETED'
       finalResult.value = 'FAIL'
@@ -619,7 +662,7 @@ const executeMeasurements = async () => {
     testCompleted.value = true
 
     addStatusMessage(
-      `測試完成: ${finalResult.value} (${passCount}/${testStatus.value.total_items} 通過)`,
+      `測試完成: ${finalResult.value} (通過: ${passCount}, 失敗: ${failCount}, 錯誤: ${errorCount})`,
       finalResult.value === 'PASS' ? 'success' : 'error'
     )
 
@@ -641,14 +684,14 @@ const executeSingleItem = async (item, index) => {
     const testParams = {}
 
     // Extract parameters based on ExecuteName
-    const executeName = item.test_command // 假設 test_command 就是 ExecuteName
+    const executeName = item.execute_name // ExecuteName 是執行名稱
     const caseMode = item.case || item.switch_mode // Switch/case mode
 
     // Build test parameters (參考 oneCSV_atlas_2.py:134-155)
     // 這裡需要根據實際的 CSV 欄位來構建參數
     // 簡化版本：將所有額外欄位作為參數傳遞
     Object.keys(item).forEach(key => {
-      if (!['item_no', 'item_name', 'test_command', 'lower_limit', 'upper_limit',
+      if (!['item_no', 'item_name', 'execute_name', 'lower_limit', 'upper_limit',
             'unit', 'status', 'measured_value'].includes(key)) {
         if (item[key] && item[key] !== '') {
           testParams[key] = item[key]
@@ -667,6 +710,12 @@ const executeSingleItem = async (item, index) => {
     // Track used instruments
     if (testParams.Instrument) {
       usedInstruments.value[testParams.Instrument] = executeName
+    }
+
+    // 新增: 對於 'Other' 類型的測試，確保 command 欄位被正確傳遞
+    // command 欄位從資料庫 test_plans 表的 command 欄位讀取
+    if (executeName === 'Other' && item.command && !testParams.command) {
+      testParams.command = item.command
     }
 
     // Execute measurement via API
@@ -946,13 +995,24 @@ const stopStatusPolling = () => {
 }
 
 // 修正: 移除確認對話框,直接執行登出,避免需要點擊兩次的問題
+// 修正: 先執行登出再清除專案選擇,確保一次點擊就能完成登出
+// 修正: 確保 logout 完成後再進行路由跳轉,避免路由守衛阻擋
 const handleLogout = async () => {
-  // Clear project and station selection
-  projectStore.clearCurrentSelection()
+  try {
+    // 先執行登出並清除認證狀態 (await 確保完成)
+    await authStore.logout()
 
-  // Logout and redirect
-  authStore.logout()
-  router.push('/login')
+    // 清除專案和站別選擇
+    projectStore.clearCurrentSelection()
+
+    // 跳轉到登入頁面
+    router.push('/login')
+  } catch (error) {
+    console.error('Logout failed:', error)
+    // 即使失敗也要清除本地狀態並跳轉
+    projectStore.clearCurrentSelection()
+    router.push('/login')
+  }
 }
 
 // Watchers
