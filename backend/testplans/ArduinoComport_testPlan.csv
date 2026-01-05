@@ -1,0 +1,5 @@
+ID,ItemKey,ValueType,LimitType,EqLimit,LL,UL,PassOrFail,measureValue,ExecuteName,case,Port,Baud,Command,ComportWait,ReslineCount,Timeout,UseResult,WaitmSec
+arduino,FT00-17,string,partial,456,,,,,CommandTest,comport,COM4,9600,hello\n,2,3,5.5,,
+WAIT_DUT_restart_20,FT00-18,string,none,,,,,,Other,wait,,,,,,,,2000
+123_1,FT00-19,string,partial,123,,,,,CommandTest,console,,,python ./src/lowsheen_lib/testUTF/123.py,,,5000,,
+123_2,FT00-20,string,partial,456,,,,,CommandTest,console,,,python ./src/lowsheen_lib/testUTF/123.py,,,5000,123_1,

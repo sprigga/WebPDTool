@@ -91,9 +91,21 @@ const handleProjectChange = async (projectId) => {
   }
 }
 
+// 原有程式碼: 當選擇站別時，儲存站別資訊並發送事件
+// 修正: 加入更詳細的除錯訊息和錯誤處理
 const handleStationChange = (stationId) => {
+  console.log('Station ID selected:', stationId)
+  console.log('Available stations:', stations.value)
+
   if (stationId) {
     const station = stations.value.find(s => s.id === stationId)
+    console.log('Found station:', station)
+
+    if (!station) {
+      console.error('Station not found in stations array!')
+      return
+    }
+
     projectStore.setCurrentStation(station)
     emit('station-selected', station)
   }

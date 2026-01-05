@@ -450,7 +450,12 @@ const loadTestPlan = async () => {
 
   loading.value = true
   try {
-    testPlanItems.value = await getStationTestPlan(currentStation.value.id, false)
+    // 原有程式碼缺少 projectId 參數導致後端 API 報錯
+    testPlanItems.value = await getStationTestPlan(
+      currentStation.value.id,
+      projectStore.currentProject?.id || currentStation.value.project_id,
+      false
+    )
   } catch (error) {
     console.error('Failed to load test plan:', error)
     ElMessage.error('載入測試計劃失敗')
@@ -724,7 +729,8 @@ const handleBulkDelete = async () => {
 
 onMounted(async () => {
   // 從 localStorage 載入當前專案和站別
-  projectStore.loadFromStorage()
+  // currentProject 和 currentStation 已在 store 初始化時自動載入，無需額外呼叫方法
+  // 原程式碼: projectStore.loadFromStorage() - 此方法不存在，已移除
 
   // 新增: 載入所有專案列表 (用於上傳對話框的專案選擇)
   if (projectStore.projects.length === 0) {
