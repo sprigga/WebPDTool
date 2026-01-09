@@ -604,6 +604,14 @@ class MeasurementService:
                 elif 'EqLimit' in test_params:
                     required_params.append('EqLimit')
 
+                # 原有程式碼: 沒有實現 WaitmSec 等待功能
+                # 修改: 在執行腳本前，如果有 WaitmSec 參數，先等待指定的毫秒數
+                wait_msec = test_params.get('WaitmSec') or test_params.get('wait_msec')
+                if wait_msec and isinstance(wait_msec, (int, float)):
+                    wait_seconds = wait_msec / 1000
+                    self.logger.info(f"Waiting {wait_msec}ms ({wait_seconds}s) before executing {test_point_id}")
+                    await asyncio.sleep(wait_seconds)
+
                 # 執行預設腳本
                 result = await self._execute_instrument_command(
                     script_path=f'./src/lowsheen_lib/{script_file}',
@@ -634,20 +642,32 @@ class MeasurementService:
                                      f"or use a predefined switch_mode: {list(script_config.keys())}"
                     )
 
-                # 檢查腳本檔案是否存在
+                # 原有程式碼: 解析相對路徑為絕對路徑
                 import os
+                # 如果是相對路徑,則相對於 backend 目錄
+                # measurement_service.py 位於 backend/app/services/，所以要往上一層
+                if not os.path.isabs(script_path):
+                    # 從 backend/app/services/measurement_service.py 到 backend/
+                    current_file = os.path.abspath(__file__)
+                    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+                    script_path = os.path.join(backend_dir, script_path)
+
+                # 檢查腳本檔案是否存在
                 if not os.path.exists(script_path):
-                    # 嘗試相對於 backend 目錄的路徑
-                    relative_path = os.path.join('/home/ubuntu/WebPDTool/backend', script_path)
-                    if os.path.exists(relative_path):
-                        script_path = relative_path
-                    else:
-                        return MeasurementResult(
-                            item_no=0,
-                            item_name=test_point_id,
-                            result="ERROR",
-                            error_message=f"Script not found: {script_path}"
-                        )
+                    return MeasurementResult(
+                        item_no=0,
+                        item_name=test_point_id,
+                        result="ERROR",
+                        error_message=f"Script not found: {script_path}"
+                    )
+
+                # 原有程式碼: 沒有實現 WaitmSec 等待功能
+                # 修改: 在執行腳本前，如果有 WaitmSec 參數，先等待指定的毫秒數
+                wait_msec = test_params.get('WaitmSec') or test_params.get('wait_msec')
+                if wait_msec and isinstance(wait_msec, (int, float)):
+                    wait_seconds = wait_msec / 1000
+                    self.logger.info(f"Waiting {wait_msec}ms ({wait_seconds}s) before executing {test_point_id}")
+                    await asyncio.sleep(wait_seconds)
 
                 # 執行自訂腳本
                 self.logger.info(f"Executing custom script: {script_path} for {test_point_id}")
@@ -796,7 +816,7 @@ class MeasurementService:
             if switch_mode in ['webStep1_2', 'URLStep1_2']:
                 # Simulate SFC call
                 await asyncio.sleep(0.1)  # Simulate network delay
-                
+
                 return MeasurementResult(
                     item_no=0,
                     item_name=test_point_id,
@@ -809,6 +829,17 @@ class MeasurementService:
                     item_name=test_point_id,
                     result="SKIP"
                 )
+            # 原有程式碼: 新增 WAIT_FIX_5sec 支援,等待 5 秒後返回 PASS
+            elif switch_mode == 'WAIT_FIX_5sec':
+                self.logger.info(f"Executing WAIT_FIX_5sec for {test_point_id} - waiting 5 seconds")
+                await asyncio.sleep(5)  # 等待 5 秒
+
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="PASS",
+                    measured_value=Decimal('1')
+                )
             else:
                 return MeasurementResult(
                     item_no=0,
@@ -816,7 +847,7 @@ class MeasurementService:
                     result="ERROR",
                     error_message=f"Unsupported SFC switch mode: {switch_mode}"
                 )
-                
+
         except Exception as e:
             return MeasurementResult(
                 item_no=0,
@@ -903,50 +934,135 @@ class MeasurementService:
         """
         Execute other/custom measurements (based on OtherMeasurement.py)
 
-        支援執行自定義 Python 測試腳本，腳本路徑從資料庫 test_plans 表的 command 欄位獲取
+        支援執行自定義命令,命令從資料庫 test_plans 表的 command 欄位獲取
+        可以執行各種類型的命令,不限於 Python (例如: python, bash, node, etc.)
 
         參數說明:
-        - switch_mode: 腳本類型或自定義識別符 (例如: 'test123', 'custom_script')
-        - test_params['script_path']: 腳本完整路徑 (優先使用，如果提供)
-        - test_params['command']: 從資料庫 command 欄位傳入的腳本路徑 (次選)
-        - test_params['arg']: 傳遞給腳本的命令行參數 (可選)
+        - switch_mode: 腳本類型或自定義識別符 (例如: 'test123', 'custom_script', 'WAIT_FIX_5sec')
+        - test_params['script_path']: 腳本完整路徑 (僅路徑,不包含命令,向後相容)
+        - test_params['command']: 完整命令字符串 (例如: 'python ./scripts/test123.py')
+        - test_params['arg']: 傳遞給腳本的命令行參數 (可選,僅在使用 script_path 時有效)
+
+        Command 欄位支援格式:
+        1. 完整命令: 'python ./scripts/test123.py arg1 arg2'
+        2. 僅路徑: './scripts/test123.py' (將自動使用 python3 執行)
+        3. 其他命令: 'bash ./scripts/test.sh', 'node ./app.js', etc.
         """
         try:
-            # 優先級 1: 使用 test_params 中明確指定的 script_path
-            script_path = test_params.get('script_path')
+            import os
+            import shlex
 
-            # 優先級 2: 使用 test_params 中的 command (來自資料庫 test_plans.command)
-            if not script_path:
-                script_path = test_params.get('command')
+            # 原有程式碼: 新增 WAIT_FIX_5sec 支援,等待 5 秒後返回 PASS
+            if switch_mode == 'WAIT_FIX_5sec':
+                self.logger.info(f"Executing WAIT_FIX_5sec for {test_point_id} - waiting 5 seconds")
+                await asyncio.sleep(5)  # 等待 5 秒
 
-            # 優先級 3: 如果是 test123，使用預設路徑 (向後相容)
-            if not script_path and switch_mode == 'test123':
-                script_path = './scripts/test123.py'
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="PASS",
+                    measured_value=Decimal('1')
+                )
+
+            # 優先級 1: 使用 test_params 中的 command (來自資料庫 test_plans.command)
+            # 這是完整命令字符串,例如: 'python ./scripts/test123.py'
+            raw_command = test_params.get('command')
+
+            # 優先級 2: 使用 test_params 中明確指定的 script_path (向後相容)
+            if not raw_command:
+                script_path = test_params.get('script_path')
+
+                # 優先級 3: 如果是 test123，使用預設路徑 (向後相容)
+                if not script_path and switch_mode == 'test123':
+                    script_path = 'scripts/test123.py'
+
+                # 如果只有 script_path,構建為完整命令
+                if script_path:
+                    # 如果是相對路徑,則相對於 backend 目錄
+                    if not os.path.isabs(script_path):
+                        current_file = os.path.abspath(__file__)
+                        backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+                        script_path = os.path.join(backend_dir, script_path)
+
+                    # 檢查腳本檔案是否存在
+                    if not os.path.exists(script_path):
+                        return MeasurementResult(
+                            item_no=0,
+                            item_name=test_point_id,
+                            result="ERROR",
+                            error_message=f"Script not found: {script_path}"
+                        )
+
+                    # 構建命令: python3 + script_path + arg
+                    raw_command = f'python3 {script_path}'
+                    if 'arg' in test_params:
+                        raw_command += f' {test_params["arg"]}'
 
             # 如果都沒有，返回錯誤
-            if not script_path:
+            if not raw_command:
                 return MeasurementResult(
                     item_no=0,
                     item_name=test_point_id,
                     result="ERROR",
-                    error_message=f"No script path specified. Please provide 'script_path' or 'command' in test_params, or set command in database test_plans table."
+                    error_message=f"No command specified. Please provide 'command' or 'script_path' in test_params, or set command in database test_plans table."
                 )
 
-            # 原有程式碼: 構建命令行參數
-            # 原始腳本邏輯: 如果第一個參數是 '123'，輸出 '456'，否則輸出 '123'
-            command = ['python', script_path]
+            # 解析完整命令字符串為命令列表
+            # 使用 shlex.split 正確處理帶引號的參數
+            try:
+                command_parts = shlex.split(raw_command)
+            except ValueError as e:
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    error_message=f"Invalid command format: {raw_command}. Error: {str(e)}"
+                )
 
-            # 如果有指定參數，則傳入
-            if 'arg' in test_params:
-                command.append(test_params['arg'])
+            # 獲取執行檔案路徑 (命令的第一部分)
+            executable = command_parts[0]
 
-            # 執行腳本
+            # 如果執行檔案是相對路徑,解析為絕對路徑
+            if not os.path.isabs(executable) and '/' in executable:
+                current_file = os.path.abspath(__file__)
+                backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+                executable_abs = os.path.join(backend_dir, executable)
+                if os.path.exists(executable_abs):
+                    command_parts[0] = executable_abs
+
+            # 構建最終命令列表
+            command = command_parts
+
+            # 原有程式碼: 沒有實現 WaitmSec 等待功能
+            # 修改: 在執行腳本前，如果有 WaitmSec 參數，先等待指定的毫秒數
+            wait_msec = test_params.get('WaitmSec') or test_params.get('wait_msec')
+            if wait_msec and isinstance(wait_msec, (int, float)):
+                wait_seconds = wait_msec / 1000
+                self.logger.info(f"Waiting {wait_msec}ms ({wait_seconds}s) before executing {test_point_id}")
+                await asyncio.sleep(wait_seconds)
+
+            # 原有程式碼: 使用固定 30 秒超時
+            # 修改: 從 test_params 讀取 Timeout (單位: ms)，轉換為秒
+            # 優先級: test_params['Timeout'] > test_params['timeout'] > 預設 30 秒
+            timeout_ms = test_params.get('Timeout') or test_params.get('timeout') or 30000
+            timeout_seconds = timeout_ms / 1000 if isinstance(timeout_ms, (int, float)) else 30
+
+            # 執行命令
+            # 注意: 在容器環境中,工作目錄是 /app (對應專案的 backend 目錄)
+            # 原有程式碼: 使用硬編碼路徑 '/home/ubuntu/WebPDTool/backend',這在容器中會失敗
+            # 修正: 使用當前檔案的目錄來動態獲取 backend 目錄路徑
+            self.logger.info(f"Executing command: {' '.join(command)}")
+
+            # 動態獲取 backend 目錄路徑 (支援本地和容器環境)
+            current_file = os.path.abspath(__file__)
+            backend_cwd = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+
             result = subprocess.run(
                 command,
                 capture_output=True,
                 text=True,
-                timeout=30,
-                cwd='/home/ubuntu/WebPDTool/backend'
+                timeout=timeout_seconds,
+                cwd=backend_cwd
             )
 
             if result.returncode != 0:
@@ -954,7 +1070,7 @@ class MeasurementService:
                     item_no=0,
                     item_name=test_point_id,
                     result="ERROR",
-                    error_message=f"Script failed: {result.stderr}"
+                    error_message=f"Command failed with return code {result.returncode}. stderr: {result.stderr}"
                 )
 
             # 解析輸出
@@ -992,7 +1108,7 @@ class MeasurementService:
                         item_no=0,
                         item_name=test_point_id,
                         result="PASS",
-                        error_message=f"Script output: {output}"
+                        error_message=f"Command output: {output}"
                     )
 
         except subprocess.TimeoutExpired:
@@ -1000,14 +1116,14 @@ class MeasurementService:
                 item_no=0,
                 item_name=test_point_id,
                 result="ERROR",
-                error_message="Script timeout"
+                error_message="Command execution timeout"
             )
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             return MeasurementResult(
                 item_no=0,
                 item_name=test_point_id,
                 result="ERROR",
-                error_message=f"Script not found: {script_path}"
+                error_message=f"Command or file not found: {str(e)}"
             )
         except Exception as e:
             return MeasurementResult(
@@ -1055,13 +1171,19 @@ class MeasurementService:
         try:
             # Convert test_params to string format expected by PDTool4 scripts
             params_str = str(test_params)
-            
+
+            # 原有程式碼: 使用 python3 而非 python，確保在不同環境中都能執行
+            # 原有程式碼: timeout=30 (固定值)
+            # 修改: 從 test_params 讀取 Timeout (單位: ms)，轉換為秒
+            timeout_ms = test_params.get('Timeout') or test_params.get('timeout') or 30000
+            timeout_seconds = timeout_ms / 1000 if isinstance(timeout_ms, (int, float)) else 30
+
             # Execute command
             result = subprocess.run(
-                ['python', script_path, test_point_id, params_str],
+                ['python3', script_path, test_point_id, params_str],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=timeout_seconds  # 原有程式碼: timeout=30 (固定值)
             )
             
             if result.returncode == 10:
@@ -1107,14 +1229,15 @@ class MeasurementService:
             try:
                 script_path = f'./src/lowsheen_lib/{script_name}'
                 test_params = {'Instrument': instrument_location}
-                
+
+                # 原有程式碼: 使用 python3 而非 python，確保在不同環境中都能執行
                 await asyncio.create_subprocess_exec(
-                    'python', script_path, '--final', str(test_params),
+                    'python3', script_path, '--final', str(test_params),
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL
                 )
                 self.logger.info(f"Reset instrument {instrument_location}")
-                
+
             except Exception as e:
                 self.logger.warning(f"Failed to reset instrument {instrument_location}: {e}")
     
@@ -1161,7 +1284,8 @@ class MeasurementService:
             'SFCtest': {
                 'webStep1_2': [],
                 'URLStep1_2': [],
-                'skip': []
+                'skip': [],
+                'WAIT_FIX_5sec': []  # 原有程式碼: 新增 WAIT_FIX_5sec 支援,不需要任何參數
             },
             'getSN': {
                 'SN': [],
@@ -1175,7 +1299,8 @@ class MeasurementService:
             # 新增: test123 測試腳本支援
             'Other': {
                 'test123': [],  # test123.py 不需要任何必需參數，可選 arg 參數
-                'custom': []
+                'custom': [],
+                'WAIT_FIX_5sec': []  # 原有程式碼: 新增 WAIT_FIX_5sec 支援,不需要任何參數
             }
         }
         
