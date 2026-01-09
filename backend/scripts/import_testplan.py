@@ -197,6 +197,8 @@ def import_csv_to_db(csv_file_path: str, project_code: str = None,
                         test_type = 'general'
 
                     # 建立測試計畫項目
+                    # 原有程式碼: parameters 只包含驗證參數
+                    # 修改: 加入執行相關參數，讓 test_engine.py 可以取得完整資訊
                     test_plan = TestPlan(
                         project_id=project.id,
                         station_id=station.id,
@@ -204,13 +206,21 @@ def import_csv_to_db(csv_file_path: str, project_code: str = None,
                         item_no=idx,
                         item_name=data['item_name'],
                         test_type=test_type,
+                        # 原有程式碼: parameters 只包含驗證參數
+                        # 修改: 加入執行相關參數 (command, timeout, use_result, wait_msec)
                         parameters={
+                            # 驗證參數
                             'item_key': data['item_key'],
                             'value_type': data['value_type'],
                             'limit_type': data['limit_type'],
                             'eq_limit': data['eq_limit'],
                             'pass_or_fail': data['pass_or_fail'],
-                            'measure_value': data['measure_value']
+                            'measure_value': data['measure_value'],
+                            # 執行參數 (新增)
+                            'command': data['command'],
+                            'timeout': data['timeout'],
+                            'use_result': data['use_result'],
+                            'wait_msec': data['wait_msec']
                         },
                         lower_limit=data['lower_limit'],
                         upper_limit=data['upper_limit'],

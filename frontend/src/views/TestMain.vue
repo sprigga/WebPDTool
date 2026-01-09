@@ -174,7 +174,7 @@
               type="success"
               size="large"
               :loading="testing"
-              :disabled="!barcode || testing"
+              :disabled="(requireBarcode && !barcode) || testing"
               @click="handleStartTest"
               style="width: 100%"
             >
@@ -350,9 +350,10 @@ const currentStation = computed(() => projectStore.currentStation)
 
 // Configuration
 const sfcEnabled = ref(false)
-const runAllTests = ref(false)
+const runAllTests = ref(true)
 const loopCount = ref(0)
 const showSFCConfig = ref(false)
+const requireBarcode = ref(false) // 控制是否需要輸入產品序號才能開始測試
 const sfcConfig = reactive({
   path: '',
   stationID: '',
@@ -414,9 +415,24 @@ const progressStatus = computed(() => {
 })
 
 // Methods
+// 原有程式碼: formatNumber 直接使用 Number(value).toFixed(3)
+// 修改: 支援字串類型的測量值 (例如: "Hello World!")
 const formatNumber = (value) => {
   if (value === null || value === undefined) return '-'
-  return Number(value).toFixed(3)
+
+  // 如果是字串類型，直接返回
+  if (typeof value === 'string') {
+    return value
+  }
+
+  // 如果是數字類型，格式化為3位小數
+  const num = Number(value)
+  if (!isNaN(num)) {
+    return num.toFixed(3)
+  }
+
+  // 其他情況返回原始值
+  return value
 }
 
 const formatElapsedTime = (seconds) => {
@@ -566,9 +582,15 @@ const executeMeasurements = async () => {
         item.status = result.result
         item.measured_value = result.measured_value
 
-        // Update statistics
+        // 原有程式碼: errorCode 只在測試開始時清除,導致之前的錯誤訊息一直顯示
+        // 修改: 如果當前項目執行成功,且 errorCode 包含當前項目的錯誤,則清除 errorCode
+        // 這樣可以確保只有最新的錯誤會顯示,且成功的項目不會保留錯誤狀態
         if (result.result === 'PASS') {
           passCount++
+          // 清除當前項目的錯誤訊息 (如果存在)
+          if (errorCode.value && errorCode.value.includes(item.item_name)) {
+            errorCode.value = ''
+          }
         } else if (result.result === 'FAIL') {
           failCount++
 
@@ -622,7 +644,10 @@ const executeMeasurements = async () => {
         testStatus.value.fail_items = failCount + errorCount
 
         addStatusMessage(`項目 ${item.item_no} 執行錯誤: ${error.message}`, 'error')
-        errorCode.value = `項目 ${item.item_no} 執行錯誤: ${error.message}`
+
+        // 原有程式碼: errorCode 直接被覆蓋,導致只顯示最後一個錯誤
+        // 修改: 使用格式化的錯誤訊息,包含項目名稱,方便識別錯誤來源
+        errorCode.value = `[${item.item_no}] ${item.item_name}: ${error.message}`
 
         // PDTool4 runAllTest: 遇到異常也繼續
         if (!runAllTests.value) {
@@ -683,16 +708,22 @@ const executeSingleItem = async (item, index) => {
     // Parse test parameters from CSV columns
     const testParams = {}
 
+    // 原有程式碼: const caseMode = item.case || item.switch_mode
+    // 修改: 優先使用 case_type (後端欄位名稱)，向後相容 case 和 switch_mode
+    const caseMode = item.case_type || item.case || item.switch_mode // Switch/case mode
+
     // Extract parameters based on ExecuteName
     const executeName = item.execute_name // ExecuteName 是執行名稱
-    const caseMode = item.case || item.switch_mode // Switch/case mode
 
     // Build test parameters (參考 oneCSV_atlas_2.py:134-155)
     // 這裡需要根據實際的 CSV 欄位來構建參數
     // 簡化版本：將所有額外欄位作為參數傳遞
+    // 重要: 排除不應該傳給 backend 的欄位，其他欄位都傳遞
     Object.keys(item).forEach(key => {
       if (!['item_no', 'item_name', 'execute_name', 'lower_limit', 'upper_limit',
-            'unit', 'status', 'measured_value'].includes(key)) {
+            'unit', 'status', 'measured_value', 'id', 'project_id', 'station_id',
+            'test_plan_name', 'item_key', 'sequence_order', 'enabled', 'pass_or_fail',
+            'measure_value', 'created_at', 'updated_at'].includes(key)) {
         if (item[key] && item[key] !== '') {
           testParams[key] = item[key]
         }
@@ -712,17 +743,31 @@ const executeSingleItem = async (item, index) => {
       usedInstruments.value[testParams.Instrument] = executeName
     }
 
-    // 新增: 對於 'Other' 類型的測試，確保 command 欄位被正確傳遞
+    // 原有程式碼: 只對於 'Other' 類型的測試，確保 command 欄位被正確傳遞
+    // 修改: 對於 'Other' 和 'CommandTest' 類型的測試，都要確保 command 欄位被正確傳遞
     // command 欄位從資料庫 test_plans 表的 command 欄位讀取
-    if (executeName === 'Other' && item.command && !testParams.command) {
+    if ((executeName === 'Other' || executeName === 'CommandTest') && item.command && !testParams.command) {
       testParams.command = item.command
+    }
+
+    // 原有程式碼: switch_mode: caseMode || 'default'
+    // 修改: 如果 case_type 是 'wait'，直接將 measurement_type 設為 'wait'，switch_mode 設為 'wait'
+    // 這樣後端才能正確識別並調用 WaitMeasurement
+    let measurementType = executeName || 'Other'
+    let switchMode = caseMode || 'default'
+
+    // 原有程式碼: 如果 case_type='wait'，但 executeName='Other'，系統會調用 DummyMeasurement
+    // 修改: 優先使用 case_type 作為 measurement_type 和 switch_mode
+    if (item.case_type && item.case_type !== '') {
+      measurementType = item.case_type
+      switchMode = item.case_type
     }
 
     // Execute measurement via API
     const measurementData = {
-      measurement_type: executeName || 'Other',
+      measurement_type: measurementType,
       test_point_id: String(item.item_no),
-      switch_mode: caseMode || 'default',
+      switch_mode: switchMode,
       test_params: testParams,
       run_all_test: runAllTests.value
     }
@@ -730,19 +775,28 @@ const executeSingleItem = async (item, index) => {
     const response = await executeSingleMeasurement(measurementData)
 
     // Validate against limits
+    // 原有程式碼: const measuredValue = Number(response.measured_value)
+    // 修改: 支援字串類型的測量值,只有數值類型才進行限制值檢查
     let result = response.result
     if (response.measured_value !== null && response.measured_value !== undefined) {
+      // 檢查是否為數值類型
       const measuredValue = Number(response.measured_value)
-      const lowerLimit = item.lower_limit !== null ? Number(item.lower_limit) : null
-      const upperLimit = item.upper_limit !== null ? Number(item.upper_limit) : null
+      const isNumeric = !isNaN(measuredValue) && typeof response.measured_value !== 'string'
 
-      if (lowerLimit !== null && measuredValue < lowerLimit) {
-        result = 'FAIL'
-      } else if (upperLimit !== null && measuredValue > upperLimit) {
-        result = 'FAIL'
-      } else if (lowerLimit !== null || upperLimit !== null) {
-        result = 'PASS'
+      // 只有數值類型才進行限制值檢查
+      if (isNumeric) {
+        const lowerLimit = item.lower_limit !== null ? Number(item.lower_limit) : null
+        const upperLimit = item.upper_limit !== null ? Number(item.upper_limit) : null
+
+        if (lowerLimit !== null && measuredValue < lowerLimit) {
+          result = 'FAIL'
+        } else if (upperLimit !== null && measuredValue > upperLimit) {
+          result = 'FAIL'
+        } else if (lowerLimit !== null || upperLimit !== null) {
+          result = 'PASS'
+        }
       }
+      // 字串類型保持原有的 result 結果,不進行限制值檢查
     }
 
     return {
@@ -834,7 +888,7 @@ const saveSFCConfig = () => {
 }
 
 const handleStartTest = async () => {
-  if (!barcode.value.trim()) {
+  if (requireBarcode.value && !barcode.value.trim()) {
     ElMessage.warning('請輸入產品序號')
     return
   }
@@ -860,11 +914,12 @@ const handleStartTest = async () => {
   })
 
   try {
-    addStatusMessage(`開始測試: ${barcode.value}`, 'info')
+    const serialNumber = requireBarcode.value ? barcode.value.trim() : 'AUTO-' + Date.now()
+    addStatusMessage(`開始測試: ${serialNumber}`, 'info')
 
     // Create test session
     const session = await createTestSession({
-      serial_number: barcode.value.trim(),
+      serial_number: serialNumber,
       station_id: currentStation.value.id
     })
 

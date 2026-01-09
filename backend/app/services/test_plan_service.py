@@ -761,12 +761,25 @@ class TestPlanService:
     ) -> bool:
         """
         刪除測試計畫項目
+
+        原有程式碼: 直接刪除測試計畫，未處理關聯的測試結果
+        問題: TestResult 表有外鍵約束 test_plan_id，沒有設置 CASCADE 刪除
+        修正: 刪除測試計畫前，先刪除關聯的測試結果記錄
         """
         try:
             test_plan = self.get_test_plan_by_id(db, test_plan_id)
             if not test_plan:
                 return False
 
+            # 先刪除關聯的測試結果記錄（避免外鍵約束錯誤）
+            deleted_results = db.query(TestResultModel).filter(
+                TestResultModel.test_plan_id == test_plan_id
+            ).delete(synchronize_session=False)
+
+            if deleted_results > 0:
+                self.logger.info(f"Deleted {deleted_results} associated test results for test plan: {test_plan.item_name}")
+
+            # 再刪除測試計畫
             db.delete(test_plan)
             db.commit()
 
@@ -785,8 +798,21 @@ class TestPlanService:
     ) -> int:
         """
         批次刪除測試計畫項目
+
+        原有程式碼: 直接批次刪除測試計畫，未處理關聯的測試結果
+        問題: TestResult 表有外鍵約束 test_plan_id，沒有設置 CASCADE 刪除
+        修正: 刪除測試計畫前，先批次刪除關聯的測試結果記錄
         """
         try:
+            # 先批次刪除關聯的測試結果記錄（避免外鍵約束錯誤）
+            deleted_results = db.query(TestResultModel).filter(
+                TestResultModel.test_plan_id.in_(test_plan_ids)
+            ).delete(synchronize_session=False)
+
+            if deleted_results > 0:
+                self.logger.info(f"Deleted {deleted_results} associated test results before bulk delete")
+
+            # 再批次刪除測試計畫
             deleted_count = db.query(TestPlan).filter(
                 TestPlan.id.in_(test_plan_ids)
             ).delete(synchronize_session=False)

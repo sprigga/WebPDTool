@@ -58,6 +58,8 @@ services:
       - "${BACKEND_PORT:-9100}:9100"
     volumes:
       - ./backend:/app
+      # 移除 PDTool4 目錄掛載 - PDTool4 不應放置在容器內
+      # - ./PDTool4:/app/PDTool4:ro
       # Uncomment for development hot-reload
       # - ./backend/app:/app/app
     networks:

@@ -1,5 +1,5 @@
 ID,ItemKey,ValueType,LimitType,EqLimit,LL,UL,PassOrFail,measureValue,ExecuteName,case,Command,Timeout,UseResult,WaitmSec
-SFC_GONOGO,SF00-00,string,partial,PASS,,,,,SFCtest,URL,,,,
-123_1,TT00-00,string,partial,123,,,,,CommandTest,console,python ./scripts/test123.py,5000,,
-WAIT_FIX_5sec,FT00-077,string,none,,,,,,Other,wait,,,,500
-123_2,TT00-01,string,partial,456,,,,,CommandTest,console,python ./scripts/test123.py,5000,123_1,
+SFC_GONOGO,SF00-00,string,partial,PASS,,,,,SFCtest,URLStep1_2,,,,
+123_1,TT00-00,string,partial,123,,,,,Other,test123,scripts/test123.py,5000,,
+WAIT_FIX_5sec,FT00-077,string,none,,,,,,SFCtest,WAIT_FIX_5sec,,,500,,
+123_2,TT00-01,string,partial,456,,,,,Other,test123,scripts/test123.py,5000,123_1,,

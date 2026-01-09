@@ -1,0 +1,15 @@
+{
+  "description": "Ralph Wiggum plugin stop hook for self-referential loops",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/ubuntu/.claude/plugins/cache/claude-plugins-official/ralph-wiggum/6d3752c000e2/hooks/stop-hook.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

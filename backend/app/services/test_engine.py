@@ -184,43 +184,99 @@ class TestEngine:
     ) -> MeasurementResult:
         """
         Execute a single measurement
-        
+
         Args:
             session_id: Test session ID
             test_plan_item: Test plan item to execute
             config: Configuration dictionary
             db: Database session
-            
+
         Returns:
             MeasurementResult
         """
         start_time = time.time()
-        
+
+        # 在使用前提取所有屬性，避免 SQLAlchemy session 脫離問題
+        # 注意: TestPlan 模型使用 test_type 欄位而非 test_command
         try:
-            # Convert test plan item to dict
+            # 原有程式碼: parameters = test_plan_item.parameters or {}
+            # 修改: 構建完整的 parameters 字典,整合 test_plan 的各個欄位
+            # 這樣可以確保 CommandTest 和 Other 測量類型能正確讀取所需參數
+
+            # 從資料庫欄位提取參數
+            db_parameters = test_plan_item.parameters or {}
+
+            # 構建完整的 parameters 字典,優先級: 資料庫欄位 > JSON parameters
+            parameters = {
+                **db_parameters,  # 先載入 JSON parameters 中的值
+                # 資料庫直接欄位優先級更高 (會覆蓋 JSON 中的同名鍵)
+                "command": test_plan_item.command,
+                "wait_msec": test_plan_item.wait_msec,
+                "timeout": test_plan_item.timeout,
+                "use_result": test_plan_item.use_result,
+            }
+
+            # 原有程式碼: 只使用 test_type 來決定測量類別
+            # 修改: 優先使用 case_type (如果存在)，因為 case_type='wait' 應該優先於 test_type='Other'
+            # 優先級: case_type > test_type
+            case_type = test_plan_item.case_type
+            test_type = test_plan_item.test_type
+
+            # 決定使用的測試命令 (test_command)
+            # 如果 case_type 存在且不是 None，優先使用 case_type
+            # 否則使用 test_type
+            if case_type and case_type.strip():
+                test_command = case_type
+            else:
+                test_command = test_type
+
             item_dict = {
+                "id": test_plan_item.id,
                 "item_no": test_plan_item.item_no,
                 "item_name": test_plan_item.item_name,
+                "item_key": test_plan_item.item_key,
                 "lower_limit": test_plan_item.lower_limit,
                 "upper_limit": test_plan_item.upper_limit,
                 "unit": test_plan_item.unit,
-                "test_command": test_plan_item.test_command,
-                "test_params": test_plan_item.test_params or {}
+                "test_type": test_type,  # 保留原始 test_type
+                "test_command": test_command,  # 實際使用的測試命令 (優先使用 case_type)
+                "command": test_plan_item.command,  # 原始指令字串
+                "case_type": case_type,  # 原有程式碼: 新增 case_type 欄位
+                "parameters": parameters,  # BaseMeasurement 預期使用 "parameters" 鍵
+                "test_params": parameters,  # 同時保留 "test_params" 鍵 (已整合完整參數)
+                "value_type": test_plan_item.value_type,
+                "limit_type": test_plan_item.limit_type,
+                "eq_limit": test_plan_item.eq_limit,
+                "timeout": test_plan_item.timeout,
+                "use_result": test_plan_item.use_result,
+                "wait_msec": test_plan_item.wait_msec
             }
-            
-            # Get measurement class based on test command
-            measurement_class = self._get_measurement_class(test_plan_item.test_command)
+        except Exception as e:
+            self.logger.error(f"Error extracting test plan item attributes: {e}")
+            execution_time_ms = int((time.time() - start_time) * 1000)
+            return MeasurementResult(
+                item_no=0,
+                item_name="Unknown",
+                result="ERROR",
+                error_message=f"Failed to extract test plan data: {str(e)}",
+                execution_duration_ms=execution_time_ms
+            )
+
+        try:
+            # Get measurement class based on test command (test_type)
+            # 使用 item_dict 中的 test_command
+            measurement_class = self._get_measurement_class(item_dict.get("test_command", ""))
             
             if measurement_class is None:
                 # No specific measurement implementation, return skip
                 self.logger.warning(
-                    f"No measurement implementation for command: {test_plan_item.test_command}"
+                    f"No measurement implementation for command: {item_dict.get('test_command')}"
                 )
                 return MeasurementResult(
-                    item_no=test_plan_item.item_no,
-                    item_name=test_plan_item.item_name,
+                    item_no=item_dict.get("item_no", 0),
+                    item_name=item_dict.get("item_name", "Unknown"),
                     result="SKIP",
-                    error_message=f"No implementation for: {test_plan_item.test_command}"
+                    error_message=f"No implementation for: {item_dict.get('test_command')}"
                 )
             
             # Create and execute measurement
@@ -236,14 +292,18 @@ class TestEngine:
             return result
             
         except Exception as e:
+            # 使用 item_dict 而不是 test_plan_item，避免 SQLAlchemy session 脫離問題
+            item_name = item_dict.get("item_name", "Unknown")
+            item_no = item_dict.get("item_no", 0)
+
             self.logger.error(
-                f"Error executing measurement {test_plan_item.item_name}: {e}",
+                f"Error executing measurement {item_name}: {e}",
                 exc_info=True
             )
             execution_time_ms = int((time.time() - start_time) * 1000)
             return MeasurementResult(
-                item_no=test_plan_item.item_no,
-                item_name=test_plan_item.item_name,
+                item_no=item_no,
+                item_name=item_name,
                 result="ERROR",
                 error_message=str(e),
                 execution_duration_ms=execution_time_ms

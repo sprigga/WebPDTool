@@ -27,7 +27,9 @@ class TestResult(Base):
     item_no = Column(Integer, nullable=False)
     item_name = Column(String(100), nullable=False)
 
-    measured_value = Column(DECIMAL(15, 6), nullable=True)
+    # 原有程式碼: measured_value = Column(DECIMAL(15, 6), nullable=True)
+    # 修改: 改為 String 類型以支援字串測量值 (例如: "Hello World!")
+    measured_value = Column(String(100), nullable=True)
     lower_limit = Column(DECIMAL(15, 6), nullable=True)
     upper_limit = Column(DECIMAL(15, 6), nullable=True)
     unit = Column(String(20), nullable=True)

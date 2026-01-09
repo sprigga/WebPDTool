@@ -30,7 +30,7 @@ class MeasurementResponse(BaseModel):
     test_point_id: str
     measurement_type: str
     result: str  # PASS, FAIL, ERROR
-    measured_value: Optional[float] = None
+    measured_value: Optional[str] = None  # 修改: 支援字串和數值類型
     error_message: Optional[str] = None
     test_time: datetime
     execution_duration_ms: Optional[int] = None
@@ -75,12 +75,27 @@ async def execute_measurement(
             run_all_test=request.run_all_test,
             user_id=current_user.get("sub")
         )
-        
+
+        # 修正: 將所有 measured_value 轉換為字串類型以符合 schema 定義
+        # schema 定義: measured_value: Optional[str] = None
+        measured_value = result.measured_value
+        if measured_value is not None:
+            # 原有程式碼: 如果是 Decimal 類型，轉換為字串或浮點數
+            # 修改: 統一轉換為字串，因為 schema 期望的是 str 類型
+            from decimal import Decimal
+            if isinstance(measured_value, Decimal):
+                measured_value = str(float(measured_value))  # Decimal -> float -> str (避免科學記號)
+            elif isinstance(measured_value, (int, float)):
+                measured_value = str(measured_value)  # 數值轉字串
+            elif not isinstance(measured_value, str):
+                measured_value = str(measured_value)  # 其他類型轉字串
+            # 如果已經是字串，保持不變
+
         return MeasurementResponse(
             test_point_id=request.test_point_id,
             measurement_type=request.measurement_type,
             result=result.result,
-            measured_value=float(result.measured_value) if result.measured_value else None,
+            measured_value=measured_value,
             error_message=result.error_message,
             test_time=result.test_time,
             execution_duration_ms=result.execution_duration_ms

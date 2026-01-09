@@ -4,7 +4,7 @@ Provides abstract base class for all measurement implementations
 整合 PDTool4 test_point_runAllTest.py 的 TestPoint 驗證邏輯
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, Union
 from datetime import datetime
 from decimal import Decimal
 import logging
@@ -129,7 +129,7 @@ class MeasurementResult:
         item_no: int,
         item_name: str,
         result: str,
-        measured_value: Optional[Decimal] = None,
+        measured_value: Optional[Union[Decimal, str]] = None,
         lower_limit: Optional[Decimal] = None,
         upper_limit: Optional[Decimal] = None,
         unit: Optional[str] = None,
@@ -149,11 +149,22 @@ class MeasurementResult:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to dictionary"""
+        # 原有程式碼: measured_value = float(self.measured_value) if self.measured_value else None
+        # 修改: 支援字串類型的 measured_value (例如: "Hello World!")
+        # 如果是 Decimal 或 float/int，轉換為 float；如果是 str，保持原樣
+        measured_value = self.measured_value
+        if measured_value is not None:
+            from decimal import Decimal
+            if isinstance(measured_value, Decimal):
+                measured_value = float(measured_value)
+            elif not isinstance(measured_value, (str, float, int)):
+                measured_value = str(measured_value)
+
         return {
             "item_no": self.item_no,
             "item_name": self.item_name,
             "result": self.result,
-            "measured_value": float(self.measured_value) if self.measured_value else None,
+            "measured_value": measured_value,
             "lower_limit": float(self.lower_limit) if self.lower_limit else None,
             "upper_limit": float(self.upper_limit) if self.upper_limit else None,
             "unit": self.unit,

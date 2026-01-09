@@ -160,6 +160,8 @@ const testForm = reactive({
   serialNumber: ''
 })
 
+const requireBarcode = ref(true) // 控制是否需要輸入產品序號才能開始測試
+
 const currentSession = ref(null)
 const testStatus = ref({
   status: 'IDLE',
@@ -226,7 +228,7 @@ const getResultTagType = (result) => {
 
 // Start test
 const handleStartTest = async () => {
-  if (!testForm.serialNumber.trim()) {
+  if (requireBarcode.value && !testForm.serialNumber.trim()) {
     ElMessage.warning('請輸入產品序號')
     return
   }
@@ -239,8 +241,9 @@ const handleStartTest = async () => {
   testing.value = true
   try {
     // Create test session
+    const serialNumber = requireBarcode.value ? testForm.serialNumber.trim() : 'AUTO-' + Date.now()
     const session = await createTestSession({
-      serial_number: testForm.serialNumber.trim(),
+      serial_number: serialNumber,
       station_id: currentStation.value.id
     })
 
