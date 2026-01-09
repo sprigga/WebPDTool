@@ -435,11 +435,15 @@ const formatNumber = (value) => {
   return value
 }
 
+// 原有程式碼: formatElapsedTime 只顯示整數秒
+// 修改: 支援小數點第3位顯示，格式為 MM:SS.sss
 const formatElapsedTime = (seconds) => {
-  if (!seconds) return '00:00'
+  if (!seconds && seconds !== 0) return '00:00.000'
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  // 秒數顯示到小數點第3位
+  const secsFormatted = typeof secs === 'number' ? secs.toFixed(3) : '0.000'
+  return `${String(mins).padStart(2, '0')}:${String(parseFloat(secsFormatted)).padStart(6, '0')}`
 }
 
 const getStatusTagType = (status) => {
@@ -546,6 +550,10 @@ const handleTestPlanChange = () => {
 // 新增: 執行量測功能 (參考 PDTool4 oneCSV_atlas_2.py)
 // 整合 runAllTest 模式 - 遇到錯誤時記錄但繼續執行
 const executeMeasurements = async () => {
+  // 原有程式碼: 測試完成後沒有計算經過時間
+  // 修改: 記錄測試開始時間，用於計算經過時間
+  const startTime = Date.now()
+
   try {
     addStatusMessage('開始執行測試項目...', 'info')
     if (runAllTests.value) {
@@ -567,6 +575,10 @@ const executeMeasurements = async () => {
 
       // Update current item status
       testStatus.value.current_item = index + 1
+
+      // 原有程式碼: 時間只在最後計算一次，測試過程中沒有更新
+      // 修改: 每次執行測項時更新經過時間（精確到毫秒），讓時間即時顯示
+      testStatus.value.elapsed_time_seconds = (Date.now() - startTime) / 1000
 
       // Check if should stop
       if (!testing.value) {
@@ -677,6 +689,11 @@ const executeMeasurements = async () => {
     }
 
     // 最終結果判定
+    // 原有程式碼: 測試完成後沒有更新 elapsed_time_seconds
+    // 修改: 計算並更新經過時間（精確到毫秒）
+    const elapsedSeconds = (Date.now() - startTime) / 1000
+    testStatus.value.elapsed_time_seconds = elapsedSeconds
+
     if (hasError || hasFail) {
       testStatus.value.status = 'COMPLETED'
       finalResult.value = 'FAIL'
