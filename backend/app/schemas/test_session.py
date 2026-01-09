@@ -28,7 +28,9 @@ class TestSessionStatus(BaseModel):
     total_items: Optional[int] = None
     pass_items: Optional[int] = None
     fail_items: Optional[int] = None
-    elapsed_time_seconds: Optional[int] = None
+    # 原有程式碼: elapsed_time_seconds: Optional[int] = None
+    # 修改: 改為 float 類型以支援小數點第3位
+    elapsed_time_seconds: Optional[float] = None
 
     class Config:
         from_attributes = True

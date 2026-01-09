@@ -178,11 +178,19 @@ async def get_test_session_status(
     pass_items = sum(1 for r in results if r.result == "PASS")
     fail_items = sum(1 for r in results if r.result == "FAIL")
 
-    # Calculate elapsed time
+    # 原有程式碼: Calculate elapsed time (wall-clock time)
+    # elapsed_time = None
+    # if session.start_time:
+    #     end = session.end_time if session.end_time else datetime.utcnow()
+    #     elapsed_time = int((end - session.start_time).total_seconds())
+
+    # 修改: Calculate elapsed time by summing all test items' execution_duration_ms
     elapsed_time = None
-    if session.start_time:
-        end = session.end_time if session.end_time else datetime.utcnow()
-        elapsed_time = int((end - session.start_time).total_seconds())
+    if results:
+        # 累計所有測項的執行時間(毫秒),並轉換為秒(保留3位小數)
+        total_duration_ms = sum(int(r.execution_duration_ms or 0) for r in results)
+        if total_duration_ms > 0:
+            elapsed_time = round(total_duration_ms / 1000.0, 3)
 
     # Determine status
     if session.end_time:

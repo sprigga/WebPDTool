@@ -207,12 +207,26 @@ const progressStatus = computed(() => {
   return undefined
 })
 
-// Format elapsed time
+// 原有程式碼: Format elapsed time (只顯示分:秒)
+// const formatElapsedTime = (seconds) => {
+//   if (!seconds) return '00:00'
+//   const mins = Math.floor(seconds / 60)
+//   const secs = seconds % 60
+//   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+// }
+
+// 修改: Format elapsed time (顯示分:秒.毫秒,精確到小數點第3位)
 const formatElapsedTime = (seconds) => {
-  if (!seconds) return '00:00'
+  if (!seconds && seconds !== 0) return '00:00.000'
+
   const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  const remainingSecs = seconds % 60
+
+  // 分割整數和小數部分
+  const secsInt = Math.floor(remainingSecs)
+  const secsDec = (remainingSecs - secsInt).toFixed(3).slice(1) // 取小數部分 (.xxx)
+
+  return `${String(mins).padStart(2, '0')}:${String(secsInt).padStart(2, '0')}${secsDec}`
 }
 
 // Get result tag type
