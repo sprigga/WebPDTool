@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
+from app.core.api_helpers import get_entity_or_404, PermissionChecker
+from app.core.constants import ErrorMessages
 from app.schemas.project import Station, StationCreate, StationUpdate
 from app.models.station import Station as StationModel
 from app.models.project import Project as ProjectModel
@@ -29,10 +31,13 @@ async def get_project_stations(
     Returns:
         List of stations
     """
-    # Verify project exists
-    project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    # Original code:
+    # project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
+    # if not project:
+    #     raise HTTPException(status_code=404, detail="Project not found")
+    #
+    # Refactored: Use get_entity_or_404 helper
+    get_entity_or_404(db, ProjectModel, project_id, ErrorMessages.PROJECT_NOT_FOUND)
 
     stations = db.query(StationModel).filter(StationModel.project_id == project_id).all()
     return stations
@@ -55,11 +60,13 @@ async def get_station(
     Returns:
         Station details
     """
-    station = db.query(StationModel).filter(StationModel.id == station_id).first()
-    if not station:
-        raise HTTPException(status_code=404, detail="Station not found")
-
-    return station
+    # Original code:
+    # station = db.query(StationModel).filter(StationModel.id == station_id).first()
+    # if not station:
+    #     raise HTTPException(status_code=404, detail="Station not found")
+    #
+    # Refactored: Use get_entity_or_404 helper
+    return get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
 
 
 @router.post("/stations", response_model=Station, status_code=status.HTTP_201_CREATED)
@@ -79,18 +86,19 @@ async def create_station(
     Returns:
         Created station
     """
-    # Check if user is admin or engineer
-    user_role = current_user.get("role")
-    if user_role not in ["admin", "engineer"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators and engineers can create stations"
-        )
+    # Original code:
+    # user_role = current_user.get("role")
+    # if user_role not in ["admin", "engineer"]:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Only administrators and engineers can create stations"
+    #     )
+    #
+    # Refactored: Use PermissionChecker helper
+    PermissionChecker.check_admin_or_engineer(current_user, "create stations")
 
     # Verify project exists
-    project = db.query(ProjectModel).filter(ProjectModel.id == station.project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    get_entity_or_404(db, ProjectModel, station.project_id, ErrorMessages.PROJECT_NOT_FOUND)
 
     # Check if station code already exists in this project
     existing_station = db.query(StationModel).filter(
@@ -104,7 +112,7 @@ async def create_station(
         )
 
     # Create new station
-    db_station = StationModel(**station.dict())
+    db_station = StationModel(**station.model_dump())
     db.add(db_station)
     db.commit()
     db.refresh(db_station)
@@ -131,21 +139,28 @@ async def update_station(
     Returns:
         Updated station
     """
-    # Check if user is admin or engineer
-    user_role = current_user.get("role")
-    if user_role not in ["admin", "engineer"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators and engineers can update stations"
-        )
+    # Original code:
+    # user_role = current_user.get("role")
+    # if user_role not in ["admin", "engineer"]:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Only administrators and engineers can update stations"
+    #     )
+    #
+    # Refactored: Use PermissionChecker helper
+    PermissionChecker.check_admin_or_engineer(current_user, "update stations")
 
     # Get existing station
-    db_station = db.query(StationModel).filter(StationModel.id == station_id).first()
-    if not db_station:
-        raise HTTPException(status_code=404, detail="Station not found")
+    # Original code:
+    # db_station = db.query(StationModel).filter(StationModel.id == station_id).first()
+    # if not db_station:
+    #     raise HTTPException(status_code=404, detail="Station not found")
+    #
+    # Refactored: Use get_entity_or_404 helper
+    db_station = get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
 
     # Update station fields
-    update_data = station.dict(exclude_unset=True)
+    update_data = station.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_station, key, value)
 
@@ -169,17 +184,24 @@ async def delete_station(
         db: Database session
         current_user: Current authenticated user
     """
-    # Check if user is admin
-    if current_user.get("role") != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can delete stations"
-        )
+    # Original code:
+    # if current_user.get("role") != "admin":
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Only administrators can delete stations"
+    #     )
+    #
+    # Refactored: Use PermissionChecker helper
+    PermissionChecker.check_admin(current_user, "delete stations")
 
     # Get existing station
-    db_station = db.query(StationModel).filter(StationModel.id == station_id).first()
-    if not db_station:
-        raise HTTPException(status_code=404, detail="Station not found")
+    # Original code:
+    # db_station = db.query(StationModel).filter(StationModel.id == station_id).first()
+    # if not db_station:
+    #     raise HTTPException(status_code=404, detail="Station not found")
+    #
+    # Refactored: Use get_entity_or_404 helper
+    db_station = get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
 
     # Delete station
     db.delete(db_station)

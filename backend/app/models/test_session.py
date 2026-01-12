@@ -1,7 +1,4 @@
-"""
-Test Session Model
-Represents a test execution session for a product
-"""
+"""Test Session Model"""
 from sqlalchemy import Column, Integer, String, TIMESTAMP, Enum, ForeignKey, func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -35,19 +32,10 @@ class TestSession(Base):
 
     created_at = Column(TIMESTAMP, server_default=func.now())
 
-    # Relationships
     station = relationship("Station", back_populates="test_sessions")
     user = relationship("User")
-    test_results = relationship(
-        "TestResult",
-        back_populates="session",
-        cascade="all, delete-orphan"
-    )
-    sfc_logs = relationship(
-        "SFCLog",
-        back_populates="session",
-        cascade="all, delete-orphan"
-    )
+    test_results = relationship("TestResult", back_populates="session", cascade="all, delete-orphan")
+    sfc_logs = relationship("SFCLog", back_populates="session", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<TestSession(id={self.id}, serial={self.serial_number}, result={self.final_result})>"

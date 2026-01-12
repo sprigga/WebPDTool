@@ -1,7 +1,4 @@
-"""
-Test Result Model
-Represents individual test item results within a test session
-"""
+"""Test Result Model"""
 from sqlalchemy import Column, Integer, String, TIMESTAMP, BigInteger, Enum, ForeignKey, DECIMAL, Text, func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -26,10 +23,7 @@ class TestResult(Base):
 
     item_no = Column(Integer, nullable=False)
     item_name = Column(String(100), nullable=False)
-
-    # 原有程式碼: measured_value = Column(DECIMAL(15, 6), nullable=True)
-    # 修改: 改為 String 類型以支援字串測量值 (例如: "Hello World!")
-    measured_value = Column(String(100), nullable=True)
+    measured_value = Column(String(100), nullable=True)  # String to support both numeric and text values
     lower_limit = Column(DECIMAL(15, 6), nullable=True)
     upper_limit = Column(DECIMAL(15, 6), nullable=True)
     unit = Column(String(20), nullable=True)
@@ -40,7 +34,6 @@ class TestResult(Base):
     test_time = Column(TIMESTAMP, server_default=func.now(), index=True)
     execution_duration_ms = Column(Integer, nullable=True)
 
-    # Relationships
     session = relationship("TestSession", back_populates="test_results")
     test_plan = relationship("TestPlan")
 

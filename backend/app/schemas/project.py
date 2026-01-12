@@ -1,9 +1,12 @@
-"""Project schemas"""
+"""Project and Station schemas"""
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
 
+# ============================================================================
+# Project Schemas
+# ============================================================================
 class ProjectBase(BaseModel):
     """Base project schema"""
     project_code: str = Field(..., min_length=1, max_length=50)
@@ -12,19 +15,19 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
-    """Project creation schema"""
+    """Project creation"""
     pass
 
 
 class ProjectUpdate(BaseModel):
-    """Project update schema"""
+    """Project update"""
     project_name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
     is_active: Optional[bool] = None
 
 
 class ProjectInDB(ProjectBase):
-    """Project schema for database"""
+    """Project with database fields"""
     id: int
     is_active: bool
     created_at: datetime
@@ -35,10 +38,13 @@ class ProjectInDB(ProjectBase):
 
 
 class Project(ProjectInDB):
-    """Project response schema"""
+    """Project response"""
     pass
 
 
+# ============================================================================
+# Station Schemas
+# ============================================================================
 class StationBase(BaseModel):
     """Base station schema"""
     station_code: str = Field(..., min_length=1, max_length=50)
@@ -47,19 +53,19 @@ class StationBase(BaseModel):
 
 
 class StationCreate(StationBase):
-    """Station creation schema"""
+    """Station creation"""
     project_id: int
 
 
 class StationUpdate(BaseModel):
-    """Station update schema"""
+    """Station update"""
     station_name: Optional[str] = Field(None, min_length=1, max_length=100)
     test_plan_path: Optional[str] = Field(None, max_length=255)
     is_active: Optional[bool] = None
 
 
 class StationInDB(StationBase):
-    """Station schema for database"""
+    """Station with database fields"""
     id: int
     project_id: int
     is_active: bool
@@ -71,12 +77,12 @@ class StationInDB(StationBase):
 
 
 class Station(StationInDB):
-    """Station response schema"""
+    """Station response"""
     pass
 
 
 class ProjectWithStations(Project):
-    """Project with stations"""
+    """Project with stations included"""
     stations: List[Station] = []
 
     class Config:

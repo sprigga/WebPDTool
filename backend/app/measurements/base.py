@@ -1,11 +1,11 @@
 """
 Base Measurement Module
 Provides abstract base class for all measurement implementations
-整合 PDTool4 test_point_runAllTest.py 的 TestPoint 驗證邏輯
+Integrates PDTool4 TestPoint validation logic
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Tuple, Union
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 import logging
 
@@ -13,121 +13,119 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# 輔助函數 - 對應 PDTool4 test_point_runAllTest.py
+# Utility Functions
 # ============================================================================
-def is_empty_limit(limit: Optional[Any]) -> bool:
-    """
-    檢查限制值是否為空
-    對應 PDTool4 test_point_runAllTest.py: is_empty_limit()
-    """
-    return limit is None or len(str(limit)) == 0
+def is_empty_limit(value: Optional[Any]) -> bool:
+    """Check if a limit value is empty"""
+    return value is None or len(str(value)) == 0
 
 
 # ============================================================================
-# 限制類型 (LimitType) - 對應 PDTool4
+# Limit Types
 # ============================================================================
 class LimitType:
-    """限制類型基類"""
+    """Base class for limit types"""
     pass
 
 
-class LOWER_LIMIT_TYPE(LimitType):
-    """下限限制類型"""
+class LOWER_LIMIT(LimitType):
+    """Lower limit constraint"""
     pass
 
 
-class UPPER_LIMIT_TYPE(LimitType):
-    """上限限制類型"""
+class UPPER_LIMIT(LimitType):
+    """Upper limit constraint"""
     pass
 
 
-class BOTH_LIMIT_TYPE(LimitType):
-    """雙向限制類型"""
+class BOTH_LIMIT(LimitType):
+    """Both lower and upper limit constraint"""
     pass
 
 
-class NONE_LIMIT_TYPE(LimitType):
-    """無限制類型"""
+class NONE_LIMIT(LimitType):
+    """No limit constraint"""
     pass
 
 
-class EQUALITY_LIMIT_TYPE(LimitType):
-    """相等限制類型"""
+class EQUALITY_LIMIT(LimitType):
+    """Equality constraint"""
     pass
 
 
-class PARTIAL_LIMIT_TYPE(LimitType):
-    """部分包含限制類型 (runAllTest 專用)"""
+class PARTIAL_LIMIT(LimitType):
+    """Partial string match constraint"""
     pass
 
 
-class INEQUALITY_LIMIT_TYPE(LimitType):
-    """不相等限制類型 (runAllTest 專用)"""
+class INEQUALITY_LIMIT(LimitType):
+    """Inequality constraint"""
     pass
 
 
-# 限制類型映射表
+# Mapping dictionary for limit types
 LIMIT_TYPE_MAP = {
-    'lower': LOWER_LIMIT_TYPE,
-    'upper': UPPER_LIMIT_TYPE,
-    'both': BOTH_LIMIT_TYPE,
-    'equality': EQUALITY_LIMIT_TYPE,
-    'partial': PARTIAL_LIMIT_TYPE,
-    'inequality': INEQUALITY_LIMIT_TYPE,
-    'none': NONE_LIMIT_TYPE,
+    'lower': LOWER_LIMIT,
+    'upper': UPPER_LIMIT,
+    'both': BOTH_LIMIT,
+    'equality': EQUALITY_LIMIT,
+    'partial': PARTIAL_LIMIT,
+    'inequality': INEQUALITY_LIMIT,
+    'none': NONE_LIMIT,
 }
 
 
 # ============================================================================
-# 數值類型 (ValueType) - 對應 PDTool4
+# Value Types with casting
 # ============================================================================
 class ValueType:
-    """數值類型基類"""
-    cast_call = None
-
-
-class STRING_VALUE_TYPE(ValueType):
+    """Base class for value types"""
     @staticmethod
-    def cast_call(in_obj):
-        return str(in_obj)
+    def cast(value: Any) -> Any:
+        return str(value)
 
 
-class INTEGER_VALUE_TYPE(ValueType):
+class StringType(ValueType):
     @staticmethod
-    def cast_call(in_obj):
-        # 如果已經是 int，直接返回
-        if isinstance(in_obj, int):
-            return in_obj
-        # 否則先轉成字串再轉 int
-        return int(str(in_obj), 0)
+    def cast(value: Any) -> str:
+        return str(value)
 
 
-class FLOAT_VALUE_TYPE(ValueType):
+class IntegerType(ValueType):
     @staticmethod
-    def cast_call(in_obj):
-        return float(in_obj)
+    def cast(value: Any) -> int:
+        if isinstance(value, int):
+            return value
+        # Handle string representation safely
+        try:
+            return int(str(value), 0) if isinstance(value, str) else int(value)
+        except (ValueError, TypeError):
+            return 0
+
+
+class FloatType(ValueType):
+    @staticmethod
+    def cast(value: Any) -> float:
+        return float(value)
 
 
 VALUE_TYPE_MAP = {
-    'string': STRING_VALUE_TYPE,
-    'integer': INTEGER_VALUE_TYPE,
-    'float': FLOAT_VALUE_TYPE,
+    'string': StringType,
+    'integer': IntegerType,
+    'float': FloatType,
 }
 
 
 # ============================================================================
-# 測量結果類別
+# Measurement Result
 # ============================================================================
 class MeasurementResult:
-    """
-    測量結果資料結構
-    對應 PDTool4 TestPoint 的執行結果
-    """
+    """Stores test measurement result data"""
 
     def __init__(
         self,
-        item_no: int,
-        item_name: str,
+        item_no: Optional[int],
+        item_name: Optional[str],
         result: str,
         measured_value: Optional[Union[Decimal, str]] = None,
         lower_limit: Optional[Decimal] = None,
@@ -136,8 +134,8 @@ class MeasurementResult:
         error_message: Optional[str] = None,
         execution_duration_ms: Optional[int] = None
     ):
-        self.item_no = item_no
-        self.item_name = item_name
+        self.item_no = item_no or 0
+        self.item_name = item_name or ""
         self.result = result  # PASS, FAIL, SKIP, ERROR
         self.measured_value = measured_value
         self.lower_limit = lower_limit
@@ -145,16 +143,13 @@ class MeasurementResult:
         self.unit = unit
         self.error_message = error_message
         self.execution_duration_ms = execution_duration_ms
-        self.test_time = datetime.utcnow()
+        self.test_time = datetime.now(timezone.utc)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert result to dictionary"""
-        # 原有程式碼: measured_value = float(self.measured_value) if self.measured_value else None
-        # 修改: 支援字串類型的 measured_value (例如: "Hello World!")
-        # 如果是 Decimal 或 float/int，轉換為 float；如果是 str，保持原樣
+        """Convert result to dictionary for JSON serialization"""
+        # Convert measured_value appropriately based on type
         measured_value = self.measured_value
         if measured_value is not None:
-            from decimal import Decimal
             if isinstance(measured_value, Decimal):
                 measured_value = float(measured_value)
             elif not isinstance(measured_value, (str, float, int)):
@@ -175,67 +170,58 @@ class MeasurementResult:
 
 
 # ============================================================================
-# 測量基類 - 整合 TestPoint 驗證邏輯
+# Base Measurement Class
 # ============================================================================
 class BaseMeasurement(ABC):
     """
-    抽象測量基類，所有測量實作都應繼承此類
-    整合 PDTool4 TestPoint 的 limit_type 驗證邏輯
+    Abstract base class for all measurement implementations.
+    Integrates PDTool4 TestPoint limit validation logic.
     """
 
     def __init__(self, test_plan_item: Dict[str, Any], config: Dict[str, Any]):
         """
-        初始化測量
-        對應 PDTool4 TestPoint.__init__()
+        Initialize measurement with test plan configuration.
 
         Args:
-            test_plan_item: 測試計畫項目配置 (來自資料庫)
-            config: 全域配置和儀器設定
+            test_plan_item: Test plan item configuration from database
+            config: Global configuration and instrument settings
         """
         self.test_plan_item = test_plan_item
         self.config = config
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        # 提取測試計畫欄位
+        # Extract test plan fields
         self.item_no = test_plan_item.get("item_no")
         self.item_name = test_plan_item.get("item_name")
         self.item_key = test_plan_item.get("item_key", self.item_name)
         self.lower_limit = test_plan_item.get("lower_limit")
         self.upper_limit = test_plan_item.get("upper_limit")
         self.unit = test_plan_item.get("unit")
-        self.test_command = test_plan_item.get("test_type")  # test_type 對應 test_command
+        self.test_command = test_plan_item.get("test_type")
         self.test_params = test_plan_item.get("parameters", {})
 
-        # 新增: 支援 limit_type 和 value_type
+        # Limit and value types
         self.value_type_str = test_plan_item.get("value_type", "string")
         self.limit_type_str = test_plan_item.get("limit_type", "none")
         self.eq_limit = test_plan_item.get("eq_limit")
 
-        # 設置數值類型
-        try:
-            self.value_type = VALUE_TYPE_MAP.get(self.value_type_str, STRING_VALUE_TYPE)
-        except KeyError:
-            self.value_type = STRING_VALUE_TYPE
-            self.logger.warning(f"Unknown value_type '{self.value_type_str}', using STRING")
+        # Set value type with fallback
+        self.value_type = VALUE_TYPE_MAP.get(self.value_type_str, StringType)
 
-        # 處理 eq_limit (相等限制)
+        # Cast eq_limit if present
         if not is_empty_limit(self.eq_limit):
-            self.eq_limit = self.value_type.cast_call(self.eq_limit)
+            self.eq_limit = self.value_type.cast(self.eq_limit)
 
-        # 設置限制類型
-        try:
-            self.limit_type = LIMIT_TYPE_MAP.get(self.limit_type_str, NONE_LIMIT_TYPE)
-        except KeyError:
-            self.limit_type = NONE_LIMIT_TYPE
-            self.logger.warning(f"Unknown limit_type '{self.limit_type_str}', using NONE")
+        # Set limit type with fallback
+        self.limit_type = LIMIT_TYPE_MAP.get(self.limit_type_str, NONE_LIMIT)
 
     @abstractmethod
     async def execute(self) -> MeasurementResult:
         """
-        執行測量 - 子類必須實作
+        Execute the measurement - must be implemented by subclasses.
 
         Returns:
-            MeasurementResult 物件包含測試結果
+            MeasurementResult object containing test results
         """
         pass
 
@@ -246,32 +232,31 @@ class BaseMeasurement(ABC):
         raise_on_fail: bool = False
     ) -> Tuple[bool, Optional[str]]:
         """
-        驗證測量值是否符合規格
-        對應 PDTool4 test_point_runAllTest.py: TestPoint._execute()
+        Validate measured value against specifications.
 
-        支援的 limit_type:
-        - none: 無限制，直接通過
-        - lower: 下限檢查
-        - upper: 上限檢查
-        - both: 雙向限制檢查
-        - equality: 相等檢查
-        - partial: 包含檢查 (字串包含)
-        - inequality: 不相等檢查
+        Supported limit types:
+        - none: No limit, always passes
+        - lower: Lower limit check (value >= lower)
+        - upper: Upper limit check (value <= upper)
+        - both: Both limits check (lower <= value <= upper)
+        - equality: Exact match check
+        - partial: String contains check
+        - inequality: Not equal check
 
-        特殊錯誤檢查 (PDTool4 runAllTest 模式):
-        - "No instrument found" -> 失敗
-        - "Error:" 開頭 -> 失敗
+        Special error checks (PDTool4 runAllTest mode):
+        - "No instrument found" -> fail
+        - "Error:" prefix -> fail
 
         Args:
-            measured_value: 測量值
-            run_all_test: "ON" 繼續執行, "OFF" 遇到錯誤停止
-            raise_on_fail: 失敗時是否拋出異常
+            measured_value: The value to validate
+            run_all_test: "ON" to continue on error, "OFF" to stop
+            raise_on_fail: Whether to raise on validation failure
 
         Returns:
-            Tuple[bool, Optional[str]]: (通過/失敗, 錯誤訊息)
+            Tuple of (passed, error_message)
         """
         try:
-            # PDTool4 runAllTest: 檢查儀器錯誤
+            # Check for instrument errors
             if measured_value and isinstance(measured_value, str):
                 if measured_value == "No instrument found":
                     self.logger.error("Instrument not found")
@@ -280,69 +265,71 @@ class BaseMeasurement(ABC):
                     self.logger.error(f"Instrument error: {measured_value}")
                     return False, f"Instrument error: {measured_value}"
 
-            # 檢查測量值類型轉換
+            # Type cast based on value_type
             if not is_empty_limit(measured_value):
-                # 根據 value_type 轉換
-                if self.value_type is INTEGER_VALUE_TYPE:
+                if self.value_type is IntegerType:
                     measured_value = int(str(measured_value), 0)
-                elif self.value_type is FLOAT_VALUE_TYPE:
+                elif self.value_type is FloatType:
                     measured_value = float(str(measured_value))
                 else:
                     measured_value = str(measured_value)
             else:
                 measured_value = None
 
-            # NONE_LIMIT_TYPE: 無限制，直接通過
-            if self.limit_type is NONE_LIMIT_TYPE:
+            # No limit - always passes
+            if self.limit_type is NONE_LIMIT:
                 return True, None
 
-            # EQUALITY_LIMIT_TYPE: 相等判斷
-            if self.limit_type is EQUALITY_LIMIT_TYPE:
+            # Equality check
+            if self.limit_type is EQUALITY_LIMIT:
                 result = bool(str(measured_value) == str(self.eq_limit))
                 if not result and raise_on_fail:
-                    logger.warning(f"Equality_limit : {self.eq_limit}")
-                    return False, f"Failed equality limit: {repr(measured_value)} does not equal {repr(self.eq_limit)}"
-                return result, None if result else f"Equality check failed: {repr(measured_value)} != {repr(self.eq_limit)}"
+                    logger.warning(f"Equality limit: {self.eq_limit}")
+                    return False, f"Failed equality: {repr(measured_value)} != {repr(self.eq_limit)}"
+                return result, None if result else f"Equality failed: {repr(measured_value)} != {repr(self.eq_limit)}"
 
-            # PARTIAL_LIMIT_TYPE: 包含判斷 (runAllTest 專用)
-            if self.limit_type is PARTIAL_LIMIT_TYPE:
+            # Partial string match check
+            if self.limit_type is PARTIAL_LIMIT:
                 result = str(self.eq_limit) in str(measured_value)
                 if not result and raise_on_fail:
-                    logger.warning(f"Partial_limit : {self.eq_limit}")
+                    logger.warning(f"Partial limit: {self.eq_limit}")
                     if run_all_test == "ON":
-                        # runAllTest 模式: 記錄錯誤但不中斷
                         logger.error(f"TestPointEqualityLimitFailure: {repr(measured_value)} does not contain {repr(self.eq_limit)}")
-                    return False, f"Failed partial limit: {repr(measured_value)} does not contain {repr(self.eq_limit)}"
-                return result, None if result else f"Partial check failed: '{self.eq_limit}' not in '{measured_value}'"
+                    return False, f"Failed partial: {repr(measured_value)} does not contain {repr(self.eq_limit)}"
+                return result, None if result else f"Partial failed: '{self.eq_limit}' not in '{measured_value}'"
 
-            # INEQUALITY_LIMIT_TYPE: 不相等判斷 (runAllTest 專用)
-            if self.limit_type is INEQUALITY_LIMIT_TYPE:
+            # Inequality check
+            if self.limit_type is INEQUALITY_LIMIT:
                 result = bool(measured_value != self.eq_limit)
                 if not result and raise_on_fail:
-                    logger.warning(f"Inequality_limit : {self.eq_limit}")
-                    return False, f"Failed inequality limit: {repr(measured_value)} equals {repr(self.eq_limit)}"
-                return result, None if result else f"Inequality check failed: {repr(measured_value)} == {repr(self.eq_limit)}"
+                    logger.warning(f"Inequality limit: {self.eq_limit}")
+                    return False, f"Failed inequality: {repr(measured_value)} == {repr(self.eq_limit)}"
+                return result, None if result else f"Inequality failed: {repr(measured_value)} == {repr(self.eq_limit)}"
 
-            # LOWER_LIMIT_TYPE / BOTH_LIMIT_TYPE: 下限判斷
-            if self.limit_type in (LOWER_LIMIT_TYPE, BOTH_LIMIT_TYPE):
-                lower_result = bool(float(measured_value) >= float(self.lower_limit))
-                if not lower_result and raise_on_fail:
-                    logger.warning(f"Lower_limit : {self.lower_limit}")
-                    return False, f"Failed lower limit: {repr(measured_value)} < {repr(self.lower_limit)}"
-                if self.limit_type is LOWER_LIMIT_TYPE:
-                    return lower_result, None if lower_result else f"Lower limit failed: {measured_value} < {self.lower_limit}"
+            # Lower limit check
+            lower_result = True
+            if self.limit_type in (LOWER_LIMIT, BOTH_LIMIT):
+                if measured_value is not None and self.lower_limit is not None:
+                    lower_result = bool(float(measured_value) >= float(self.lower_limit))
+                    if not lower_result and raise_on_fail:
+                        logger.warning(f"Lower limit: {self.lower_limit}")
+                        return False, f"Failed lower: {repr(measured_value)} < {repr(self.lower_limit)}"
+                    if self.limit_type is LOWER_LIMIT:
+                        return lower_result, None if lower_result else f"Lower failed: {measured_value} < {self.lower_limit}"
 
-            # UPPER_LIMIT_TYPE / BOTH_LIMIT_TYPE: 上限判斷
-            if self.limit_type in (UPPER_LIMIT_TYPE, BOTH_LIMIT_TYPE):
-                upper_result = bool(float(self.upper_limit) >= float(measured_value))
-                if not upper_result and raise_on_fail:
-                    logger.warning(f"Upper_limit : {self.upper_limit}")
-                    return False, f"Failed upper limit: {repr(measured_value)} > {repr(self.upper_limit)}"
-                if self.limit_type is UPPER_LIMIT_TYPE:
-                    return upper_result, None if upper_result else f"Upper limit failed: {measured_value} > {self.upper_limit}"
+            # Upper limit check
+            upper_result = True
+            if self.limit_type in (UPPER_LIMIT, BOTH_LIMIT):
+                if measured_value is not None and self.upper_limit is not None:
+                    upper_result = bool(float(self.upper_limit) >= float(measured_value))
+                    if not upper_result and raise_on_fail:
+                        logger.warning(f"Upper limit: {self.upper_limit}")
+                        return False, f"Failed upper: {repr(measured_value)} > {repr(self.upper_limit)}"
+                    if self.limit_type is UPPER_LIMIT:
+                        return upper_result, None if upper_result else f"Upper failed: {measured_value} > {self.upper_limit}"
 
-            # BOTH_LIMIT_TYPE: 返回組合結果
-            if self.limit_type is BOTH_LIMIT_TYPE:
+            # Both limits - combine results
+            if self.limit_type is BOTH_LIMIT:
                 return upper_result and lower_result, None
 
             return True, None
@@ -359,20 +346,20 @@ class BaseMeasurement(ABC):
         execution_duration_ms: Optional[int] = None
     ) -> MeasurementResult:
         """
-        建立測量結果物件
+        Create a MeasurementResult object.
 
         Args:
-            result: 測試結果 (PASS/FAIL/SKIP/ERROR)
-            measured_value: 測量值
-            error_message: 錯誤訊息
-            execution_duration_ms: 執行時間 (毫秒)
+            result: Test result (PASS/FAIL/SKIP/ERROR)
+            measured_value: Measured value
+            error_message: Error message if failed
+            execution_duration_ms: Execution time in milliseconds
 
         Returns:
-            MeasurementResult 物件
+            MeasurementResult object
         """
         return MeasurementResult(
-            item_no=self.item_no,
-            item_name=self.item_name,
+            item_no=self.item_no or 0,
+            item_name=self.item_name or "",
             result=result,
             measured_value=measured_value,
             lower_limit=self.lower_limit,
@@ -383,9 +370,9 @@ class BaseMeasurement(ABC):
         )
 
     async def setup(self):
-        """測量前設定 (可選)"""
+        """Optional setup before measurement"""
         pass
 
     async def teardown(self):
-        """測量後清理 (可選)"""
+        """Optional cleanup after measurement"""
         pass

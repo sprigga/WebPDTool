@@ -1,6 +1,4 @@
-"""
-Test Session Pydantic Schemas
-"""
+"""Test Session schemas"""
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
@@ -8,28 +6,26 @@ from enum import Enum
 
 
 class TestResultEnum(str, Enum):
-    """Test result enumeration"""
+    """Test session result"""
     PASS = "PASS"
     FAIL = "FAIL"
     ABORT = "ABORT"
 
 
 class TestSessionCreate(BaseModel):
-    """Schema for creating a new test session"""
-    serial_number: str = Field(..., min_length=1, max_length=100, description="Product serial number")
-    station_id: int = Field(..., gt=0, description="Station ID")
+    """Create test session"""
+    serial_number: str = Field(..., min_length=1, max_length=100)
+    station_id: int = Field(..., gt=0)
 
 
 class TestSessionStatus(BaseModel):
-    """Schema for test session status updates"""
+    """Test session status update"""
     session_id: int
-    status: str  # "RUNNING", "PAUSED", "COMPLETED", "ABORTED"
+    status: str
     current_item: Optional[int] = None
     total_items: Optional[int] = None
     pass_items: Optional[int] = None
     fail_items: Optional[int] = None
-    # 原有程式碼: elapsed_time_seconds: Optional[int] = None
-    # 修改: 改為 float 類型以支援小數點第3位
     elapsed_time_seconds: Optional[float] = None
 
     class Config:
@@ -37,7 +33,7 @@ class TestSessionStatus(BaseModel):
 
 
 class TestSessionComplete(BaseModel):
-    """Schema for completing a test session"""
+    """Complete test session"""
     final_result: TestResultEnum
     total_items: int
     pass_items: int
@@ -46,7 +42,7 @@ class TestSessionComplete(BaseModel):
 
 
 class TestSession(BaseModel):
-    """Schema for test session response"""
+    """Test session response"""
     id: int
     serial_number: str
     station_id: int
@@ -65,6 +61,5 @@ class TestSession(BaseModel):
 
 
 class TestSessionDetail(TestSession):
-    """Schema for test session with detailed information"""
-    # Will include test results in future iterations
+    """Test session with details"""
     pass

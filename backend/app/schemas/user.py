@@ -26,7 +26,7 @@ class UserUpdate(BaseModel):
 
 
 class UserInDB(UserBase):
-    """User schema for database"""
+    """User with database fields"""
     id: int
     is_active: bool
     created_at: datetime
@@ -42,25 +42,25 @@ class User(UserInDB):
 
 
 class Token(BaseModel):
-    """Token response schema"""
+    """Token response"""
     access_token: str
     token_type: str = "bearer"
 
 
 class TokenData(BaseModel):
-    """Token data schema"""
+    """Token data"""
     username: Optional[str] = None
     role: Optional[UserRole] = None
 
 
 class LoginRequest(BaseModel):
-    """Login request schema"""
+    """Login request"""
     username: str
     password: str
 
 
 class LoginResponse(BaseModel):
-    """Login response schema"""
+    """Login response"""
     access_token: str
     token_type: str = "bearer"
     user: User

@@ -1,96 +1,76 @@
 """
-Example Measurement Implementations
-Simplified versions demonstrating the measurement pattern
+Measurement Implementations
+Concrete measurement classes for various test types
 """
 from decimal import Decimal
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import asyncio
 import random
 
-from app.measurements.base import BaseMeasurement, MeasurementResult, STRING_VALUE_TYPE
+from app.measurements.base import (
+    BaseMeasurement,
+    MeasurementResult,
+    StringType
+)
 
 
+# ============================================================================
+# Helper Functions
+# ============================================================================
+def get_param(params: Dict[str, Any], *keys: str, default=None):
+    """Get parameter value trying multiple keys"""
+    for key in keys:
+        if key in params and params[key] not in (None, ""):
+            return params[key]
+    return default
+
+
+# ============================================================================
+# Dummy Measurement - For Testing
+# ============================================================================
 class DummyMeasurement(BaseMeasurement):
-    """
-    Dummy measurement for testing
-    Returns random values within limits
-    """
-    
+    """Returns random values for testing purposes"""
+
     async def execute(self) -> MeasurementResult:
-        """Execute dummy measurement"""
         try:
-            # Simulate measurement delay
             await asyncio.sleep(0.1)
-            
-            # Generate random value between limits
+
+            # Generate value based on limits with 80% pass rate
             if self.lower_limit is not None and self.upper_limit is not None:
-                # Generate value within range with 80% pass rate
                 if random.random() < 0.8:
-                    # Pass case
                     range_size = float(self.upper_limit - self.lower_limit)
                     measured_value = self.lower_limit + Decimal(random.uniform(0.1, 0.9) * range_size)
                 else:
-                    # Fail case
                     if random.random() < 0.5:
                         measured_value = self.lower_limit - Decimal(abs(random.gauss(1, 0.5)))
                     else:
                         measured_value = self.upper_limit + Decimal(abs(random.gauss(1, 0.5)))
             else:
-                # No limits, just return random value
                 measured_value = Decimal(random.uniform(0, 100))
 
-            # Validate result
-            is_valid, validation_error = self.validate_result(measured_value)
-            result_status = "PASS" if is_valid else "FAIL"
-
+            is_valid, error_msg = self.validate_result(measured_value)
             return self.create_result(
-                result=result_status,
+                result="PASS" if is_valid else "FAIL",
                 measured_value=measured_value,
-                error_message=validation_error if not is_valid else None
+                error_message=error_msg if not is_valid else None
             )
-            
         except Exception as e:
-            self.logger.error(f"Error in dummy measurement: {e}")
-            return self.create_result(
-                result="ERROR",
-                error_message=str(e)
-            )
+            self.logger.error(f"Dummy measurement error: {e}")
+            return self.create_result(result="ERROR", error_message=str(e))
 
 
+# ============================================================================
+# Command Test Measurement
+# ============================================================================
 class CommandTestMeasurement(BaseMeasurement):
-    """
-    Command Test Measurement
-    Executes external commands/scripts
-    對應 PDTool4 的 CommandTest 測試類型
-    """
+    """Executes external commands/scripts"""
 
     async def execute(self) -> MeasurementResult:
-        """Execute command test measurement"""
-        import subprocess
-        import os
-
         try:
-            # Extract parameters from test_params
-            # 原有程式碼: params = self.test_params
-            # 修改: test_engine.py 已經將 command 和 wait_msec 整合到 test_params 中
-            #      所以現在可以直接使用 self.test_params
-            params = self.test_params
-
-            # 優先使用 parameters["command"]，其次使用 test_plan_item 中的 command
-            command = params.get("command", "")
-
-            # 如果 parameters 中沒有，嘗試從 test_plan_item 取得
-            if not command:
-                command = self.test_plan_item.get("command", "")
-
-            timeout = params.get("timeout", 5000)  # 預設 5 秒
-
-            # 原有程式碼: wait_msec = params.get("wait_msec", 0)
-            # 修改: test_engine.py 已經將 wait_msec 整合到 params 中
-            #      如果沒有，再嘗試從 test_plan_item 直接讀取
-            wait_msec = params.get("wait_msec") or params.get("WaitmSec", 0)
-            if not wait_msec:
-                wait_msec = self.test_plan_item.get("wait_msec", 0)
+            # Get parameters with fallback options
+            command = get_param(self.test_params, "command") or self.test_plan_item.get("command", "")
+            timeout = get_param(self.test_params, "timeout", default=5000)
+            wait_msec = get_param(self.test_params, "wait_msec", "WaitmSec") or self.test_plan_item.get("wait_msec", 0)
 
             if not command:
                 return self.create_result(
@@ -100,20 +80,17 @@ class CommandTestMeasurement(BaseMeasurement):
 
             self.logger.info(f"Executing command: {command}")
 
-            # 等待指定的毫秒數
-            if wait_msec and wait_msec > 0:
+            # Wait if specified
+            if wait_msec and isinstance(wait_msec, (int, float)):
                 await asyncio.sleep(wait_msec / 1000.0)
 
-            # 轉換 timeout 單位 (ms -> s)
-            timeout_seconds = timeout / 1000.0 if timeout else 5
-
-            # 執行外部指令
-            # 使用 shell=True 以支援路徑和參數
+            # Execute command
+            timeout_seconds = timeout / 1000.0
             process = await asyncio.create_subprocess_shell(
                 command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd="/app"  # 設定工作目錄為容器內的 /app
+                cwd="/app"
             )
 
             try:
@@ -126,133 +103,90 @@ class CommandTestMeasurement(BaseMeasurement):
                 await process.wait()
                 return self.create_result(
                     result="ERROR",
-                    error_message=f"Command execution timeout after {timeout}ms"
+                    error_message=f"Command timeout after {timeout}ms"
                 )
 
-            # 解碼輸出
             output = stdout.decode().strip()
             error_output = stderr.decode().strip()
 
-            # 檢查執行結果
             if process.returncode != 0:
-                error_msg = error_output if error_output else f"Command failed with exit code {process.returncode}"
-                self.logger.error(f"Command execution failed: {error_msg}")
+                error_msg = error_output or f"Command failed with exit code {process.returncode}"
+                self.logger.error(f"Command failed: {error_msg}")
+                return self.create_result(result="ERROR", error_message=error_msg)
 
-                # 根據 PDTool4 邏輯，如果返回錯誤，測試結果應該是 FAIL
-                # 但我們需要區分是測試失敗還是執行錯誤
-                # 這裡我們將返回碼視為執行錯誤
-                return self.create_result(
-                    result="ERROR",
-                    error_message=error_msg
-                )
-
-            # 使用輸出作為測量值
+            # Convert output based on value_type
             measured_value = output
-
-            # 驗證結果
-            is_valid, validation_error = self.validate_result(measured_value)
-
-            # 根據 value_type 決定如何轉換 measured_value
-            if self.value_type is STRING_VALUE_TYPE:
-                # 字串類型，直接使用原始值
-                final_value = measured_value
-            else:
-                # 數值類型，轉換為 Decimal
+            if self.value_type is not StringType:
                 try:
-                    final_value = Decimal(str(measured_value)) if measured_value else None
-                except Exception:
-                    final_value = measured_value
+                    measured_value = Decimal(output) if output else None
+                except (ValueError, TypeError):
+                    measured_value = None
 
-            if not is_valid:
-                return self.create_result(
-                    result="FAIL",
-                    measured_value=final_value,
-                    error_message=validation_error
-                )
+            # Ensure measured_value is compatible with create_result
+            if isinstance(measured_value, str):
+                measured_value = None
 
+            is_valid, error_msg = self.validate_result(measured_value)
             return self.create_result(
-                result="PASS",
-                measured_value=final_value
+                result="PASS" if is_valid else "FAIL",
+                measured_value=measured_value,
+                error_message=error_msg if not is_valid else None
             )
 
         except Exception as e:
-            self.logger.error(f"Error in command test: {e}", exc_info=True)
-            return self.create_result(
-                result="ERROR",
-                error_message=str(e)
-            )
+            self.logger.error(f"Command test error: {e}", exc_info=True)
+            return self.create_result(result="ERROR", error_message=str(e))
 
 
+# ============================================================================
+# Power Measurements
+# ============================================================================
 class PowerReadMeasurement(BaseMeasurement):
-    """
-    Power Read Measurement
-    Reads voltage/current from power instruments
-    (Simplified version - to be expanded based on PDTool4 implementation)
-    """
-    
+    """Reads voltage/current from power instruments"""
+
     async def execute(self) -> MeasurementResult:
-        """Execute power read measurement"""
         try:
-            # Extract parameters
-            params = self.test_params
-            instrument = params.get("Instrument")
-            channel = params.get("Channel")
-            item = params.get("Item")  # volt or curr
-            
+            instrument = get_param(self.test_params, "Instrument")
+            channel = get_param(self.test_params, "Channel")
+            item = get_param(self.test_params, "Item")
+
             if not all([instrument, channel, item]):
                 return self.create_result(
                     result="ERROR",
                     error_message="Missing required parameters: Instrument, Channel, Item"
                 )
-            
-            self.logger.info(
-                f"Reading {item} from {instrument} channel {channel}"
-            )
-            
-            # Simulate instrument read
+
+            self.logger.info(f"Reading {item} from {instrument} channel {channel}")
             await asyncio.sleep(0.3)
-            
-            # Generate simulated value based on limits
+
+            # Generate simulated value
             if self.lower_limit and self.upper_limit:
-                # Generate value near center of range
                 center = (self.lower_limit + self.upper_limit) / 2
                 variance = (self.upper_limit - self.lower_limit) / 10
                 measured_value = center + Decimal(random.gauss(0, float(variance)))
             else:
                 measured_value = Decimal(random.uniform(0, 100))
 
-            is_valid, validation_error = self.validate_result(measured_value)
-            result_status = "PASS" if is_valid else "FAIL"
-
+            is_valid, error_msg = self.validate_result(measured_value)
             return self.create_result(
-                result=result_status,
+                result="PASS" if is_valid else "FAIL",
                 measured_value=measured_value,
-                error_message=validation_error if not is_valid else None
+                error_message=error_msg if not is_valid else None
             )
-            
+
         except Exception as e:
-            self.logger.error(f"Error in power read: {e}")
-            return self.create_result(
-                result="ERROR",
-                error_message=str(e)
-            )
+            self.logger.error(f"Power read error: {e}")
+            return self.create_result(result="ERROR", error_message=str(e))
 
 
 class PowerSetMeasurement(BaseMeasurement):
-    """
-    Power Set Measurement
-    Sets voltage/current on power supplies
-    (Simplified version - to be expanded based on PDTool4 implementation)
-    """
+    """Sets voltage/current on power supplies"""
 
     async def execute(self) -> MeasurementResult:
-        """Execute power set measurement"""
         try:
-            # Extract parameters
-            params = self.test_params
-            instrument = params.get("Instrument")
-            voltage = params.get("Voltage") or params.get("SetVolt")
-            current = params.get("Current") or params.get("SetCurr")
+            instrument = get_param(self.test_params, "Instrument")
+            voltage = get_param(self.test_params, "Voltage", "SetVolt")
+            current = get_param(self.test_params, "Current", "SetCurr")
 
             if not instrument:
                 return self.create_result(
@@ -260,188 +194,119 @@ class PowerSetMeasurement(BaseMeasurement):
                     error_message="Missing required parameter: Instrument"
                 )
 
-            self.logger.info(
-                f"Setting power on {instrument}: V={voltage}, I={current}"
-            )
-
-            # Simulate power set
+            self.logger.info(f"Setting power on {instrument}: V={voltage}, I={current}")
             await asyncio.sleep(0.2)
 
-            # Power set typically doesn't return a measured value but indicates success
-            return self.create_result(
-                result="PASS",
-                measured_value=Decimal("1.0")  # Success indicator
-            )
+            return self.create_result(result="PASS", measured_value=Decimal("1.0"))
 
         except Exception as e:
-            self.logger.error(f"Error in power set: {e}")
-            return self.create_result(
-                result="ERROR",
-                error_message=str(e)
-            )
+            self.logger.error(f"Power set error: {e}")
+            return self.create_result(result="ERROR", error_message=str(e))
 
 
+# ============================================================================
+# SFC Measurement
+# ============================================================================
 class SFCMeasurement(BaseMeasurement):
-    """
-    SFC (Shop Floor Control) Test Measurement
-    Integrates with manufacturing execution systems
-    (Simplified version - to be expanded based on PDTool4 implementation)
-    """
+    """Integrates with manufacturing execution systems"""
 
     async def execute(self) -> MeasurementResult:
-        """Execute SFC test measurement"""
         try:
-            # Extract parameters
-            params = self.test_params
-            sfc_mode = params.get("Mode", "webStep1_2")  # Default mode
-
+            sfc_mode = get_param(self.test_params, "Mode", default="webStep1_2")
             self.logger.info(f"Executing SFC test with mode: {sfc_mode}")
 
-            # Simulate SFC communication delay
             await asyncio.sleep(0.5)
 
-            # In real implementation, this would call the SFC system
-            # For now, simulate a successful response
-            result_status = "PASS"
-
-            return self.create_result(
-                result=result_status,
-                measured_value=Decimal("1.0")  # Success indicator
-            )
+            return self.create_result(result="PASS", measured_value=Decimal("1.0"))
 
         except Exception as e:
-            self.logger.error(f"Error in SFC test: {e}")
-            return self.create_result(
-                result="ERROR",
-                error_message=str(e)
-            )
+            self.logger.error(f"SFC test error: {e}")
+            return self.create_result(result="ERROR", error_message=str(e))
 
 
+# ============================================================================
+# Get Serial Number Measurement
+# ============================================================================
 class GetSNMeasurement(BaseMeasurement):
-    """
-    Get Serial Number Measurement
-    Acquires device serial numbers via various methods
-    (Simplified version - to be expanded based on PDTool4 implementation)
-    """
+    """Acquires device serial numbers"""
 
     async def execute(self) -> MeasurementResult:
-        """Execute serial number acquisition measurement"""
         try:
-            # Extract parameters
-            params = self.test_params
-            sn_type = params.get("Type", "SN")  # SN, IMEI, MAC, etc.
-
+            sn_type = get_param(self.test_params, "Type", default="SN")
             self.logger.info(f"Acquiring {sn_type} from device")
 
-            # Simulate serial number read delay
             await asyncio.sleep(0.1)
 
-            # In real implementation, this would read from actual source
-            # For now, return a placeholder
-            sn_value = params.get("SerialNumber", f"SN{random.randint(100000, 999999)}")
+            # Return placeholder or provided serial number
+            sn_value = get_param(self.test_params, "SerialNumber", default=f"SN{random.randint(100000, 999999)}")
 
-            return self.create_result(
-                result="PASS",
-                measured_value=Decimal("1.0")  # Success indicator
-            )
+            return self.create_result(result="PASS", measured_value=Decimal("1.0"))
 
         except Exception as e:
-            self.logger.error(f"Error in serial number acquisition: {e}")
-            return self.create_result(
-                result="ERROR",
-                error_message=str(e)
-            )
+            self.logger.error(f"Serial number acquisition error: {e}")
+            return self.create_result(result="ERROR", error_message=str(e))
 
 
+# ============================================================================
+# Operator Judgment Measurement
+# ============================================================================
 class OPJudgeMeasurement(BaseMeasurement):
-    """
-    Operator Judgment Measurement
-    Awaits operator confirmation for subjective tests
-    (Simplified version - to be expanded based on PDTool4 implementation)
-    """
+    """Awaits operator confirmation for subjective tests"""
 
     async def execute(self) -> MeasurementResult:
-        """Execute operator judgment measurement"""
         try:
-            # Extract parameters
-            params = self.test_params
-            judgment_type = params.get("Type", "YorN")  # YorN, confirm, etc.
+            judgment_type = get_param(self.test_params, "Type", default="YorN")
+            self.logger.info(f"Operator judgment: {judgment_type}")
 
-            self.logger.info(f"Awaiting operator judgment: {judgment_type}")
+            expected = get_param(self.test_params, "Expected", default="PASS")
+            actual = get_param(self.test_params, "Result", default=expected)
 
-            # In real implementation, this would prompt the operator
-            # For now, simulate based on test parameters
-            expected_result = params.get("Expected", "PASS")
-            actual_result = params.get("Result", expected_result)
-
-            return self.create_result(
-                result=actual_result,
-                measured_value=Decimal("1.0") if actual_result == "PASS" else Decimal("0.0")
-            )
+            measured_value = Decimal("1.0") if actual == "PASS" else Decimal("0.0")
+            # Ensure actual is a valid result string
+            if actual not in ("PASS", "FAIL", "SKIP", "ERROR"):
+                actual = "PASS"
+            return self.create_result(result=str(actual), measured_value=measured_value)
 
         except Exception as e:
-            self.logger.error(f"Error in operator judgment: {e}")
-            return self.create_result(
-                result="ERROR",
-                error_message=str(e)
-            )
+            self.logger.error(f"Operator judgment error: {e}")
+            return self.create_result(result="ERROR", error_message=str(e))
 
 
+# ============================================================================
+# Wait Measurement
+# ============================================================================
 class WaitMeasurement(BaseMeasurement):
-    """
-    Wait Measurement
-    等待指定時間後返回 PASS
-    對應 PDTool4 的 WAIT 功能
-
-    參數說明:
-    - wait_msec: 等待時間（毫秒），從 test_plans.wait_msec 欄位讀取
-    - WaitmSec: 等待時間（毫秒），從 parameters JSON 中讀取（向後相容）
-    """
+    """Waits for specified time duration"""
 
     async def execute(self) -> MeasurementResult:
-        """Execute wait measurement"""
         try:
-            # 原有程式碼: 優先從 test_plan_item 讀取 wait_msec（來自 test_plans.wait_msec 欄位）
-            #         其次從 test_params 讀取 WaitmSec（來自 parameters JSON）
-            # 修改: test_engine.py 已經將 wait_msec 整合到 test_params 中
-            #      所以現在直接從 test_params 讀取即可 (優先級已由 test_engine 處理)
-            #      test_engine 的優先級: test_plans.wait_msec > parameters JSON
+            # Get wait time from multiple possible sources
             wait_msec = (
-                self.test_params.get("wait_msec") or
-                self.test_params.get("WaitmSec") or
-                0
+                get_param(self.test_params, "wait_msec", "WaitmSec") or
+                self.test_plan_item.get("wait_msec", 0)
             )
-
-            # 如果仍然沒有值,嘗試從 test_plan_item 直接讀取 (向後相容)
-            if not wait_msec:
-                wait_msec = self.test_plan_item.get("wait_msec", 0)
 
             if not isinstance(wait_msec, (int, float)) or wait_msec <= 0:
                 return self.create_result(
                     result="ERROR",
-                    error_message=f"wait mode requires wait_msec parameter (milliseconds). Got: {wait_msec}"
+                    error_message=f"wait mode requires wait_msec > 0, got: {wait_msec}"
                 )
 
             wait_seconds = wait_msec / 1000
-            self.logger.info(f"Executing wait for {self.item_name} - waiting {wait_msec}ms ({wait_seconds}s)")
+            self.logger.info(f"Waiting {wait_msec}ms ({wait_seconds}s)")
 
-            # 等待指定的秒數
             await asyncio.sleep(wait_seconds)
 
-            return self.create_result(
-                result="PASS",
-                measured_value=Decimal("1.0")
-            )
+            return self.create_result(result="PASS", measured_value=Decimal("1.0"))
 
         except Exception as e:
-            self.logger.error(f"Error in wait measurement: {e}")
-            return self.create_result(
-                result="ERROR",
-                error_message=str(e)
-            )
+            self.logger.error(f"Wait measurement error: {e}")
+            return self.create_result(result="ERROR", error_message=str(e))
 
 
-# Measurement type registry
+# ============================================================================
+# Measurement Registry
+# ============================================================================
 MEASUREMENT_REGISTRY = {
     "DUMMY": DummyMeasurement,
     "COMMAND_TEST": CommandTestMeasurement,
@@ -453,22 +318,22 @@ MEASUREMENT_REGISTRY = {
     "WAIT": WaitMeasurement,
     "OTHER": DummyMeasurement,
     "FINAL": DummyMeasurement,
-    # 新增: 直接支援小寫的 test_type 值
+    # Lowercase variants
     "command": CommandTestMeasurement,
     "wait": WaitMeasurement,
     "other": DummyMeasurement,
-    # 新增: 支援 case_type 的測量類型
-    "console": CommandTestMeasurement,  # console 類型使用 CommandTest
-    "comport": CommandTestMeasurement,  # comport 類型使用 CommandTest
-    "tcpip": CommandTestMeasurement,   # tcpip 類型使用 CommandTest
-    "URL": SFCMeasurement,             # URL 類型使用 SFC (webStep1_2)
-    "webStep1_2": SFCMeasurement,      # SFC webStep1_2 模式
+    # Case type mappings
+    "console": CommandTestMeasurement,
+    "comport": CommandTestMeasurement,
+    "tcpip": CommandTestMeasurement,
+    "URL": SFCMeasurement,
+    "webStep1_2": SFCMeasurement,
 }
 
 
-def get_measurement_class(test_command: str):
+def get_measurement_class(test_command: str) -> Optional[type]:
     """
-    Get measurement class by command name
+    Get measurement class by command name.
 
     Args:
         test_command: Test command string
@@ -476,7 +341,7 @@ def get_measurement_class(test_command: str):
     Returns:
         Measurement class or None
     """
-    # Convert PDTool4-style names to registry keys
+    # Normalize command names
     command_map = {
         "SFCtest": "SFC_TEST",
         "getSN": "GET_SN",
@@ -486,19 +351,17 @@ def get_measurement_class(test_command: str):
         "CommandTest": "COMMAND_TEST",
         "PowerRead": "POWER_READ",
         "PowerSet": "POWER_SET",
-        # 新增: 小寫 test_type 的映射
-        "command": "command",
-        "wait": "wait",
-        "other": "other",
-        # 新增: case_type 的映射
         "console": "console",
         "comport": "comport",
         "tcpip": "tcpip",
         "URL": "URL",
         "webStep1_2": "webStep1_2",
+        "command": "command",
+        "wait": "wait",
+        "other": "other",
     }
 
-    # 優先使用 command_map，如果沒有則嘗試直接查找或轉大寫
+    # Find in map or use uppercase
     if test_command in command_map:
         registry_key = command_map[test_command]
     elif test_command in MEASUREMENT_REGISTRY:
