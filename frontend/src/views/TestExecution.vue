@@ -7,6 +7,50 @@
         </div>
       </template>
 
+      <!-- Project and Station Selectors -->
+      <el-card class="selector-card">
+        <el-form :model="selectorForm" label-width="120px">
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="專案">
+                <el-select
+                  v-model="selectorForm.projectId"
+                  placeholder="請選擇專案"
+                  @change="handleProjectChange"
+                  :disabled="testing"
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="project in projects"
+                    :key="project.id"
+                    :label="`${project.project_code} - ${project.project_name}`"
+                    :value="project.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="站別">
+                <el-select
+                  v-model="selectorForm.stationId"
+                  placeholder="請選擇站別"
+                  @change="handleStationChange"
+                  :disabled="testing || !selectorForm.projectId"
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="station in stations"
+                    :key="station.id"
+                    :label="`${station.station_code} - ${station.station_name}`"
+                    :value="station.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </el-form>
+      </el-card>
+
       <!-- Station Info -->
       <el-alert
         v-if="currentStation"
@@ -152,9 +196,23 @@ import {
   startTestExecution,
   stopTestExecution
 } from '@/api/tests'
+import { getProjects, getProjectStations } from '@/api/projects'
+import { getStationTestPlan } from '@/api/testplans'
 
 const projectStore = useProjectStore()
-const currentStation = computed(() => projectStore.currentStation)
+// const currentStation = computed(() => projectStore.currentStation)
+
+// 新增: 專案和站別選擇器
+const projects = ref([])
+const stations = ref([])
+const selectorForm = reactive({
+  projectId: null,
+  stationId: null
+})
+const currentStation = ref(null)
+const currentTestPlan = ref([])
+
+// 原有程式碼: const currentStation = computed(() => projectStore.currentStation)
 
 const testForm = reactive({
   serialNumber: ''
@@ -247,7 +305,7 @@ const handleStartTest = async () => {
     return
   }
 
-  if (!currentStation.value) {
+  if (!selectorForm.stationId) {
     ElMessage.warning('請先選擇站別')
     return
   }
@@ -258,16 +316,16 @@ const handleStartTest = async () => {
     const serialNumber = requireBarcode.value ? testForm.serialNumber.trim() : 'AUTO-' + Date.now()
     const session = await createTestSession({
       serial_number: serialNumber,
-      station_id: currentStation.value.id
+      station_id: selectorForm.stationId
     })
 
     currentSession.value = session
-    
+
     ElMessage.success('測試會話已創建')
 
     // Start test execution
     await startTestExecution(session.id)
-    
+
     testStatus.value.status = 'RUNNING'
     ElMessage.success('測試已啟動')
 
@@ -349,8 +407,98 @@ const handleNewTest = () => {
   testForm.serialNumber = ''
 }
 
+// 新增: 載入專案列表
+const loadProjects = async () => {
+  try {
+    const response = await getProjects()
+    projects.value = response.data
+
+    // 如果有預設專案,自動選擇
+    if (projects.value.length > 0 && !selectorForm.projectId) {
+      selectorForm.projectId = projects.value[0].id
+      await handleProjectChange(projects.value[0].id)
+    }
+  } catch (error) {
+    console.error('Failed to load projects:', error)
+    ElMessage.error('載入專案列表失敗')
+  }
+}
+
+// 新增: 處理專案變更
+const handleProjectChange = async (projectId) => {
+  selectorForm.stationId = null
+  stations.value = []
+  currentStation.value = null
+  currentTestPlan.value = []
+
+  if (!projectId) return
+
+  try {
+    const response = await getProjectStations(projectId)
+    stations.value = response.data
+
+    // 如果有預設站別,自動選擇
+    if (stations.value.length > 0) {
+      selectorForm.stationId = stations.value[0].id
+      await handleStationChange(stations.value[0].id)
+    }
+  } catch (error) {
+    console.error('Failed to load stations:', error)
+    ElMessage.error('載入站別列表失敗')
+  }
+}
+
+// 新增: 處理站別變更
+const handleStationChange = async (stationId) => {
+  if (!stationId) {
+    currentStation.value = null
+    currentTestPlan.value = []
+    return
+  }
+
+  try {
+    // 獲取站別詳情
+    const station = stations.value.find(s => s.id === stationId)
+    currentStation.value = station
+
+    // 載入測試計劃
+    await loadTestPlan(stationId)
+  } catch (error) {
+    console.error('Failed to load station details:', error)
+    ElMessage.error('載入站別詳情失敗')
+  }
+}
+
+// 新增: 載入測試計劃
+const loadTestPlan = async (stationId) => {
+  if (!selectorForm.projectId || !stationId) return
+
+  try {
+    const response = await getStationTestPlan(
+      stationId,
+      selectorForm.projectId,
+      true,
+      null
+    )
+    currentTestPlan.value = response.data
+
+    // 更新測試總項目數
+    testStatus.value.total_items = currentTestPlan.value.length
+
+    if (currentTestPlan.value.length > 0) {
+      ElMessage.success(`已載入測試計劃，共 ${currentTestPlan.value.length} 個測試項目`)
+    } else {
+      ElMessage.warning('該站別暫無測試計劃')
+    }
+  } catch (error) {
+    console.error('Failed to load test plan:', error)
+    ElMessage.error('載入測試計劃失敗')
+  }
+}
+
 onMounted(() => {
   // Check if there's an active session to resume
+  loadProjects()
 })
 
 onUnmounted(() => {
@@ -372,6 +520,11 @@ onUnmounted(() => {
 .card-header h2 {
   margin: 0;
   font-size: 20px;
+}
+
+.selector-card {
+  margin-bottom: 20px;
+  background-color: #f5f7fa;
 }
 
 .serial-input-card {
