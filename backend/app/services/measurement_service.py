@@ -767,12 +767,52 @@ class MeasurementService:
                 )
 
                 # 執行命令
-                self.logger.info(f"Executing command: {command}")
+                # 原有程式碼: cwd="/app" (容器環境工作目錄) - 硬編碼路徑
+                # 問題: 當指令為 "python /app/scripts/hello_world.py" 時,會找不到檔案
+                # 原因: 在容器中, /app 對應專案根目錄,腳本實際位於 /app/backend/scripts/
+                # 修改: 使用相對路徑,動態獲取 backend 目錄作為工作目錄
+                #       這樣可以同時支援本地環境和容器環境
+                import os
+
+                current_file = os.path.abspath(__file__)
+                backend_cwd = os.path.dirname(
+                    os.path.dirname(os.path.dirname(current_file))
+                )
+
+                # 處理命令中的絕對路徑,轉換為相對路徑
+                # 支援兩種情況:
+                # 1. 容器環境: /app/scripts/xxx.py -> /app/backend/scripts/xxx.py
+                # 2. 本地環境: 直接使用相對路徑 ./scripts/xxx.py
+                processed_command = command
+
+                # 檢測是否為容器環境的絕對路徑
+                # 標準化路徑後檢查是否以 backend_cwd 的父目錄開頭
+                try:
+                    # 獲取專案根目錄 (backend 的上一層)
+                    project_root = os.path.dirname(backend_cwd)
+
+                    # 如果命令包含 /app/scripts/ 或 /app/backend/scripts/,嘗試轉換
+                    if "/app/scripts/" in command and "/app/backend/scripts/" not in command:
+                        # 容器環境: /app 對應專案根目錄
+                        # 將 /app/scripts/ 轉換為相對於 backend 的路徑
+                        processed_command = command.replace("/app/scripts/", "scripts/")
+                        self.logger.info(f"Path conversion: /app/scripts/ -> scripts/ (relative path)")
+                    elif command.startswith("/app/") and not command.startswith(f"{project_root}/"):
+                        # 其他 /app 開頭的路徑,轉換為相對路徑
+                        relative_path = command.replace("/app/", "")
+                        processed_command = relative_path
+                        self.logger.info(f"Path conversion: /app/xxx -> {relative_path} (relative path)")
+                except Exception as e:
+                    # 如果路徑轉換失敗,使用原始命令
+                    self.logger.warning(f"Path conversion failed: {e}, using original command")
+                    processed_command = command
+
+                self.logger.info(f"Executing command: {processed_command}, cwd: {backend_cwd}")
                 process = await asyncio.create_subprocess_shell(
-                    command,
+                    processed_command,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    cwd="/app",  # 容器環境工作目錄
+                    cwd=backend_cwd,  # 使用動態 backend 目錄,支援本地和容器環境
                 )
 
                 try:
