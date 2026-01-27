@@ -15,7 +15,7 @@
             <el-button
               type="success"
               :icon="Plus"
-              :disabled="!currentStation"
+              :disabled="!selectedProject || !selectedStation"
               @click="handleAddItem"
             >
               新增項目
@@ -32,10 +32,55 @@
         </div>
       </template>
 
+      <!-- Project and Station Selection -->
+      <el-card class="filter-card" shadow="never">
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="選擇專案">
+              <el-select
+                v-model="selectedProjectId"
+                placeholder="請選擇專案"
+                style="width: 100%"
+                filterable
+                clearable
+                @change="handleProjectSelect"
+              >
+                <el-option
+                  v-for="project in projectStore.projects"
+                  :key="project.id"
+                  :label="`${project.project_code} - ${project.project_name}`"
+                  :value="project.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="選擇站別">
+              <el-select
+                v-model="selectedStationId"
+                placeholder="請選擇站別"
+                style="width: 100%"
+                filterable
+                clearable
+                :disabled="!selectedProjectId"
+                @change="handleStationSelect"
+              >
+                <el-option
+                  v-for="station in filteredStations"
+                  :key="station.id"
+                  :label="`${station.station_code} - ${station.station_name}`"
+                  :value="station.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-card>
+
       <!-- Station Info -->
       <el-alert
-        v-if="currentStation"
-        :title="`當前站別: ${currentStation.station_code} - ${currentStation.station_name}`"
+        v-if="selectedStation"
+        :title="`當前選擇: ${selectedProject?.project_code || ''} - ${selectedProject?.project_name || ''} / ${selectedStation.station_code} - ${selectedStation.station_name}`"
         type="info"
         :closable="false"
         style="margin-bottom: 20px"
@@ -154,7 +199,7 @@
             :disabled="!uploadForm.projectId"
           >
             <el-option
-              v-for="station in filteredStations"
+              v-for="station in uploadFormFilteredStations"
               :key="station.id"
               :label="`${station.station_code} - ${station.station_name}`"
               :value="station.id"
@@ -384,10 +429,30 @@ import {
 } from '@/api/testplans'
 
 const projectStore = useProjectStore()
-const currentStation = computed(() => projectStore.currentStation)
+// const currentStation = computed(() => projectStore.currentStation)  // 原有程式碼: 使用 store 中的當前站別
 
-// 新增: 根據選擇的專案過濾站別
+// 新增: 使用本地狀態管理選擇的專案和站別,不依賴 store 的 currentProject/currentStation
+const selectedProjectId = ref(null)
+const selectedStationId = ref(null)
+
+const selectedProject = computed(() => {
+  if (!selectedProjectId.value) return null
+  return projectStore.projects.find(p => p.id === selectedProjectId.value) || null
+})
+
+const selectedStation = computed(() => {
+  if (!selectedStationId.value) return null
+  return filteredStations.value.find(s => s.id === selectedStationId.value) || null
+})
+
+// 根據選擇的專案過濾站別(主篩選器)
 const filteredStations = computed(() => {
+  if (!selectedProjectId.value) return []
+  return projectStore.stations.filter(station => station.project_id === selectedProjectId.value)
+})
+
+// 根據上傳表單的專案過濾站別(上傳對話框專用)
+const uploadFormFilteredStations = computed(() => {
   if (!uploadForm.projectId) return []
   return projectStore.stations.filter(station => station.project_id === uploadForm.projectId)
 })
@@ -441,19 +506,52 @@ const uploadRef = ref(null)
 const editFormRef = ref(null)
 const testPlanTable = ref(null)
 
+// 新增: 處理專案選擇變更
+const handleProjectSelect = async (projectId) => {
+  // 清空站別選擇
+  selectedStationId.value = null
+
+  // 載入該專案的站別列表
+  if (projectId) {
+    try {
+      await projectStore.fetchProjectStations(projectId)
+    } catch (error) {
+      console.error('Failed to load stations:', error)
+      ElMessage.error('載入站別列表失敗')
+    }
+  }
+
+  // 清空測試計劃列表
+  testPlanItems.value = []
+}
+
+// 新增: 處理站別選擇變更
+const handleStationSelect = async (stationId) => {
+  // 載入測試計劃
+  await loadTestPlan()
+}
+
 // Load test plan
 const loadTestPlan = async () => {
-  if (!currentStation.value) {
-    ElMessage.warning('請先選擇站別')
+  // 修正: 檢查是否選擇專案和站別
+  if (!selectedProjectId.value || !selectedStationId.value) {
+    // 原有程式碼: if (!currentStation.value)
+    // ElMessage.warning('請先選擇站別')
+    testPlanItems.value = []  // 清空測試計劃列表
     return
   }
 
   loading.value = true
   try {
-    // 原有程式碼缺少 projectId 參數導致後端 API 報錯
+    // 修正: 使用選擇的專案和站別 ID
+    // 原有程式碼: testPlanItems.value = await getStationTestPlan(
+    //   currentStation.value.id,
+    //   projectStore.currentProject?.id || currentStation.value.project_id,
+    //   false
+    // )
     testPlanItems.value = await getStationTestPlan(
-      currentStation.value.id,
-      projectStore.currentProject?.id || currentStation.value.project_id,
+      selectedStationId.value,
+      selectedProjectId.value,
       false
     )
   } catch (error) {
@@ -466,9 +564,11 @@ const loadTestPlan = async () => {
 
 // Handle show upload dialog
 const handleShowUploadDialog = () => {
-  // 設定預設專案和站別為當前專案和站別(如果有的話)
-  uploadForm.projectId = projectStore.currentProject?.id || null
-  uploadForm.stationId = currentStation.value?.id || null
+  // 設定預設專案和站別為當前選擇的專案和站別(如果有的話)
+  // 原有程式碼: uploadForm.projectId = projectStore.currentProject?.id || null
+  // 原有程式碼: uploadForm.stationId = currentStation.value?.id || null
+  uploadForm.projectId = selectedProjectId.value || null
+  uploadForm.stationId = selectedStationId.value || null
   showUploadDialog.value = true
 }
 
@@ -548,12 +648,16 @@ const handleUpload = async () => {
     }
 
     // 切換到上傳的站別
-    if (!currentStation.value || currentStation.value.id !== uploadedStationId) {
-      const station = projectStore.stations.find(s => s.id === uploadedStationId)
-      if (station) {
-        await projectStore.setCurrentStation(station)
-      }
-    }
+    // 修正: 更新本地選擇狀態而不是 store 狀態
+    // 原有程式碼:
+    // if (!currentStation.value || currentStation.value.id !== uploadedStationId) {
+    //   const station = projectStore.stations.find(s => s.id === uploadedStationId)
+    //   if (station) {
+    //     await projectStore.setCurrentStation(station)
+    //   }
+    // }
+    selectedProjectId.value = uploadedProjectId
+    selectedStationId.value = uploadedStationId
 
     // 重新載入測試計劃
     await loadTestPlan()
@@ -646,10 +750,18 @@ const handleSaveItem = async () => {
         ElMessage.success('更新成功')
       } else {
         // Create new item
-        // 新增: 加入 project_id
+        // 修正: 使用選擇的專案和站別
+        // 原有程式碼:
+        // await createTestPlanItem({
+        //   project_id: projectStore.currentProject?.id || currentStation.value.project_id,
+        //   station_id: currentStation.value.id,
+        //   item_no: editingItem.sequence_order,
+        //   ...itemData,
+        //   parameters: {}
+        // })
         await createTestPlanItem({
-          project_id: projectStore.currentProject?.id || currentStation.value.project_id,
-          station_id: currentStation.value.id,
+          project_id: selectedProjectId.value,
+          station_id: selectedStationId.value,
           item_no: editingItem.sequence_order,
           ...itemData,
           parameters: {}
@@ -728,11 +840,11 @@ const handleBulkDelete = async () => {
 }
 
 onMounted(async () => {
-  // 從 localStorage 載入當前專案和站別
+  // 原有程式碼: 從 localStorage 載入當前專案和站別
   // currentProject 和 currentStation 已在 store 初始化時自動載入，無需額外呼叫方法
   // 原程式碼: projectStore.loadFromStorage() - 此方法不存在，已移除
 
-  // 新增: 載入所有專案列表 (用於上傳對話框的專案選擇)
+  // 修正: 載入所有專案列表
   if (projectStore.projects.length === 0) {
     try {
       await projectStore.fetchProjects()
@@ -741,16 +853,22 @@ onMounted(async () => {
     }
   }
 
-  // 如果有當前專案,載入站別列表
+  // 修正: 如果有 store 中有當前專案,自動選擇並載入站別列表
   if (projectStore.currentProject) {
     try {
+      selectedProjectId.value = projectStore.currentProject.id
       await projectStore.fetchProjectStations(projectStore.currentProject.id)
+
+      // 如果有 store 中有當前站別,自動選擇
+      if (projectStore.currentStation) {
+        selectedStationId.value = projectStore.currentStation.id
+      }
     } catch (error) {
       console.error('Failed to load stations:', error)
     }
   }
 
-  // 載入測試計劃
+  // 載入測試計劃(如果有選擇專案和站別)
   loadTestPlan()
 })
 </script>
@@ -774,6 +892,14 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   gap: 10px;
+}
+
+.filter-card {
+  margin-bottom: 20px;
+}
+
+.filter-card :deep(.el-card__body) {
+  padding: 15px 20px;
 }
 
 .table-footer {
