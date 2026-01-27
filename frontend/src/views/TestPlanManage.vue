@@ -269,6 +269,14 @@
       >
         <el-divider content-position="left">基本資訊</el-divider>
 
+        <!-- 新增: 測試計劃名稱欄位 -->
+        <el-form-item label="測試計劃名稱">
+          <el-input
+            v-model="editingItem.test_plan_name"
+            placeholder="請輸入測試計劃名稱(選填)"
+          />
+        </el-form-item>
+
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="測試項目名稱" prop="item_name">
@@ -493,7 +501,9 @@ const editingItem = reactive({
   command: '',
   timeout: null,
   use_result: '',
-  wait_msec: null
+  wait_msec: null,
+  // 新增: 測試計劃名稱欄位
+  test_plan_name: ''
 })
 
 const editFormRules = {
@@ -701,7 +711,9 @@ const handleAddItem = () => {
     command: '',
     timeout: null,
     use_result: '',
-    wait_msec: null
+    wait_msec: null,
+    // 新增: 重置測試計劃名稱
+    test_plan_name: ''
   })
   showEditDialog.value = true
 }
@@ -741,7 +753,9 @@ const handleSaveItem = async () => {
         command: editingItem.command,
         timeout: editingItem.timeout,
         use_result: editingItem.use_result,
-        wait_msec: editingItem.wait_msec
+        wait_msec: editingItem.wait_msec,
+        // 新增: 測試計劃名稱
+        test_plan_name: editingItem.test_plan_name
       }
 
       if (editingItem.id) {

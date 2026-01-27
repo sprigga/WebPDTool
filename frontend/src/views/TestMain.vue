@@ -3,25 +3,56 @@
     <!-- Top Info Bar -->
     <el-card class="info-card" shadow="never">
       <el-row :gutter="20" align="middle">
-        <el-col :span="5">
-          <div class="info-item">
-            <span class="info-label">專案:</span>
-            <span class="info-value">{{ currentProject?.project_code || '-' }}</span>
-          </div>
+        <!-- 原有程式碼: 只顯示專案和站別的資訊 -->
+        <!-- 修改: 增加專案和站別選擇器,允許使用者切換不同的專案和站別 -->
+        <el-col :span="6">
+          <el-form-item label="專案:" label-width="60px" style="margin-bottom: 0">
+            <el-select
+              v-model="selectedProjectId"
+              placeholder="選擇專案"
+              style="width: 160px"
+              filterable
+              clearable
+              size="small"
+              @change="handleProjectChange"
+            >
+              <el-option
+                v-for="project in projectStore.projects"
+                :key="project.id"
+                :label="`${project.project_code} - ${project.project_name}`"
+                :value="project.id"
+              />
+            </el-select>
+          </el-form-item>
         </el-col>
-        <el-col :span="5">
-          <div class="info-item">
-            <span class="info-label">站別:</span>
-            <span class="info-value">{{ currentStation?.station_code || '-' }}</span>
-          </div>
+        <el-col :span="6">
+          <el-form-item label="站別:" label-width="60px" style="margin-bottom: 0">
+            <el-select
+              v-model="selectedStationId"
+              placeholder="選擇站別"
+              style="width: 160px"
+              filterable
+              clearable
+              size="small"
+              :disabled="!selectedProjectId"
+              @change="handleStationChange"
+            >
+              <el-option
+                v-for="station in filteredStations"
+                :key="station.id"
+                :label="`${station.station_code} - ${station.station_name}`"
+                :value="station.id"
+              />
+            </el-select>
+          </el-form-item>
         </el-col>
-        <el-col :span="5">
+        <el-col :span="4">
           <div class="info-item">
             <span class="info-label">使用者:</span>
             <span class="info-value">{{ currentUser?.username || '-' }}</span>
           </div>
         </el-col>
-        <el-col :span="5">
+        <el-col :span="4">
           <div class="info-item">
             <span class="info-label">版本:</span>
             <span class="info-value">v1.0.0</span>
@@ -343,10 +374,26 @@ const router = useRouter()
 const authStore = useAuthStore()
 const projectStore = useProjectStore()
 
-// Current user and station
+// 原有程式碼: 使用 store 中的 currentProject 和 currentStation
+// 修改: 使用本地狀態管理選擇的專案和站別,允許動態切換
+const selectedProjectId = ref(null)
+const selectedStationId = ref(null)
+
 const currentUser = computed(() => authStore.user)
-const currentProject = computed(() => projectStore.currentProject)
-const currentStation = computed(() => projectStore.currentStation)
+const currentProject = computed(() => {
+  if (!selectedProjectId.value) return null
+  return projectStore.projects.find(p => p.id === selectedProjectId.value) || null
+})
+const currentStation = computed(() => {
+  if (!selectedStationId.value) return null
+  return filteredStations.value.find(s => s.id === selectedStationId.value) || null
+})
+
+// 根據選擇的專案過濾站別
+const filteredStations = computed(() => {
+  if (!selectedProjectId.value) return []
+  return projectStore.stations.filter(station => station.project_id === selectedProjectId.value)
+})
 
 // Configuration
 const sfcEnabled = ref(false)
@@ -1087,20 +1134,90 @@ const handleLogout = async () => {
   }
 }
 
-// Watchers
-// 當站別改變時，載入測試計劃名稱和測試項目
-watch(() => currentStation.value, async (newVal) => {
-  if (newVal) {
+// 新增: 處理專案變更
+const handleProjectChange = async () => {
+  // 清除站別選擇
+  selectedStationId.value = null
+  selectedTestPlanName.value = null
+  testPlanNames.value = []
+  testPlanItems.value = []
+
+  if (selectedProjectId.value) {
+    const project = projectStore.projects.find(p => p.id === selectedProjectId.value)
+    addStatusMessage(`已選擇專案: ${project?.project_code} - ${project?.project_name}`, 'info')
+
+    // 原有程式碼: 沒有載入該專案的站別列表
+    // 修改: 當選擇專案時，載入該專案的站別列表
+    try {
+      await projectStore.fetchProjectStations(selectedProjectId.value)
+    } catch (error) {
+      console.error('Failed to load stations:', error)
+      addStatusMessage('載入站別列表失敗: ' + error.message, 'error')
+    }
+  }
+
+  // 清除站別相關的 localStorage
+  if (currentStation.value) {
+    localStorage.removeItem(`lastTestPlanName_station_${currentStation.value.id}`)
+  }
+}
+
+// 新增: 處理站別變更
+const handleStationChange = async () => {
+  selectedTestPlanName.value = null
+  testPlanNames.value = []
+  testPlanItems.value = []
+
+  if (currentStation.value) {
+    addStatusMessage(`已選擇站別: ${currentStation.value.station_code} - ${currentStation.value.station_name}`, 'info')
     await loadTestPlanNames()
     await loadTestPlanItems()
   }
-})
+}
+
+// Watchers
+// 原有程式碼: 當站別改變時，載入測試計劃名稱和測試項目
+// 修改: 移除這個 watcher,因為我們改用 handleStationChange 手動處理
+// watch(() => currentStation.value, async (newVal) => {
+//   if (newVal) {
+//     await loadTestPlanNames()
+//     await loadTestPlanItems()
+//   }
+// })
 
 // Lifecycle
 onMounted(async () => {
   addStatusMessage('系統就緒', 'success')
 
-  // 載入當前站別的測試計劃名稱和測試項目
+  // 原有程式碼: 沒有載入專案列表
+  // 修改: 載入所有專案列表 (參考 TestPlanManage.vue:848-854)
+  if (projectStore.projects.length === 0) {
+    try {
+      await projectStore.fetchProjects()
+    } catch (error) {
+      console.error('Failed to load projects:', error)
+      addStatusMessage('載入專案列表失敗: ' + error.message, 'error')
+    }
+  }
+
+  // 原有程式碼: 使用 store 中的 currentProject 和 currentStation
+  // 修改: 初始化時,如果 store 中有選擇的專案和站別,則設為預設選擇
+  if (projectStore.currentProject) {
+    selectedProjectId.value = projectStore.currentProject.id
+    // 原有程式碼: 沒有載入該專案的站別列表
+    // 修改: 載入該專案的站別列表 (參考 TestPlanManage.vue:857-869)
+    try {
+      await projectStore.fetchProjectStations(projectStore.currentProject.id)
+    } catch (error) {
+      console.error('Failed to load stations:', error)
+      addStatusMessage('載入站別列表失敗: ' + error.message, 'error')
+    }
+  }
+  if (projectStore.currentStation && projectStore.currentStation.project_id === selectedProjectId.value) {
+    selectedStationId.value = projectStore.currentStation.id
+  }
+
+  // 如果有選擇站別,載入測試計劃名稱和測試項目
   if (currentStation.value) {
     await loadTestPlanNames()
     await loadTestPlanItems()
@@ -1153,6 +1270,10 @@ onUnmounted(() => {
 /* Config Card */
 .config-card {
   margin-bottom: 20px;
+}
+
+.config-card :deep(.el-form-item) {
+  margin-bottom: 0;
 }
 
 .loop-counter {
