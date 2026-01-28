@@ -43,9 +43,26 @@ if ! command -v uv &> /dev/null; then
     exit 1
 fi
 
+# 清除可能干擾的 VIRTUAL_ENV 環境變數
+# 確保使用 backend/.venv 而非根目錄的 .venv
+if [ ! -z "$VIRTUAL_ENV" ]; then
+    echo -e "${YELLOW}偵測到 VIRTUAL_ENV 環境變數: ${VIRTUAL_ENV}${NC}"
+    echo -e "${YELLOW}將使用 backend 專屬虛擬環境 (.venv)${NC}"
+    unset VIRTUAL_ENV
+fi
+
 # 安裝/更新依賴
 echo -e "${YELLOW}檢查並安裝依賴...${NC}"
 uv sync
+
+# 驗證虛擬環境位置
+VENV_PATH="./.venv"
+if [ ! -d "$VENV_PATH" ]; then
+    echo -e "${RED}錯誤: 虛擬環境未建立於 ${VENV_PATH}${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}使用虛擬環境: ${VENV_PATH}${NC}"
 
 # 檢查資料庫連線 (可選)
 echo -e "${YELLOW}準備啟動 FastAPI 開發伺服器...${NC}"
