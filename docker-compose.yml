@@ -50,7 +50,8 @@ services:
       # Security
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
       ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      # ACCESS_TOKEN_EXPIRE_MINUTES: 30  # 原本設定: 30 分鐘
+      ACCESS_TOKEN_EXPIRE_MINUTES: 480  # 修改為: 8 小時 (480 分鐘)
 
       # CORS
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:9080,http://localhost}
