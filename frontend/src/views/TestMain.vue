@@ -596,124 +596,179 @@ const handleTestPlanChange = () => {
 
 // 新增: 執行量測功能 (參考 PDTool4 oneCSV_atlas_2.py)
 // 整合 runAllTest 模式 - 遇到錯誤時記錄但繼續執行
+// 整合 Loop 測試模式 - 根據 loopCount 循環執行測試
 const executeMeasurements = async () => {
   // 原有程式碼: 測試完成後沒有計算經過時間
   // 修改: 記錄測試開始時間，用於計算經過時間
   const startTime = Date.now()
+
+  // 原有程式碼: 沒有實現 Loop 測試功能
+  // 修改: 根據 sfcConfig.loopEnabled 和 sfcConfig.loopCount 來執行循環測試
+  const loopEnabled = sfcConfig.loopEnabled
+  const totalLoops = loopEnabled ? sfcConfig.loopCount : 1
 
   try {
     addStatusMessage('開始執行測試項目...', 'info')
     if (runAllTests.value) {
       addStatusMessage('PDTool4 runAllTest 模式: 已啟用 - 將在錯誤時繼續執行', 'info')
     }
+    if (loopEnabled) {
+      addStatusMessage(`Loop 測試模式: 已啟用 - 將執行 ${totalLoops} 次循環`, 'info')
+    }
 
-    // Reset tracking variables
-    testResults.value = {}
-    usedInstruments.value = {}
-
+    // 原有程式碼: passCount, failCount, errorCount, errorItems 在循環內部定義
+    // 修改: 將這些變數移到循環外部,以便在循環結束後仍能存取
     let passCount = 0
     let failCount = 0
     let errorCount = 0
     const errorItems = [] // PDTool4 runAllTest: 收集錯誤項目
 
-    // Execute each test item sequentially (參考 oneCSV_atlas_2.py:131-191)
-    for (let index = 0; index < testPlanItems.value.length; index++) {
-      const item = testPlanItems.value[index]
-
-      // Update current item status
-      testStatus.value.current_item = index + 1
-
-      // 原有程式碼: 時間只在最後計算一次，測試過程中沒有更新
-      // 修改: 每次執行測項時更新經過時間（精確到毫秒），讓時間即時顯示
-      testStatus.value.elapsed_time_seconds = (Date.now() - startTime) / 1000
-
-      // Check if should stop
-      if (!testing.value) {
-        addStatusMessage('測試已中止', 'warning')
-        break
+    // 外層循環: 處理 Loop 測試
+    for (let currentLoop = 0; currentLoop < totalLoops; currentLoop++) {
+      // 如果是循環測試,顯示當前循環次數
+      if (loopEnabled) {
+        addStatusMessage(`========== Loop ${currentLoop + 1}/${totalLoops} ==========`, 'info')
+        loopCount.value = currentLoop + 1
       }
 
-      try {
-        // Execute single measurement
-        const result = await executeSingleItem(item, index)
+      // Reset tracking variables for each loop
+      testResults.value = {}
+      usedInstruments.value = {}
 
-        // Update item with result
-        item.status = result.result
-        item.measured_value = result.measured_value
+      // 原有程式碼: 每次循環都重新定義 passCount, failCount, errorCount, errorItems
+      // 修改: 每次循環重置這些變數的值,而不是重新定義
+      passCount = 0
+      failCount = 0
+      errorCount = 0
+      errorItems.length = 0 // 清空陣列
 
-        // 原有程式碼: errorCode 只在測試開始時清除,導致之前的錯誤訊息一直顯示
-        // 修改: 如果當前項目執行成功,且 errorCode 包含當前項目的錯誤,則清除 errorCode
-        // 這樣可以確保只有最新的錯誤會顯示,且成功的項目不會保留錯誤狀態
-        if (result.result === 'PASS') {
-          passCount++
-          // 清除當前項目的錯誤訊息 (如果存在)
-          if (errorCode.value && errorCode.value.includes(item.item_name)) {
-            errorCode.value = ''
+      // Reset test plan items status for each loop
+      testPlanItems.value.forEach(item => {
+        item.status = null
+        item.measured_value = null
+      })
+
+      // Execute each test item sequentially (參考 oneCSV_atlas_2.py:131-191)
+      for (let index = 0; index < testPlanItems.value.length; index++) {
+        const item = testPlanItems.value[index]
+
+        // Update current item status
+        testStatus.value.current_item = index + 1
+
+        // 原有程式碼: 時間只在最後計算一次，測試過程中沒有更新
+        // 修改: 每次執行測項時更新經過時間（精確到毫秒），讓時間即時顯示
+        testStatus.value.elapsed_time_seconds = (Date.now() - startTime) / 1000
+
+        // Check if should stop
+        if (!testing.value) {
+          addStatusMessage('測試已中止', 'warning')
+          break
+        }
+
+        try {
+          // Execute single measurement
+          const result = await executeSingleItem(item, index)
+
+          // Update item with result
+          item.status = result.result
+          item.measured_value = result.measured_value
+
+          // 原有程式碼: errorCode 只在測試開始時清除,導致之前的錯誤訊息一直顯示
+          // 修改: 如果當前項目執行成功,且 errorCode 包含當前項目的錯誤,則清除 errorCode
+          // 這樣可以確保只有最新的錯誤會顯示,且成功的項目不會保留錯誤狀態
+          if (result.result === 'PASS') {
+            passCount++
+            // 清除當前項目的錯誤訊息 (如果存在)
+            if (errorCode.value && errorCode.value.includes(item.item_name)) {
+              errorCode.value = ''
+            }
+          } else if (result.result === 'FAIL') {
+            failCount++
+
+            // PDTool4 runAllTest: 記錄失敗但繼續
+            if (!runAllTests.value) {
+              addStatusMessage(`測試失敗於項目 ${item.item_name}，停止執行`, 'error')
+              break
+            } else {
+              addStatusMessage(`[runAllTest] 項目 ${item.item_name} 失敗 - 繼續執行`, 'warning')
+            }
+          } else if (result.result === 'ERROR') {
+            errorCount++
+            errorItems.push({
+              item_no: item.item_no,
+              item_name: item.item_name,
+              error: result.error_message
+            })
+
+            // PDTool4 runAllTest: 記錄錯誤但繼續
+            if (!runAllTests.value) {
+              addStatusMessage(`測試錯誤於項目 ${item.item_name}，停止執行`, 'error')
+              break
+            } else {
+              addStatusMessage(`[runAllTest] 項目 ${item.item_name} 錯誤 - 繼續執行`, 'warning')
+            }
           }
-        } else if (result.result === 'FAIL') {
-          failCount++
 
-          // PDTool4 runAllTest: 記錄失敗但繼續
-          if (!runAllTests.value) {
-            addStatusMessage(`測試失敗於項目 ${item.item_name}，停止執行`, 'error')
-            break
-          } else {
-            addStatusMessage(`[runAllTest] 項目 ${item.item_name} 失敗 - 繼續執行`, 'warning')
+          // Update test status
+          testStatus.value.pass_items = passCount
+          testStatus.value.fail_items = failCount
+
+          // Store result for dependency usage (UseResult機制)
+          if (result.measured_value !== null) {
+            testResults.value[item.item_no] = String(result.measured_value)
           }
-        } else if (result.result === 'ERROR') {
+
+          addStatusMessage(`項目 ${item.item_no}: ${item.item_name} - ${result.result}`,
+                          result.result === 'PASS' ? 'success' : 'error')
+
+        } catch (error) {
+          console.error(`Failed to execute item ${item.item_no}:`, error)
+          item.status = 'ERROR'
+          item.measured_value = null
           errorCount++
           errorItems.push({
             item_no: item.item_no,
             item_name: item.item_name,
-            error: result.error_message
+            error: error.message
           })
 
-          // PDTool4 runAllTest: 記錄錯誤但繼續
+          testStatus.value.fail_items = failCount + errorCount
+
+          addStatusMessage(`項目 ${item.item_no} 執行錯誤: ${error.message}`, 'error')
+
+          // 原有程式碼: errorCode 直接被覆蓋,導致只顯示最後一個錯誤
+          // 修改: 使用格式化的錯誤訊息,包含項目名稱,方便識別錯誤來源
+          errorCode.value = `[${item.item_no}] ${item.item_name}: ${error.message}`
+
+          // PDTool4 runAllTest: 遇到異常也繼續
           if (!runAllTests.value) {
-            addStatusMessage(`測試錯誤於項目 ${item.item_name}，停止執行`, 'error')
             break
           } else {
-            addStatusMessage(`[runAllTest] 項目 ${item.item_name} 錯誤 - 繼續執行`, 'warning')
+            addStatusMessage(`[runAllTest] 項目 ${item.item_no} 異常 - 繼續執行`, 'warning')
           }
         }
+      }
 
-        // Update test status
-        testStatus.value.pass_items = passCount
-        testStatus.value.fail_items = failCount
+      // 如果測試被中止,跳出循環
+      if (!testing.value) {
+        break
+      }
 
-        // Store result for dependency usage (UseResult機制)
-        if (result.measured_value !== null) {
-          testResults.value[item.item_no] = String(result.measured_value)
-        }
+      // 如果不是循環模式,完成一次後就跳出
+      if (!loopEnabled) {
+        break
+      }
 
-        addStatusMessage(`項目 ${item.item_no}: ${item.item_name} - ${result.result}`,
-                        result.result === 'PASS' ? 'success' : 'error')
+      // PDTool4 runAllTest: 顯示當前循環的錯誤摘要
+      if (runAllTests.value && errorItems.length > 0) {
+        addStatusMessage(`[Loop ${currentLoop + 1}] 完成，但有 ${errorItems.length} 個錯誤項目`, 'warning')
+      }
 
-      } catch (error) {
-        console.error(`Failed to execute item ${item.item_no}:`, error)
-        item.status = 'ERROR'
-        item.measured_value = null
-        errorCount++
-        errorItems.push({
-          item_no: item.item_no,
-          item_name: item.item_name,
-          error: error.message
-        })
-
-        testStatus.value.fail_items = failCount + errorCount
-
-        addStatusMessage(`項目 ${item.item_no} 執行錯誤: ${error.message}`, 'error')
-
-        // 原有程式碼: errorCode 直接被覆蓋,導致只顯示最後一個錯誤
-        // 修改: 使用格式化的錯誤訊息,包含項目名稱,方便識別錯誤來源
-        errorCode.value = `[${item.item_no}] ${item.item_name}: ${error.message}`
-
-        // PDTool4 runAllTest: 遇到異常也繼續
-        if (!runAllTests.value) {
-          break
-        } else {
-          addStatusMessage(`[runAllTest] 項目 ${item.item_no} 異常 - 繼續執行`, 'warning')
-        }
+      // 循環測試模式: 在每次循環結束後顯示結果
+      if (currentLoop < totalLoops - 1) {
+        addStatusMessage(`Loop ${currentLoop + 1} 完成，準備進行下一次循環...`, 'info')
+        // 可選: 在循環之間添加延遲
+        // await new Promise(resolve => setTimeout(resolve, 1000))
       }
     }
 
@@ -721,12 +776,16 @@ const executeMeasurements = async () => {
     await cleanupInstruments()
 
     // Update final status - 檢查是否有任何 ERROR 或 FAIL 狀態的項目
+    // 注意: 這裡檢查的是最後一次循環的結果
     const hasError = testPlanItems.value.some(item => item.status === 'ERROR')
     const hasFail = testPlanItems.value.some(item => item.status === 'FAIL')
 
-    // PDTool4 runAllTest: 顯示錯誤摘要
+    // 原有程式碼: PDTool4 runAllTest: 顯示錯誤摘要 (只在非循環模式下顯示)
+    // 修改: 支援循環測試模式,顯示最終一次循環的錯誤摘要
+    // 注意: errorItems 現在定義在循環外部,包含最後一次循環的錯誤
     if (runAllTests.value && errorItems.length > 0) {
-      addStatusMessage(`[runAllTest] 完成，但有 ${errorItems.length} 個錯誤項目:`, 'warning')
+      const loopInfo = loopEnabled ? ` (最後一次循環)` : ''
+      addStatusMessage(`測試完成${loopInfo}，有 ${errorItems.length} 個錯誤項目:`, 'warning')
       errorItems.slice(0, 5).forEach(err => {
         addStatusMessage(`  - ${err.item_no}: ${err.item_name}: ${err.error}`, 'warning')
       })
@@ -750,8 +809,12 @@ const executeMeasurements = async () => {
     }
     testCompleted.value = true
 
+    // 原有程式碼: 只顯示一次測試的結果
+    // 修改: 支援循環測試模式,顯示循環次數
+    // 注意: passCount, failCount, errorCount 現在定義在循環外部,包含最後一次循環的統計
+    const loopText = loopEnabled ? ` (共 ${totalLoops} 次循環)` : ''
     addStatusMessage(
-      `測試完成: ${finalResult.value} (通過: ${passCount}, 失敗: ${failCount}, 錯誤: ${errorCount})`,
+      `測試完成: ${finalResult.value}${loopText} (通過: ${passCount}, 失敗: ${failCount}, 錯誤: ${errorCount})`,
       finalResult.value === 'PASS' ? 'success' : 'error'
     )
 
@@ -971,6 +1034,10 @@ const handleStartTest = async () => {
   testCompleted.value = false
   errorCode.value = ''
 
+  // 原有程式碼: 沒有重置 loopCount
+  // 修改: 重置 loopCount 為 0，表示準備開始新的循環測試
+  loopCount.value = 0
+
   // Reset test plan items status
   testPlanItems.value.forEach(item => {
     item.status = null
@@ -994,7 +1061,7 @@ const handleStartTest = async () => {
     // 不使用 startTestExecution API，而是直接在前端執行量測邏輯
     testStatus.value.status = 'RUNNING'
 
-    // Execute measurements sequentially
+    // Execute measurements sequentially (包含 Loop 測試邏輯)
     await executeMeasurements()
 
     // Note: executeMeasurements 會在完成時自動設定 finalResult 和 testCompleted

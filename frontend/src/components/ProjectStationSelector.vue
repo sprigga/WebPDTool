@@ -65,6 +65,9 @@ onMounted(async () => {
 
       if (projectStore.currentStation) {
         selectedStationId.value = projectStore.currentStation.id
+        // 修正: 當從localStorage載入已儲存的站別時,主動發出事件通知父元件
+        // 這樣可以避免"進入系統"按鈕因為stationSelected為false而保持disabled狀態
+        emit('station-selected', projectStore.currentStation)
       }
     }
   } catch (error) {
