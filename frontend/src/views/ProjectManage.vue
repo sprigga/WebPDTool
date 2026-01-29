@@ -28,7 +28,11 @@
           </template>
 
           <!-- Projects Table -->
+          <div v-if="projectStore.projects.length === 0 && !loading.projects" class="empty-state">
+            <el-empty description="尚無專案資料，點擊「新增專案」開始建立" />
+          </div>
           <el-table
+            v-else
             v-loading="loading.projects"
             :data="projectStore.projects"
             stripe
@@ -108,6 +112,9 @@
           <!-- Stations table placeholder -->
           <div v-if="!hasSelectedProject" class="empty-state">
             <el-empty description="請先在左側選擇一個專案" />
+          </div>
+          <div v-else-if="projectStore.stations.length === 0 && !loading.stations" class="empty-state">
+            <el-empty description="尚無站別資料，點擊「新增站別」為此專案建立站別" />
           </div>
           <div v-else>
             <!-- Stations Table -->
@@ -664,5 +671,35 @@ onMounted(async () => {
 :deep(.el-card__body) {
   flex: 1;
   overflow: auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .left-panel {
+    min-width: 350px;
+  }
+}
+
+@media (max-width: 768px) {
+  .content-row {
+    flex-direction: column;
+  }
+
+  .left-panel,
+  .right-panel {
+    width: 100% !important;
+    max-width: 100%;
+    margin-bottom: 20px;
+  }
+}
+
+/* Improve table action column spacing */
+:deep(.el-table .el-button + .el-button) {
+  margin-left: 4px;
+}
+
+/* Highlight selected project row */
+:deep(.el-table__row.current-row) {
+  background-color: #ecf5ff;
 }
 </style>
