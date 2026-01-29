@@ -41,6 +41,12 @@ const routes = [
     name: 'Config',
     component: () => import('@/views/SystemConfig.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/projects',
+    name: 'ProjectManage',
+    component: () => import('@/views/ProjectManage.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 
