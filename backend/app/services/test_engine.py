@@ -17,6 +17,7 @@ from app.models.station import Station
 from app.measurements.base import BaseMeasurement, MeasurementResult
 from app.measurements.implementations import get_measurement_class
 from app.services.instrument_manager import instrument_manager
+from app.services.report_service import report_service
 
 logger = logging.getLogger(__name__)
 
@@ -411,12 +412,23 @@ class TestEngine:
             session.test_duration_seconds = duration_seconds
             
             db.commit()
-            
+
             self.logger.info(
                 f"Test session {session_id} finalized: {final_result} "
                 f"({pass_items}/{total_items} passed)"
             )
-            
+
+            # Automatically generate and save CSV report
+            try:
+                report_path = report_service.save_session_report(session_id, db)
+                if report_path:
+                    self.logger.info(f"Test report saved: {report_path}")
+                else:
+                    self.logger.warning(f"Failed to save test report for session {session_id}")
+            except Exception as report_error:
+                # Don't fail the test session if report generation fails
+                self.logger.error(f"Error generating test report: {report_error}", exc_info=True)
+
         except Exception as e:
             self.logger.error(f"Error finalizing test session: {e}", exc_info=True)
             db.rollback()
