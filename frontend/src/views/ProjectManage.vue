@@ -201,6 +201,65 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- Station Create/Edit Dialog -->
+    <el-dialog
+      v-model="showStationDialog"
+      :title="editingStation.id ? '編輯站別' : '新增站別'"
+      width="600px"
+    >
+      <el-form
+        ref="stationFormRef"
+        :model="editingStation"
+        :rules="stationFormRules"
+        label-width="100px"
+      >
+        <el-form-item label="站別代碼" prop="station_code">
+          <el-input
+            v-model="editingStation.station_code"
+            placeholder="請輸入站別代碼"
+            :disabled="!!editingStation.id"
+          />
+        </el-form-item>
+
+        <el-form-item label="站別名稱" prop="station_name">
+          <el-input
+            v-model="editingStation.station_name"
+            placeholder="請輸入站別名稱"
+          />
+        </el-form-item>
+
+        <el-form-item label="描述">
+          <el-input
+            v-model="editingStation.description"
+            type="textarea"
+            :rows="3"
+            placeholder="請輸入站別描述(選填)"
+            maxlength="500"
+            show-word-limit
+          />
+        </el-form-item>
+
+        <el-form-item label="狀態">
+          <el-switch
+            v-model="editingStation.enabled"
+            active-text="啟用"
+            inactive-text="停用"
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showStationDialog = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="savingStation"
+          @click="handleSaveStation"
+        >
+          儲存
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -210,7 +269,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
-import { createProject, updateProject, deleteProject } from '@/api/projects'
+import { createProject, updateProject, deleteProject, createStation, updateStation, deleteStation } from '@/api/projects'
 
 const projectStore = useProjectStore()
 const authStore = useAuthStore()
@@ -252,6 +311,37 @@ const projectFormRules = {
   ]
 }
 
+// Station dialog state
+const showStationDialog = ref(false)
+const savingStation = ref(false)
+const stationFormRef = ref(null)
+
+// Station form data
+const editingStation = reactive({
+  id: null,
+  station_code: '',
+  station_name: '',
+  description: '',
+  enabled: true,
+  project_id: null
+})
+
+// Station form rules
+const stationFormRules = {
+  station_code: [
+    { required: true, message: '請輸入站別代碼', trigger: 'blur' },
+    {
+      pattern: /^[a-zA-Z0-9_-]+$/,
+      message: '只能包含字母、數字、底線和破折號',
+      trigger: 'blur'
+    }
+  ],
+  station_name: [
+    { required: true, message: '請輸入站別名稱', trigger: 'blur' },
+    { min: 2, message: '站別名稱至少需要2個字元', trigger: 'blur' }
+  ]
+}
+
 // Computed
 const isAdmin = computed(() => authStore.user?.role === 'admin')
 const canEdit = computed(() => isAdmin.value)
@@ -273,7 +363,20 @@ const handleAddProject = () => {
 }
 
 const handleAddStation = () => {
-  console.log('Add station')
+  if (!selectedProjectId.value) {
+    ElMessage.warning('請先選擇專案')
+    return
+  }
+
+  Object.assign(editingStation, {
+    id: null,
+    station_code: '',
+    station_name: '',
+    description: '',
+    enabled: true,
+    project_id: selectedProjectId.value
+  })
+  showStationDialog.value = true
 }
 
 const handleProjectSelect = (currentRow) => {
@@ -347,11 +450,50 @@ const loadStations = async () => {
 }
 
 const handleEditStation = (row) => {
-  console.log('Edit station:', row)
+  Object.assign(editingStation, { ...row })
+  showStationDialog.value = true
 }
 
 const handleDeleteStation = async (row) => {
   console.log('Delete station:', row)
+}
+
+const handleSaveStation = async () => {
+  if (!stationFormRef.value) return
+
+  await stationFormRef.value.validate(async (valid) => {
+    if (!valid) return
+
+    savingStation.value = true
+    try {
+      const stationData = {
+        station_code: editingStation.station_code,
+        station_name: editingStation.station_name,
+        description: editingStation.description || null,
+        enabled: editingStation.enabled,
+        project_id: editingStation.project_id
+      }
+
+      if (editingStation.id) {
+        // Update existing station
+        await updateStation(editingStation.id, stationData)
+        ElMessage.success('站別更新成功')
+      } else {
+        // Create new station
+        await createStation(stationData)
+        ElMessage.success('站別建立成功')
+      }
+
+      showStationDialog.value = false
+      await loadStations()
+    } catch (error) {
+      console.error('Save station failed:', error)
+      const message = error.response?.data?.detail || '操作失敗'
+      ElMessage.error(message)
+    } finally {
+      savingStation.value = false
+    }
+  })
 }
 
 onMounted(async () => {
