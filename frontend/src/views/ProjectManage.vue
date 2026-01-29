@@ -142,15 +142,75 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- Project Create/Edit Dialog -->
+    <el-dialog
+      v-model="showProjectDialog"
+      :title="editingProject.id ? '編輯專案' : '新增專案'"
+      width="600px"
+    >
+      <el-form
+        ref="projectFormRef"
+        :model="editingProject"
+        :rules="projectFormRules"
+        label-width="100px"
+      >
+        <el-form-item label="專案代碼" prop="project_code">
+          <el-input
+            v-model="editingProject.project_code"
+            placeholder="請輸入專案代碼"
+            :disabled="!!editingProject.id"
+          />
+        </el-form-item>
+
+        <el-form-item label="專案名稱" prop="project_name">
+          <el-input
+            v-model="editingProject.project_name"
+            placeholder="請輸入專案名稱"
+          />
+        </el-form-item>
+
+        <el-form-item label="描述">
+          <el-input
+            v-model="editingProject.description"
+            type="textarea"
+            :rows="3"
+            placeholder="請輸入專案描述(選填)"
+            maxlength="500"
+            show-word-limit
+          />
+        </el-form-item>
+
+        <el-form-item label="狀態">
+          <el-switch
+            v-model="editingProject.enabled"
+            active-text="啟用"
+            inactive-text="停用"
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showProjectDialog = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="savingProject"
+          @click="handleSaveProject"
+        >
+          儲存
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
+import { createProject, updateProject, deleteProject } from '@/api/projects'
 
 const projectStore = useProjectStore()
 const authStore = useAuthStore()
@@ -162,6 +222,36 @@ const loading = reactive({
   stations: false
 })
 
+// Dialog state
+const showProjectDialog = ref(false)
+const savingProject = ref(false)
+const projectFormRef = ref(null)
+
+// Form data
+const editingProject = reactive({
+  id: null,
+  project_code: '',
+  project_name: '',
+  description: '',
+  enabled: true
+})
+
+// Form rules
+const projectFormRules = {
+  project_code: [
+    { required: true, message: '請輸入專案代碼', trigger: 'blur' },
+    {
+      pattern: /^[a-zA-Z0-9_-]+$/,
+      message: '只能包含字母、數字、底線和破折號',
+      trigger: 'blur'
+    }
+  ],
+  project_name: [
+    { required: true, message: '請輸入專案名稱', trigger: 'blur' },
+    { min: 2, message: '專案名稱至少需要2個字元', trigger: 'blur' }
+  ]
+}
+
 // Computed
 const isAdmin = computed(() => authStore.user?.role === 'admin')
 const canEdit = computed(() => isAdmin.value)
@@ -170,9 +260,16 @@ const selectedProject = computed(() =>
 )
 const hasSelectedProject = computed(() => !!selectedProjectId.value)
 
-// Handlers (placeholders)
+// Handlers
 const handleAddProject = () => {
-  console.log('Add project')
+  Object.assign(editingProject, {
+    id: null,
+    project_code: '',
+    project_name: '',
+    description: '',
+    enabled: true
+  })
+  showProjectDialog.value = true
 }
 
 const handleAddStation = () => {
@@ -188,11 +285,51 @@ const handleProjectSelect = (currentRow) => {
 }
 
 const handleEditProject = (row) => {
-  console.log('Edit project:', row)
+  Object.assign(editingProject, { ...row })
+  showProjectDialog.value = true
 }
 
 const handleDeleteProject = async (row) => {
   console.log('Delete project:', row)
+}
+
+const handleSaveProject = async () => {
+  if (!projectFormRef.value) return
+
+  await projectFormRef.value.validate(async (valid) => {
+    if (!valid) return
+
+    savingProject.value = true
+    try {
+      const projectData = {
+        project_code: editingProject.project_code,
+        project_name: editingProject.project_name,
+        description: editingProject.description || null,
+        enabled: editingProject.enabled
+      }
+
+      if (editingProject.id) {
+        // Update existing project
+        await updateProject(editingProject.id, projectData)
+        ElMessage.success('專案更新成功')
+      } else {
+        // Create new project
+        await createProject(projectData)
+        ElMessage.success('專案建立成功')
+      }
+
+      showProjectDialog.value = false
+      loading.projects = true
+      await projectStore.fetchProjects()
+      loading.projects = false
+    } catch (error) {
+      console.error('Save project failed:', error)
+      const message = error.response?.data?.detail || '操作失敗'
+      ElMessage.error(message)
+    } finally {
+      savingProject.value = false
+    }
+  })
 }
 
 const loadStations = async () => {
