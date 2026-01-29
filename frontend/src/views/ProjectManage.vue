@@ -57,7 +57,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
@@ -66,10 +66,14 @@ const projectStore = useProjectStore()
 const authStore = useAuthStore()
 
 // State
-const selectedProjectId = ref(null)
+const selectedProjectId = ref(parseInt(localStorage.getItem('selectedProjectId')) || null)
+const loading = reactive({
+  projects: false,
+  stations: false
+})
 
 // Computed
-const isAdmin = computed(() => authStore.currentUser?.role === 'admin')
+const isAdmin = computed(() => authStore.user?.role === 'admin')
 const canEdit = computed(() => isAdmin.value)
 const selectedProject = computed(() =>
   projectStore.projects.find(p => p.id === selectedProjectId.value)
@@ -84,6 +88,25 @@ const handleAddProject = () => {
 const handleAddStation = () => {
   console.log('Add station')
 }
+
+onMounted(async () => {
+  loading.projects = true
+  try {
+    await projectStore.fetchProjects()
+
+    // Auto-select from localStorage or first project
+    if (selectedProjectId.value) {
+      // Will load stations in later tasks
+    } else if (projectStore.projects.length > 0) {
+      selectedProjectId.value = projectStore.projects[0].id
+      localStorage.setItem('selectedProjectId', selectedProjectId.value)
+    }
+  } catch (error) {
+    console.error('Failed to load projects:', error)
+  } finally {
+    loading.projects = false
+  }
+})
 </script>
 
 <style scoped>
