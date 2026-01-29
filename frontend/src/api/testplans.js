@@ -116,3 +116,47 @@ export const reorderTestPlanItems = (itemOrders) => {
     item_orders: itemOrders
   })
 }
+
+/**
+ * Get TestPlanMap for a station (包含測試點狀態資訊)
+ * 對應 PDTool4 test_point_map.py: new_test_point_map()
+ *
+ * @param {number} stationId - Station ID
+ * @param {number} projectId - Project ID
+ * @param {boolean} enabledOnly - Return only enabled test items (default: true)
+ * @param {string} testPlanName - Optional test plan name to filter by
+ * @returns {Promise} TestPlanMap with test point status information
+ *
+ * Response format:
+ * {
+ *   station_id: number,
+ *   project_id: number,
+ *   test_plan_name: string | null,
+ *   total_test_points: number,
+ *   test_points: [
+ *     {
+ *       unique_id: string,      // 測試點唯一識別碼
+ *       name: string,           // 測試點名稱
+ *       item_key: string,       // 項目鍵值
+ *       executed: boolean,      // 是否已執行
+ *       passed: boolean | null, // 通過狀態
+ *       value: any,             // 測量值
+ *       limit_type: string,     // 限制類型 (LOWER_LIMIT_TYPE, UPPER_LIMIT_TYPE, etc.)
+ *       value_type: string,     // 數值類型 (STRING_VALUE_TYPE, FLOAT_VALUE_TYPE, etc.)
+ *       lower_limit: number,    // 下限
+ *       upper_limit: number,    // 上限
+ *       unit: string            // 單位
+ *     }
+ *   ]
+ * }
+ */
+export const getStationTestPlanMap = (stationId, projectId, enabledOnly = true, testPlanName = null) => {
+  const params = {
+    enabled_only: enabledOnly,
+    project_id: projectId
+  }
+  if (testPlanName) {
+    params.test_plan_name = testPlanName
+  }
+  return apiClient.get(`/api/stations/${stationId}/testplan-map`, { params })
+}

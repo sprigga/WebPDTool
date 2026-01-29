@@ -144,33 +144,58 @@
             :row-class-name="getRowClassName"
           >
             <el-table-column prop="item_no" label="序號" width="70" align="center" />
-            <el-table-column prop="item_name" label="測試項目" min-width="180" />
-            <el-table-column prop="execute_name" label="測試指令" width="140" />
-            <el-table-column label="下限" width="100" align="right">
+            <el-table-column prop="item_name" label="測試項目" min-width="150" />
+            <el-table-column prop="execute_name" label="測試指令" width="120" />
+            <el-table-column label="下限" width="90" align="right">
               <template #default="{ row }">
                 {{ formatNumber(row.lower_limit) }}
               </template>
             </el-table-column>
-            <el-table-column label="上限" width="100" align="right">
+            <el-table-column label="上限" width="90" align="right">
               <template #default="{ row }">
                 {{ formatNumber(row.upper_limit) }}
               </template>
             </el-table-column>
-            <el-table-column prop="unit" label="單位" width="80" align="center" />
-            <el-table-column label="狀態" width="100" align="center">
+            <el-table-column prop="unit" label="單位" width="70" align="center" />
+
+            <!-- 新增: 執行狀態欄位 -->
+            <el-table-column label="執行" width="60" align="center">
               <template #default="{ row }">
-                <el-tag v-if="row.status" :type="getStatusTagType(row.status)" size="small">
-                  {{ row.status }}
-                </el-tag>
-                <span v-else>-</span>
+                <el-icon v-if="row.executed" color="#67C23A" :size="18">
+                  <CircleCheck />
+                </el-icon>
+                <el-icon v-else color="#DCDFE6" :size="18">
+                  <CircleClose />
+                </el-icon>
               </template>
             </el-table-column>
-            <el-table-column label="測量值" width="120" align="right">
+
+            <!-- 修改: 測試結果欄位（使用 passed 狀態） -->
+            <el-table-column label="結果" width="80" align="center">
               <template #default="{ row }">
-                <span v-if="row.measured_value !== null" :class="getValueClass(row)">
+                <el-tag v-if="row.passed === true" type="success" size="small">PASS</el-tag>
+                <el-tag v-else-if="row.passed === false" type="danger" size="small">FAIL</el-tag>
+                <el-tag v-else-if="row.status" :type="getStatusTagType(row.status)" size="small">
+                  {{ row.status }}
+                </el-tag>
+                <span v-else class="text-muted">-</span>
+              </template>
+            </el-table-column>
+
+            <!-- 修改: 測量值欄位（顯示 value，並根據 passed 狀態標色） -->
+            <el-table-column label="測量值" width="110" align="right">
+              <template #default="{ row }">
+                <span
+                  v-if="row.value !== null && row.value !== undefined"
+                  :class="getTestPointValueClass(row)"
+                  :style="getTestPointValueStyle(row)"
+                >
+                  {{ formatNumber(row.value) }}
+                </span>
+                <span v-else-if="row.measured_value !== null" :class="getValueClass(row)">
                   {{ formatNumber(row.measured_value) }}
                 </span>
-                <span v-else>-</span>
+                <span v-else class="text-muted">-</span>
               </template>
             </el-table-column>
           </el-table>
@@ -368,7 +393,7 @@ import {
   executeSingleMeasurement,
   resetInstrument
 } from '@/api/tests'
-import { getStationTestPlan, getStationTestPlanNames } from '@/api/testplans'
+import { getStationTestPlan, getStationTestPlanNames, getStationTestPlanMap } from '@/api/testplans'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -420,6 +445,10 @@ const sfcConfig = reactive({
 const testPlanNames = ref([])
 const selectedTestPlanName = ref(null)
 const testPlanItems = ref([])
+
+// 新增: 測試點映射表（TestPointMap）- 對應 PDTool4 test_point_map.py
+const testPointMap = ref(null) // TestPlanMap 完整資料
+const testPointsById = ref({})  // 快速查找用：{ unique_id: testPoint }
 
 // Test control
 const barcode = ref('')
@@ -504,9 +533,18 @@ const getStatusTagType = (status) => {
 }
 
 const getRowClassName = ({ row }) => {
+  // 優先使用測試點狀態（passed）
+  if (row.passed === true) return 'row-pass'
+  if (row.passed === false) return 'row-fail'
+
+  // 回退到原有 status 欄位
   if (row.status === 'PASS') return 'row-pass'
   if (row.status === 'FAIL') return 'row-fail'
   if (row.status === 'ERROR') return 'row-error'
+
+  // 執行中的項目（executed 但尚未完成）
+  if (row.executed && row.passed === null) return 'row-executing'
+
   return ''
 }
 
@@ -514,6 +552,24 @@ const getValueClass = (row) => {
   if (row.status === 'PASS') return 'value-pass'
   if (row.status === 'FAIL') return 'value-fail'
   return ''
+}
+
+// 新增: 測試點測量值樣式（基於 passed 狀態）
+const getTestPointValueClass = (row) => {
+  if (row.passed === true) return 'test-point-value-pass'
+  if (row.passed === false) return 'test-point-value-fail'
+  return ''
+}
+
+// 新增: 測試點測量值內聯樣式
+const getTestPointValueStyle = (row) => {
+  if (row.passed === true) {
+    return { color: '#67C23A', fontWeight: '600' }
+  }
+  if (row.passed === false) {
+    return { color: '#F56C6C', fontWeight: '600' }
+  }
+  return {}
 }
 
 const addStatusMessage = (text, type = 'info') => {
@@ -549,6 +605,41 @@ const loadTestPlanNames = async () => {
   }
 }
 
+// 新增: 載入 TestPlanMap（包含測試點狀態資訊）
+const loadTestPlanMap = async () => {
+  if (!currentStation.value || !currentProject.value) {
+    addStatusMessage('請先選擇專案和站別', 'warning')
+    return
+  }
+
+  try {
+    addStatusMessage('載入測試點映射表...', 'info')
+    const response = await getStationTestPlanMap(
+      currentStation.value.id,
+      currentProject.value.id,
+      true,
+      selectedTestPlanName.value
+    )
+
+    testPointMap.value = response
+
+    // 建立快速查找索引
+    testPointsById.value = {}
+    response.test_points.forEach(tp => {
+      testPointsById.value[tp.unique_id] = tp
+    })
+
+    if (selectedTestPlanName.value) {
+      addStatusMessage(`已載入測試點映射表「${selectedTestPlanName.value}」: ${response.total_test_points} 個測試點`, 'success')
+    } else {
+      addStatusMessage(`已載入 ${response.total_test_points} 個測試點`, 'success')
+    }
+  } catch (error) {
+    console.error('Failed to load test plan map:', error)
+    addStatusMessage('載入測試點映射表失敗: ' + error.message, 'error')
+  }
+}
+
 // 直接載入當前站別的測試項目
 const loadTestPlanItems = async () => {
   if (!currentStation.value) {
@@ -561,11 +652,24 @@ const loadTestPlanItems = async () => {
     // 原有程式碼缺少 project_id 參數,導致後端 API 報錯,需傳遞 currentProject.value.id
     // 新增: 傳遞選擇的測試計劃名稱
     const items = await getStationTestPlan(currentStation.value.id, currentProject.value.id, true, selectedTestPlanName.value)
-    testPlanItems.value = items.map(item => ({
-      ...item,
-      status: null,
-      measured_value: null
-    }))
+
+    // 新增: 合併測試點狀態資訊到測試計劃項目
+    testPlanItems.value = items.map(item => {
+      const testPoint = testPointsById.value[item.item_name]
+      return {
+        ...item,
+        // 原有欄位
+        status: null,
+        measured_value: null,
+        // 新增: 測試點狀態欄位
+        unique_id: item.item_name,
+        executed: testPoint?.executed || false,
+        passed: testPoint?.passed || null,
+        value: testPoint?.value || null,
+        limit_type: testPoint?.limit_type || null,
+        value_type: testPoint?.value_type || null
+      }
+    })
     testStatus.value.total_items = items.length
 
     if (selectedTestPlanName.value) {
@@ -581,7 +685,7 @@ const loadTestPlanItems = async () => {
 }
 
 // 新增: 當測試計劃改變時，保存選擇並重新載入
-const handleTestPlanChange = () => {
+const handleTestPlanChange = async () => {
   if (selectedTestPlanName.value && currentStation.value) {
     // 保存到 localStorage
     localStorage.setItem(`lastTestPlanName_station_${currentStation.value.id}`, selectedTestPlanName.value)
@@ -591,7 +695,10 @@ const handleTestPlanChange = () => {
     localStorage.removeItem(`lastTestPlanName_station_${currentStation.value.id}`)
     addStatusMessage('已清除測試計劃選擇', 'info')
   }
-  loadTestPlanItems()
+
+  // 先載入 TestPlanMap，再載入測試計劃項目
+  await loadTestPlanMap()
+  await loadTestPlanItems()
 }
 
 // 新增: 執行量測功能 (參考 PDTool4 oneCSV_atlas_2.py)
@@ -672,6 +779,17 @@ const executeMeasurements = async () => {
           // Update item with result
           item.status = result.result
           item.measured_value = result.measured_value
+
+          // 新增: 更新測試點狀態（對應 PDTool4 TestPoint.execute()）
+          item.executed = true
+          item.value = result.measured_value
+          if (result.result === 'PASS') {
+            item.passed = true
+          } else if (result.result === 'FAIL') {
+            item.passed = false
+          } else {
+            item.passed = null // ERROR 狀態視為未通過但不標記為失敗
+          }
 
           // 原有程式碼: errorCode 只在測試開始時清除,導致之前的錯誤訊息一直顯示
           // 修改: 如果當前項目執行成功,且 errorCode 包含當前項目的錯誤,則清除 errorCode
@@ -1234,10 +1352,15 @@ const handleStationChange = async () => {
   selectedTestPlanName.value = null
   testPlanNames.value = []
   testPlanItems.value = []
+  // 新增: 清除測試點映射表
+  testPointMap.value = null
+  testPointsById.value = {}
 
   if (currentStation.value) {
     addStatusMessage(`已選擇站別: ${currentStation.value.station_code} - ${currentStation.value.station_name}`, 'info')
     await loadTestPlanNames()
+    // 新增: 先載入 TestPlanMap，再載入測試計劃項目
+    await loadTestPlanMap()
     await loadTestPlanItems()
   }
 }
@@ -1284,9 +1407,10 @@ onMounted(async () => {
     selectedStationId.value = projectStore.currentStation.id
   }
 
-  // 如果有選擇站別,載入測試計劃名稱和測試項目
+  // 如果有選擇站別,載入測試計劃名稱、測試點映射表和測試項目
   if (currentStation.value) {
     await loadTestPlanNames()
+    await loadTestPlanMap()
     await loadTestPlanItems()
   }
 
@@ -1403,6 +1527,27 @@ onUnmounted(() => {
 
 .test-plan-card :deep(.row-error) {
   background-color: #fdf6ec;
+}
+
+/* 新增: 執行中的行背景色 */
+.test-plan-card :deep(.row-executing) {
+  background-color: #fffbf0;
+}
+
+/* 新增: 測試點測量值樣式 */
+.test-point-value-pass {
+  color: #67C23A;
+  font-weight: 600;
+}
+
+.test-point-value-fail {
+  color: #F56C6C;
+  font-weight: 600;
+}
+
+/* 新增: 淡化未執行的值 */
+.text-muted {
+  color: #C0C4CC;
 }
 
 .value-pass {
