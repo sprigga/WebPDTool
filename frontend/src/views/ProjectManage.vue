@@ -393,7 +393,46 @@ const handleEditProject = (row) => {
 }
 
 const handleDeleteProject = async (row) => {
-  console.log('Delete project:', row)
+  try {
+    await ElMessageBox.confirm(
+      `確定要刪除專案 "${row.project_name}" 嗎？這將同時刪除所有關聯的站別和測試計劃資料。`,
+      '確認刪除',
+      {
+        confirmButtonText: '確定',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+
+    loading.projects = true
+    await deleteProject(row.id)
+    ElMessage.success('專案刪除成功')
+
+    // If deleted project was selected, clear selection
+    if (selectedProjectId.value === row.id) {
+      selectedProjectId.value = null
+      localStorage.removeItem('selectedProjectId')
+      projectStore.stations = []
+    }
+
+    await projectStore.fetchProjects()
+
+    // Auto-select first project if available
+    if (projectStore.projects.length > 0 && !selectedProjectId.value) {
+      selectedProjectId.value = projectStore.projects[0].id
+      localStorage.setItem('selectedProjectId', selectedProjectId.value)
+      await loadStations()
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Delete project failed:', error)
+      const message = error.response?.data?.detail || '刪除失敗'
+      ElMessage.error(message)
+    }
+  } finally {
+    loading.projects = false
+  }
 }
 
 const handleSaveProject = async () => {
@@ -455,7 +494,31 @@ const handleEditStation = (row) => {
 }
 
 const handleDeleteStation = async (row) => {
-  console.log('Delete station:', row)
+  try {
+    await ElMessageBox.confirm(
+      `確定要刪除站別 "${row.station_name}" 嗎？這將同時刪除該站別的所有測試計劃資料。`,
+      '確認刪除',
+      {
+        confirmButtonText: '確定',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+
+    loading.stations = true
+    await deleteStation(row.id)
+    ElMessage.success('站別刪除成功')
+    await loadStations()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Delete station failed:', error)
+      const message = error.response?.data?.detail || '刪除失敗'
+      ElMessage.error(message)
+    }
+  } finally {
+    loading.stations = false
+  }
 }
 
 const handleSaveStation = async () => {
