@@ -1,0 +1,139 @@
+{
+  "instruments": {
+    "DAQ973A_1": {
+      "type": "DAQ973A",
+      "name": "Keysight DAQ973A Data Acquisition System #1",
+      "connection": {
+        "type": "VISA",
+        "address": "TCPIP0::192.168.1.10::inst0::INSTR",
+        "timeout": 5000
+      },
+      "enabled": true,
+      "description": "Primary data acquisition system for voltage/current measurement"
+    },
+    "DAQ973A_2": {
+      "type": "DAQ973A",
+      "name": "Keysight DAQ973A Data Acquisition System #2",
+      "connection": {
+        "type": "VISA",
+        "address": "TCPIP0::192.168.1.11::inst0::INSTR",
+        "timeout": 5000
+      },
+      "enabled": false,
+      "description": "Secondary DAQ system (currently offline)"
+    },
+    "MODEL2303_1": {
+      "type": "MODEL2303",
+      "name": "Keysight 2303 Dual Channel Power Supply",
+      "connection": {
+        "type": "SERIAL",
+        "port": "COM3",
+        "baudrate": 115200,
+        "stopbits": 1,
+        "timeout": 5000
+      },
+      "enabled": true,
+      "description": "Main power supply for DUT"
+    },
+    "MODEL2306_1": {
+      "type": "MODEL2306",
+      "name": "Keysight 2306 Battery Simulator",
+      "connection": {
+        "type": "SERIAL",
+        "port": "/dev/ttyUSB0",
+        "baudrate": 115200,
+        "stopbits": 1,
+        "timeout": 5000
+      },
+      "enabled": true,
+      "description": "Battery simulation for portable devices"
+    },
+    "IT6723C_1": {
+      "type": "IT6723C",
+      "name": "ITECH IT6723C Programmable DC Power Supply",
+      "connection": {
+        "type": "TCPIP_SOCKET",
+        "host": "192.168.1.20",
+        "port": 2268,
+        "timeout": 5000
+      },
+      "enabled": true,
+      "description": "High power supply for load testing"
+    },
+    "KEITHLEY2015_1": {
+      "type": "KEITHLEY2015",
+      "name": "Keithley 2015 THD Multimeter",
+      "connection": {
+        "type": "GPIB",
+        "board": 0,
+        "address": 16,
+        "timeout": 5000
+      },
+      "enabled": true,
+      "description": "Precision measurement for audio testing"
+    },
+    "34970A_1": {
+      "type": "34970A",
+      "name": "Agilent 34970A Data Acquisition/Switch Unit",
+      "connection": {
+        "type": "VISA",
+        "address": "GPIB0::9::INSTR",
+        "timeout": 5000
+      },
+      "enabled": true,
+      "description": "Legacy data acquisition system"
+    },
+    "2260B_1": {
+      "type": "2260B",
+      "name": "Keithley 2260B Programmable DC Power Supply",
+      "connection": {
+        "type": "VISA",
+        "address": "TCPIP0::192.168.1.30::inst0::INSTR",
+        "timeout": 5000
+      },
+      "enabled": true
+    },
+    "PSW3072_1": {
+      "type": "PSW3072",
+      "name": "GW Instek PSW3072 Triple Output Power Supply",
+      "connection": {
+        "type": "VISA",
+        "address": "TCPIP0::192.168.1.40::inst0::INSTR",
+        "timeout": 5000
+      },
+      "enabled": true
+    },
+    "DAQ6510_1": {
+      "type": "DAQ6510",
+      "name": "Keithley DAQ6510 Data Acquisition System",
+      "connection": {
+        "type": "VISA",
+        "address": "TCPIP0::192.168.1.50::inst0::INSTR",
+        "timeout": 5000
+      },
+      "enabled": false,
+      "description": "Advanced DAQ with touchscreen (not currently used)"
+    },
+    "MDO34_1": {
+      "type": "MDO34",
+      "name": "Tektronix MDO34 Mixed Domain Oscilloscope",
+      "connection": {
+        "type": "VISA",
+        "address": "TCPIP0::192.168.1.60::inst0::INSTR",
+        "timeout": 10000
+      },
+      "enabled": true,
+      "description": "Oscilloscope for waveform analysis"
+    },
+    "APS7050_1": {
+      "type": "APS7050",
+      "name": "APS7050 Power Supply",
+      "connection": {
+        "type": "VISA",
+        "address": "TCPIP0::192.168.1.70::inst0::INSTR",
+        "timeout": 5000
+      },
+      "enabled": true
+    }
+  }
+}

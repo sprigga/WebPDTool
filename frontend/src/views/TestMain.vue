@@ -955,10 +955,10 @@ const executeSingleItem = async (item, index) => {
 
     // 原有程式碼: const caseMode = item.case || item.switch_mode
     // 修改: 優先使用 case_type (後端欄位名稱)，向後相容 case 和 switch_mode
-    const caseMode = item.case_type || item.case || item.switch_mode // Switch/case mode
+    const caseMode = item.case_type || item.case || item.switch_mode || item.item_name // Switch/case mode
 
     // Extract parameters based on ExecuteName
-    const executeName = item.execute_name // ExecuteName 是執行名稱
+    const executeName = item.execute_name // ExecuteName 是測量類型 (measurement_type)
 
     // Build test parameters (參考 oneCSV_atlas_2.py:134-155)
     // 這裡需要根據實際的 CSV 欄位來構建參數
@@ -995,17 +995,17 @@ const executeSingleItem = async (item, index) => {
       testParams.command = item.command
     }
 
-    // 原有程式碼: switch_mode: caseMode || 'default'
-    // 修改: 如果 case_type 是 'wait'，直接將 measurement_type 設為 'wait'，switch_mode 設為 'wait'
-    // 這樣後端才能正確識別並調用 WaitMeasurement
-    let measurementType = executeName || 'Other'
-    let switchMode = caseMode || 'default'
+    // 修正: 正確區分 measurement_type 和 switch_mode 的角色
+    // - measurement_type: 從 execute_name 獲取 (測量類型: PowerSet, PowerRead, CommandTest, Other, wait 等)
+    // - switch_mode: 從 case_type 獲取 (儀器/腳本名稱: DAQ973A, 123_1, WAIT_FIX_5sec, comport 等)
+    let measurementType = executeName || 'Other'  // 預設為 'Other' 表示自定義腳本
+    let switchMode = caseMode || item.item_name || 'default'  // 預設使用 item_name 作為腳本名稱
 
-    // 原有程式碼: 如果 case_type='wait'，但 executeName='Other'，系統會調用 DummyMeasurement
-    // 修改: 優先使用 case_type 作為 measurement_type 和 switch_mode
-    if (item.case_type && item.case_type !== '') {
-      measurementType = item.case_type
-      switchMode = item.case_type
+    // 特殊處理: 如果 case_type='wait' 或 'Wait'，這是等待測試類型
+    // 需要將 measurement_type 和 switch_mode 都設為 'wait'
+    if (item.case_type && (item.case_type.toLowerCase() === 'wait')) {
+      measurementType = 'wait'
+      switchMode = 'wait'
     }
 
     // Execute measurement via API

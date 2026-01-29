@@ -56,8 +56,12 @@ class TestPlanCSVParser:
             rows = []
             for line_num, row in enumerate(csv_reader, start=2):  # Start at 2 (header is line 1)
                 try:
+                    # Filter out non-string keys (None, integers) that can occur with malformed CSVs
+                    # This prevents "keywords must be strings" error when unpacking with **
+                    filtered_row = {k: v for k, v in row.items() if isinstance(k, str) and k.strip()}
+
                     # Create TestPlanCSVRow object
-                    csv_row = TestPlanCSVRow(**row)
+                    csv_row = TestPlanCSVRow(**filtered_row)
                     rows.append(csv_row)
                 except Exception as e:
                     raise CSVParseError(f"Error parsing line {line_num}: {str(e)}")

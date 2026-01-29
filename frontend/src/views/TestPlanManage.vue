@@ -677,7 +677,15 @@ const handleUpload = async () => {
     uploadForm.stationId = null
   } catch (error) {
     console.error('Upload failed:', error)
-    ElMessage.error(error.response?.data?.detail || '上傳失敗')
+    console.error('Error details:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    })
+
+    // Display detailed error message
+    const errorMsg = error.response?.data?.detail || error.message || '上傳失敗'
+    ElMessage.error(errorMsg)
   } finally {
     uploading.value = false
   }

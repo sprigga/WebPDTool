@@ -11,7 +11,7 @@
 
     <el-row :gutter="20" class="content-row">
       <!-- Left Panel - Projects -->
-      <el-col :span="8" class="left-panel">
+      <el-col :span="12" class="left-panel">
         <el-card>
           <template #header>
             <div class="card-header">
@@ -88,7 +88,7 @@
       </el-col>
 
       <!-- Right Panel - Stations -->
-      <el-col :span="16" class="right-panel">
+      <el-col :span="12" class="right-panel">
         <el-card>
           <template #header>
             <div class="card-header">
@@ -630,7 +630,6 @@ onMounted(async () => {
 
 .left-panel {
   min-width: 400px;
-  max-width: 500px;
 }
 
 .card-header {

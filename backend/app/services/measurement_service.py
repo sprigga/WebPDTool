@@ -110,11 +110,20 @@ class MeasurementService:
                 measurement_type, switch_mode, test_params
             )
             if not validation_result["valid"]:
+                # 修正: 提供更詳細的錯誤訊息,包含建議和實際的 measurement_type/switch_mode
+                error_details = []
+                if validation_result.get('missing_params'):
+                    error_details.append(f"Missing: {validation_result['missing_params']}")
+                if validation_result.get('suggestions'):
+                    error_details.append(f"Hint: {validation_result['suggestions'][0]}")
+
+                error_message = f"Invalid parameters for {measurement_type}/{switch_mode}: " + "; ".join(error_details) if error_details else f"Invalid configuration: {measurement_type}/{switch_mode}"
+
                 return MeasurementResult(
                     item_no=0,
                     item_name=test_point_id,
                     result="ERROR",
-                    error_message=f"Invalid parameters: {validation_result['missing_params']}",
+                    error_message=error_message,
                 )
 
             # Get measurement executor
@@ -1209,20 +1218,196 @@ class MeasurementService:
     ) -> MeasurementResult:
         """
         Execute operator judgment measurement (based on OPjudgeMeasurement.py)
+
+        Supports two operational modes:
+        1. 'confirm' mode - Detailed visual judgment via OPjudge_confirm.py
+        2. 'YorN' mode - Binary Yes/No judgment via OPjudge_YorN.py
+
+        Parameters:
+        - switch_mode: 'confirm' or 'YorN'
+        - test_params['TestParams']: List containing [ImagePath, content]
+          - ImagePath: Path to reference image for visual comparison
+          - content: Description of what to check
+        - test_params['WaitmSec']: Optional wait time before execution (ms)
+
+        Returns:
+        - MeasurementResult with PASS/FAIL based on operator input
         """
         try:
-            # In real implementation, this would prompt operator
-            # For API, we expect the judgment to be passed in test_params
-            judgment = test_params.get("operator_judgment", "PASS")
+            import os
+
+            # Validate switch_mode
+            if switch_mode not in ['confirm', 'YorN']:
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    error_message=f"Invalid OPjudge mode: {switch_mode}. Expected 'confirm' or 'YorN'.",
+                )
+
+            # Extract TestParams (case-insensitive)
+            test_params_list = (
+                self._get_param_case_insensitive(test_params, "TestParams", "test_params")
+                or []
+            )
+
+            # Convert to string if needed
+            test_params_str = str(test_params_list) if isinstance(test_params_list, list) else test_params_list
+
+            # Validate required parameters: ImagePath and content
+            required_args = ['ImagePath', 'content']
+            if not any(arg in test_params_str for arg in required_args):
+                missing_args_str = ', '.join(required_args)
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    error_message=f"Missing required parameters in TestParams: [{missing_args_str}]. "
+                                 f"Expected format: ['ImagePath=/path/to/image.jpg', 'content=Check description']",
+                )
+
+            # Pre-execution wait (if specified)
+            wait_msec = test_params.get("WaitmSec") or test_params.get("wait_msec")
+            if wait_msec and isinstance(wait_msec, (int, float)) and wait_msec > 0:
+                wait_seconds = wait_msec / 1000
+                self.logger.info(
+                    f"Waiting {wait_msec}ms ({wait_seconds}s) before OPjudge execution for {test_point_id}"
+                )
+                await asyncio.sleep(wait_seconds)
+
+            # Determine script path based on mode
+            # Get current backend directory dynamically
+            current_file = os.path.abspath(__file__)
+            backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_file)))
+
+            # Use terminal versions (work in Docker/headless environments)
+            # For GUI versions (PyQt5), use OPjudge_confirm.py and OPjudge_YorN.py
+            if switch_mode == 'confirm':
+                script_path = os.path.join(backend_dir, "src", "lowsheen_lib", "OPjudge_confirm_terminal.py")
+                script_path_gui = os.path.join(backend_dir, "src", "lowsheen_lib", "OPjudge_confirm.py")
+            else:  # YorN mode
+                script_path = os.path.join(backend_dir, "src", "lowsheen_lib", "OPjudge_YorN_terminal.py")
+                script_path_gui = os.path.join(backend_dir, "src", "lowsheen_lib", "OPjudge_YorN.py")
+
+            # Prefer terminal version, fallback to GUI version
+            if not os.path.exists(script_path) and os.path.exists(script_path_gui):
+                script_path = script_path_gui
+                self.logger.info(f"Using GUI version of OPjudge script (requires X11 display)")
+
+            # Check if script exists
+            if not os.path.exists(script_path):
+                self.logger.warning(
+                    f"OPjudge script not found at {script_path}. "
+                    f"Falling back to API-based operator judgment."
+                )
+                # Fallback: Use operator_judgment from test_params
+                judgment = test_params.get("operator_judgment", "PASS")
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result=judgment,
+                    measured_value=Decimal("1") if judgment == "PASS" else Decimal("0"),
+                    error_message=f"Script not found, used fallback judgment: {judgment}",
+                )
+
+            # Execute external script (subprocess delegation pattern from PDTool4)
+            timeout_ms = test_params.get("Timeout") or test_params.get("timeout") or 300000  # 5 min default
+            timeout_seconds = timeout_ms / 1000 if isinstance(timeout_ms, (int, float)) else 300
+
+            self.logger.info(
+                f"Executing OPjudge {switch_mode} mode for {test_point_id}: "
+                f"script={script_path}, params={test_params_str}"
+            )
+
+            # Run subprocess (PDTool4 pattern: python script_path test_uid TestParams)
+            process = await asyncio.create_subprocess_exec(
+                "python3",
+                script_path,
+                str(test_point_id),
+                test_params_str,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=backend_dir,
+            )
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(), timeout=timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    error_message=f"OPjudge {switch_mode} execution timeout after {timeout_ms}ms",
+                )
+
+            # Decode response (PDTool4 pattern: UTF-8 decode and strip)
+            if process.returncode != 0:
+                error_output = stderr.decode('utf-8').strip()
+                self.logger.error(
+                    f"OPjudge {switch_mode} script failed: returncode={process.returncode}, "
+                    f"stderr={error_output}"
+                )
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    error_message=f"OPjudge script error: {error_output or 'Unknown error'}",
+                )
+
+            response = stdout.decode('utf-8').strip()
+
+            # Validate response
+            if not response:
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    error_message="OPjudge script returned empty response",
+                )
+
+            # Process response (expected: "PASS" or "FAIL" or error message)
+            # PDTool4 logic: execute result via test_points.execute(response, runAllTest)
+            response_upper = response.upper()
+
+            if "PASS" in response_upper:
+                result_status = "PASS"
+                measured_value = Decimal("1")
+            elif "FAIL" in response_upper:
+                result_status = "FAIL"
+                measured_value = Decimal("0")
+            elif "ERROR" in response_upper:
+                result_status = "ERROR"
+                measured_value = None
+            else:
+                # Unknown response format - treat as error
+                self.logger.warning(
+                    f"OPjudge returned unexpected response: {response}. Treating as ERROR."
+                )
+                result_status = "ERROR"
+                measured_value = None
 
             return MeasurementResult(
                 item_no=0,
                 item_name=test_point_id,
-                result=judgment,
-                measured_value=Decimal("1") if judgment == "PASS" else Decimal("0"),
+                result=result_status,
+                measured_value=measured_value,
+                error_message=response if result_status == "ERROR" else None,
             )
 
+        except FileNotFoundError as e:
+            self.logger.error(f"OPjudge script file not found: {e}")
+            return MeasurementResult(
+                item_no=0,
+                item_name=test_point_id,
+                result="ERROR",
+                error_message=f"OPjudge script not found: {str(e)}",
+            )
         except Exception as e:
+            self.logger.error(f"OPjudge execution failed: {e}", exc_info=True)
             return MeasurementResult(
                 item_no=0, item_name=test_point_id, result="ERROR", error_message=str(e)
             )
@@ -1675,9 +1860,13 @@ class MeasurementService:
                 "WAIT_FIX_5sec": [],  # 原有程式碼: 新增 WAIT_FIX_5sec 支援,不需要任何參數
             },
             "getSN": {"SN": [], "IMEI": [], "MAC": []},
-            "OPjudge": {"YorN": [], "confirm": []},
+            "OPjudge": {
+                "YorN": ["TestParams"],  # Requires TestParams list with ImagePath and content
+                "confirm": ["TestParams"],  # Requires TestParams list with ImagePath and content
+            },
             # 新增: wait 測量類型支援
             "wait": {"wait": []},  # wait switch_mode 不需要任何參數
+            "Wait": {"wait": []},  # 支援大寫 Wait
             # 新增: test123 測試腳本支援
             "Other": {
                 "test123": [],  # test123.py 不需要任何必需參數，可選 arg 參數
@@ -1728,6 +1917,18 @@ class MeasurementService:
                         "invalid_params": [],
                         "suggestions": [],
                     }
+            # 修正: 對於 "Other" 測量類型,未知的 switch_mode 也視為有效的自定義腳本
+            # 這樣可以支援 test123.py, 123_1.py, 123_2.py 等自定義測試腳本
+            # 不需要在 validation_rules 中預先定義每個腳本名稱
+            elif measurement_type in ["Other", "wait", "Wait"]:
+                # Other 和 wait 類型允許任意 switch_mode (自定義腳本名稱)
+                # 不需要任何必需參數
+                return {
+                    "valid": True,
+                    "missing_params": [],
+                    "invalid_params": [],
+                    "suggestions": [],
+                }
             else:
                 return {
                     "valid": False,

@@ -12,7 +12,7 @@ from typing import List
 
 from app.core.database import get_db
 from app.core.api_helpers import get_entity_or_404, PermissionChecker
-from app.core.constants import ErrorMessages
+from app.core.constants import ErrorMessages, ResponseMessages
 from app.dependencies import get_current_active_user
 from app.models.testplan import TestPlan
 from app.models.station import Station
@@ -101,7 +101,7 @@ async def upload_testplan_csv(
                 errors.append(f"Error creating item {plan_dict.get('item_name')}: {str(e)}")
 
         return TestPlanUploadResponse(
-            message=ErrorMessages.UPLOAD_SUCCESS,
+            message=ResponseMessages.UPLOAD_SUCCESS,
             project_id=project_id,
             station_id=station_id,
             total_items=len(test_plan_dicts),
@@ -114,6 +114,9 @@ async def upload_testplan_csv(
         raise HTTPException(status_code=400, detail=f"CSV parsing error: {str(e)}")
     except Exception as e:
         db.rollback()
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"Upload error traceback:\n{error_traceback}")
         raise HTTPException(status_code=500, detail=f"Error uploading test plan: {str(e)}")
 
 

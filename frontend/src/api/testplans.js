@@ -45,11 +45,11 @@ export const getStationTestPlanNames = (stationId, projectId) => {
 export const uploadTestPlanCSV = (stationId, file, projectId, testPlanName = '', replaceExisting = true) => {
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('project_id', projectId)  // 新增 project_id
+  formData.append('project_id', String(projectId))  // Ensure string conversion
   if (testPlanName) {
-    formData.append('test_plan_name', testPlanName)  // 新增 test_plan_name
+    formData.append('test_plan_name', testPlanName)  // Optional field
   }
-  formData.append('replace_existing', replaceExisting)
+  formData.append('replace_existing', String(replaceExisting))  // Convert boolean to string
 
   return apiClient.post(`/api/stations/${stationId}/testplan/upload`, formData, {
     headers: {
