@@ -92,7 +92,53 @@
           <div v-if="!hasSelectedProject" class="empty-state">
             <el-empty description="請先在左側選擇一個專案" />
           </div>
-          <div v-else>Stations table will go here</div>
+          <div v-else>
+            <!-- Stations Table -->
+            <el-table
+              v-loading="loading.stations"
+              :data="projectStore.stations"
+              stripe
+              style="width: 100%"
+            >
+              <el-table-column prop="station_code" label="站別代碼" width="120" />
+
+              <el-table-column prop="station_name" label="站別名稱" min-width="150" />
+
+              <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+
+              <el-table-column label="狀態" width="80">
+                <template #default="{ row }">
+                  <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
+                    {{ row.enabled ? '啟用' : '停用' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+
+              <el-table-column label="操作" width="140" fixed="right">
+                <template #default="{ row }">
+                  <el-button
+                    v-if="canEdit"
+                    size="small"
+                    @click="handleEditStation(row)"
+                  >
+                    編輯
+                  </el-button>
+                  <el-button
+                    v-if="canEdit"
+                    size="small"
+                    type="danger"
+                    @click="handleDeleteStation(row)"
+                  >
+                    刪除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+
+            <div v-if="hasSelectedProject" class="table-footer">
+              <el-text>共 {{ projectStore.stations.length }} 個站別</el-text>
+            </div>
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -161,6 +207,14 @@ const loadStations = async () => {
   } finally {
     loading.stations = false
   }
+}
+
+const handleEditStation = (row) => {
+  console.log('Edit station:', row)
+}
+
+const handleDeleteStation = async (row) => {
+  console.log('Delete station:', row)
 }
 
 onMounted(async () => {
