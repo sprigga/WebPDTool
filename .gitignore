@@ -235,3 +235,6 @@ htmlcov/
 
 # Terminal Paste Image folder
 .cp-images/
+
+# Git worktrees
+.worktrees/
