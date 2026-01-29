@@ -1,5 +1,14 @@
 <template>
   <div class="project-manage-container">
+    <el-alert
+      v-if="!isAdmin"
+      title="僅供查看"
+      description="您沒有管理權限，無法新增、編輯或刪除專案和站別"
+      type="info"
+      :closable="false"
+      style="margin-bottom: 20px"
+    />
+
     <el-row :gutter="20" class="content-row">
       <!-- Left Panel - Projects -->
       <el-col :span="8" class="left-panel">
@@ -41,21 +50,29 @@
 
             <el-table-column label="操作" width="140" fixed="right">
               <template #default="{ row }">
-                <el-button
-                  v-if="canEdit"
-                  size="small"
-                  @click.stop="handleEditProject(row)"
-                >
-                  編輯
-                </el-button>
-                <el-button
-                  v-if="canEdit"
-                  size="small"
-                  type="danger"
-                  @click.stop="handleDeleteProject(row)"
-                >
-                  刪除
-                </el-button>
+                <el-tooltip content="需要管理員權限" :disabled="canEdit">
+                  <span>
+                    <el-button
+                      size="small"
+                      :disabled="!canEdit"
+                      @click.stop="handleEditProject(row)"
+                    >
+                      編輯
+                    </el-button>
+                  </span>
+                </el-tooltip>
+                <el-tooltip content="需要管理員權限" :disabled="canEdit">
+                  <span>
+                    <el-button
+                      size="small"
+                      type="danger"
+                      :disabled="!canEdit"
+                      @click.stop="handleDeleteProject(row)"
+                    >
+                      刪除
+                    </el-button>
+                  </span>
+                </el-tooltip>
               </template>
             </el-table-column>
           </el-table>
@@ -116,21 +133,29 @@
 
               <el-table-column label="操作" width="140" fixed="right">
                 <template #default="{ row }">
-                  <el-button
-                    v-if="canEdit"
-                    size="small"
-                    @click="handleEditStation(row)"
-                  >
-                    編輯
-                  </el-button>
-                  <el-button
-                    v-if="canEdit"
-                    size="small"
-                    type="danger"
-                    @click="handleDeleteStation(row)"
-                  >
-                    刪除
-                  </el-button>
+                  <el-tooltip content="需要管理員權限" :disabled="canEdit">
+                    <span>
+                      <el-button
+                        size="small"
+                        :disabled="!canEdit"
+                        @click="handleEditStation(row)"
+                      >
+                        編輯
+                      </el-button>
+                    </span>
+                  </el-tooltip>
+                  <el-tooltip content="需要管理員權限" :disabled="canEdit">
+                    <span>
+                      <el-button
+                        size="small"
+                        type="danger"
+                        :disabled="!canEdit"
+                        @click="handleDeleteStation(row)"
+                      >
+                        刪除
+                      </el-button>
+                    </span>
+                  </el-tooltip>
                 </template>
               </el-table-column>
             </el-table>
