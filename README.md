@@ -29,19 +29,21 @@ WebPDTool 是一個 Web 化的產品測試系統，用於執行自動化測試�
 
 | 項目 | 內容 |
 |------|------|
-| **版本** | v0.6.0 |
-| **完成度** | ~80% (核心架構完成) |
-| **最新更新** | 2026-01-05 - PDTool4 完整相容性整合 |
-| **狀態** | 核心架構完成，生產環境待優化 |
+| **版本** | v0.7.0 |
+| **完成度** | ~75-80% (核心架構完成，生產就緒中) |
+| **最新更新** | 2026-01-30 - DUT 通訊系統與進階日誌整合 |
+| **狀態** | 核心功能完整，儀器連接層與前端完善中 |
 
 ### ✨ 主要特色
 
 - ✅ **完整 PDTool4 相容性** - 支援所有 7 種 limit_type 和 3 種 value_type
 - ✅ **runAllTest 模式** - 遇到錯誤時繼續執行測試，與 PDTool4 完全一致
-- ✅ **測量模組架構** - BaseMeasurement 抽象基礎類別 + MEASUREMENT_REGISTRY 註冊表
-- ✅ **測試引擎** - TestEngine 測試編排器 + InstrumentManager 儀器管理器
-- ✅ **完整 API 層** - 8 個 API 模組，70+ 端點
-- ✅ **現代化前端** - Vue 3 Composition API + Element Plus UI
+- ✅ **DUT 通訊系統** - 繼電器控制、機架旋轉、二進位協定支援 (3,000+ 行新代碼)
+- ✅ **10 種測量類型** - PowerSet/Read, CommandTest, SFC, GetSN, OPJudge, Wait, Relay, ChassisRotation
+- ✅ **10 種儀器驅動** - Keysight, Keithley, ITECH, GW Instek 等完整實作 (88KB)
+- ✅ **完整 API 層** - 8 個 API 模組，70+ 端點，模組化設計
+- ✅ **進階日誌系統** - Redis 串流、請求追蹤、JSON 格式支援
+- ✅ **現代化前端** - Vue 3 Composition API + Element Plus UI，專案管理完整實作
 
 ---
 
@@ -593,15 +595,16 @@ WebPDTool/
 
 ### 後端架構
 
-#### API 層 (backend/app/api/)
+#### API 層 (backend/app/api/) - 8 個模組
 
-- **auth.py**: 認證與授權管理
-- **projects.py**: 專案 CRUD 操作
-- **stations.py**: 站別管理
-- **testplans.py**: 測試計劃管理與 CSV 上傳
-- **tests.py**: 測試會話執行與控制
-- **measurements.py**: 測量任務執行
-- **measurement_results.py**: 測試結果查詢與匯出
+1. **auth.py** - 認證與授權管理 (JWT Token)
+2. **projects.py** - 專案 CRUD 操作
+3. **stations.py** - 站別管理
+4. **testplan/** - 測試計劃模組 (queries, mutations, sessions, validation) - 已模組化
+5. **tests.py** - 測試會話執行與控制
+6. **measurements.py** - 測量任務執行
+7. **results/** - 測試結果模組 (sessions, measurements, reports, export, cleanup, summary) - 已模組化
+8. **dut_control.py** - DUT 通訊控制 (繼電器切換、機架旋轉) ✨ **新增**
 
 ---
 
@@ -619,58 +622,114 @@ WebPDTool/
 
 #### 服務層 (backend/app/services/)
 
-- **auth.py**: JWT Token 管理、密碼驗證
-- **test_engine.py**: 測試編排引擎 (TestEngine)
-  - 非同步測試執行
-  - 測試會話狀態管理
+- **auth.py** - JWT Token 管理、密碼驗證
+- **test_engine.py** - 測試編排引擎 (TestEngine, 508 行)
+  - 非同步測試執行 (asyncio)
+  - 測試會話狀態管理 (`TestExecutionState`)
   - 測量任務調度
-- **instrument_manager.py**: 儀器管理器 (Singleton)
+  - 自動報表生成 (CSV 匯出)
+  - runAllTest 模式支援
+- **instrument_manager.py** - 儀器管理器 (Singleton)
   - 儀器連線池管理
   - 儀器狀態追蹤
   - 連線重置機制
-- **measurement_service.py**: 測量服務協調
+- **measurement_service.py** - 測量服務協調
+- **report_service.py** - 自動報表生成服務
+
+---
+
+#### DUT 通訊系統 (backend/app/dut_comms/) ✨ **2026-01-30 新增 (~3,000 行)**
+
+- **relay_controller.py** - 繼電器開關控制 (映射 PDTool4 的 MeasureSwitchON/OFF)
+- **chassis_controller.py** - 機架旋轉控制 (映射 PDTool4 的 MyThread_CW/CCW)
+- **ls_comms/** - LS 通訊協定實作
+- **vcu_ether_comms/** - VCU 乙太網路通訊
+- **ltl_chassis_fixt_comms/** - 機架夾具二進位協定 (CRC16 校驗)
+- **common/struct_message.py** - 二進位訊息封包處理
+
+---
+
+#### 儀器驅動層 (backend/app/instruments/) ✨ **10 種儀器完整實作 (~88KB)**
+
+**資料擷取器 (DAQ)**
+- **daq973a.py** - Keysight DAQ973A 多功能資料擷取器
+- **daq6510.py** - Keithley DAQ6510 資料擷取/記錄系統
+- **a34970a.py** - Agilent 34970A 資料擷取/切換單元
+
+**電源供應器 (Power Supply)**
+- **model2303.py** - Keithley 2303 電源供應器
+- **model2306.py** - Keithley 2306 電源供應器
+- **it6723c.py** - ITECH IT6723C 電源供應器
+- **psw3072.py** - GW Instek PSW3072 電源供應器
+
+**測量儀器**
+- **keithley2015.py** - Keithley 2015 數位電表
+- **mdo34.py** - Tektronix MDO34 混合域示波器
+- **a2260b.py** - Agilent 2260B 任意波形產生器
+
+**基礎架構**
+- **base.py** - `BaseInstrumentDriver` 抽象基礎類別
+  - `initialize()` - 儀器初始化
+  - `reset()` - 儀器重置
+  - async/await 完整支援
+
+> **注意**: 儀器驅動類別已完整實作，但 VISA/Serial 傳輸層需進一步完善
 
 ---
 
 #### 測量模組層 (backend/app/measurements/)
 
-- **base.py**: BaseMeasurement 抽象基礎類別
-  - 定義測量介面規範 (prepare/execute/cleanup)
+- **base.py**: BaseMeasurement 抽象基礎類別 (379 行)
+  - 定義測量介面規範 (`setup()` / `execute()` / `cleanup()`)
   - MeasurementResult 資料結構
   - 結果驗證機制 (支援 PDTool4 所有 limit 類型)
   - 值類型轉換 (string/integer/float)
   - **PDTool4 驗證邏輯完整整合** (支援 7 種 limit_type, 3 種 value_type)
   - runAllTest 模式錯誤處理
   - PDTool4 儀器錯誤檢測 ("No instrument found", "Error:")
-- **implementations.py**: 測量實作
-  - PowerSet (電源供應器控制)
-  - PowerRead (電壓/電流讀取)
-  - CommandTest (命令執行測試)
-  - SFCtest (SFC 整合測試)
-  - getSN (序號取得)
-  - OPjudge (操作員確認)
-  - Other (自定義實作)
+
+- **implementations.py**: 10+ 種測量實作 (509 行)
+  - **DummyMeasurement** - 測試用假測量
+  - **PowerSetMeasurement** - 電源供應器控制
+  - **PowerReadMeasurement** - 電壓/電流讀取
+  - **CommandTestMeasurement** - Shell 命令執行測試
+  - **SFCMeasurement** - SFC (MES) 整合測試
+  - **GetSNMeasurement** - 產品序號取得
+  - **OPJudgeMeasurement** - 操作員手動判定
+  - **WaitMeasurement** - 延遲等待
+  - **RelayMeasurement** - DUT 繼電器控制 ✨ **新增** (對應 PDTool4 MeasureSwitchON/OFF)
+  - **ChassisRotationMeasurement** - 機架旋轉控制 ✨ **新增** (對應 PDTool4 MyThread_CW/CCW)
+
 - **registry.py**: MEASUREMENT_REGISTRY 測量類型註冊表
 
 ---
 
-### 前端架構
+### 前端架構 (~4,200 行 Vue 代碼)
 
 #### 頁面組件 (frontend/src/views/)
 
-- **Login.vue**: 使用者登入介面
-- **SystemConfig.vue**: 系統配置頁面 (專案/站別選擇)
-- **TestMain.vue**: 測試執行主控台 (495 行，仿 PDTool4 UI)
-  - 測試資訊顯示區
-  - 配置面板 (專案/站別/測試計劃選擇)
-  - 測試計劃表格
-  - 控制面板 (條碼輸入、開始/停止)
-  - 進度顯示
-  - 狀態訊息區
+**✅ 完整實作**
+- **Login.vue** (190 行) - 使用者登入介面，表單驗證
+- **TestMain.vue** (1,781 行) - 測試執行主控台 (完整 PDTool4 風格 UI)
+  - 專案/站別選擇器整合
   - SFC 配置對話框
-- **TestPlanManage.vue**: 測試計劃管理介面
-- **TestExecution.vue**: 測試執行監控
-- **TestHistory.vue**: 測試歷史查詢與分析
+  - runAllTest 模式切換
+  - 即時測試結果表格
+  - 進度追蹤與統計
+  - 狀態徽章 (PASS/FAIL/SKIP/ERROR)
+  - 循環計數器
+- **ProjectManage.vue** (704 行) - 專案與站別完整 CRUD 管理 ✨
+  - 專案表格 (排序/篩選)
+  - 站別管理
+  - 建立/編輯對話框
+  - 刪除確認機制
+  - 基於角色的權限控制 (僅 Admin)
+- **TestPlanManage.vue** (935 行) - 測試計劃管理
+- **TestExecution.vue** (565 行) - 測試執行監控
+
+**⚠️ 佔位符 (待完善)**
+- **TestHistory.vue** (16 行) - 測試歷史查詢 (僅佔位符)
+- **SystemConfig.vue** (16 行) - 系統配置 (僅佔位符)
 
 ---
 
@@ -853,79 +912,125 @@ WebPDTool/
 
 ---
 
-### ✅ 階段 5: 測試執行引擎 (核心架構完成)
+### ✅ 階段 5: 測試執行引擎 (完整實作 ✅)
 
 - [x] 測試會話資料模型 (TestSession)
 - [x] 測試結果資料模型 (TestResult)
-- [x] BaseMeasurement 抽象基礎類別
+- [x] BaseMeasurement 抽象基礎類別 (379 行)
   - [x] **PDTool4 驗證邏輯完整整合** (支援 7 種 limit_type)
   - [x] runAllTest 模式錯誤處理
   - [x] PDTool4 儀器錯誤檢測
-- [x] 測量實作模組
+- [x] 10+ 種測量實作模組 (509 行)
   - [x] PowerSet, PowerRead, CommandTest
-  - [x] SFCtest, getSN, OPjudge, Other
+  - [x] SFCtest, getSN, OPjudge, Wait
+  - [x] **Relay, ChassisRotation** (新增，對應 PDTool4)
   - [x] 完整的 limit 類型支援 (lower/upper/both/equality/inequality/partial/none)
   - [x] 值類型轉換 (string/integer/float)
-- [x] TestEngine 測試編排引擎
-  - [x] 非同步測試執行
-  - [x] 測試會話狀態管理
+- [x] TestEngine 測試編排引擎 (508 行)
+  - [x] 非同步測試執行 (asyncio)
+  - [x] 測試會話狀態管理 (`TestExecutionState`)
   - [x] 測量任務調度
+  - [x] 自動報表生成 (CSV)
 - [x] InstrumentManager 儀器管理器
   - [x] Singleton 模式實作
   - [x] 儀器連線池管理
   - [x] 儀器狀態追蹤
-- [x] 測試執行相關 API (5+ 端點)
-- [x] 測量執行相關 API (10 端點)
-- [x] 測試會話管理 API
-- [x] 測試結果查詢與匯出 API
-- [x] 前端測試執行主介面 (TestMain.vue)
+- [x] 完整 API 層 (8 個模組)
+  - [x] 測試執行相關 API
+  - [x] 測量執行相關 API
+  - [x] 測試會話管理 API
+  - [x] 測試結果查詢與匯出 API
+  - [x] **DUT 控制 API** (新增)
+- [x] 前端測試執行主介面 (TestMain.vue, 1,781 行)
   - [x] PDTool4 風格 UI 設計
   - [x] 測試控制面板
   - [x] 條碼掃描輸入
   - [x] 測試計劃表格顯示
   - [x] 進度與狀態顯示
-  - [x] **runAllTest 模式整合** (錯誤收集但繼續執行)
+  - [x] **runAllTest 模式整合**
 - [x] 即時狀態輪詢機制
 - [x] 儀器狀態查詢與重置
 - [x] MEASUREMENT_REGISTRY 測量類型註冊表
 - [x] 測試計劃匯入工具與批量匯入腳本
-- [x] 完整的測試覆蓋 (9 個測試類別,100% 通過)
-- ⚠️ 實際儀器驅動實作 (目前為 stub/dummy 實作)
-- ⏳ WebSocket 即時通訊 (計劃中，目前使用輪詢)
-- ⏳ 前端測試歷史查詢介面完整實作
-- ⏳ 圖表分析功能
-- ⏳ PDF 報表生成
+- [x] 完整的測試覆蓋 (9 個測試類別)
 
 ---
 
-### ⏳ 階段 6: 進階功能 (待實作)
+### ✅ 階段 6: DUT 通訊與進階功能 (2026-01 完成 ✅)
 
-- [ ] 實際儀器驅動實作 (取代 dummy implementations)
-- [ ] WebSocket 即時通訊機制
-- [ ] Modbus TCP/RTU 通訊模組
-- [ ] Modbus 設備配置管理
-- [ ] Modbus 讀寫操作 API
+- [x] **DUT 通訊系統** (~3,000 行新代碼) ✨
+  - [x] 繼電器控制 (relay_controller.py)
+  - [x] 機架旋轉控制 (chassis_controller.py)
+  - [x] LS 通訊協定
+  - [x] VCU 乙太網路通訊
+  - [x] 機架夾具二進位協定 (CRC16)
+- [x] **10 種儀器驅動實作** (~88KB) ✨
+  - [x] DAQ 系列 (DAQ973A, DAQ6510, 34970A)
+  - [x] 電源供應器 (Keithley 2303/2306, ITECH IT6723C, GW Instek PSW3072)
+  - [x] 測量儀器 (Keithley 2015, MDO34, A2260B)
+- [x] **進階日誌系統 v2** ✨
+  - [x] Redis 串流支援
+  - [x] 請求上下文追蹤 (request_id, user_id, session_id)
+  - [x] JSON 日誌格式
+  - [x] 背景日誌刷新器
+- [x] **ProjectManage 前端頁面** (704 行) ✨
+  - [x] 完整 CRUD 介面
+  - [x] 基於角色的權限 UI
+  - [x] 刪除確認與空狀態
+  - [x] 響應式設計
+
+---
+
+### ⚠️ 階段 7: 儀器連接層與前端完善 (進行中 70%)
+
+**儀器連接層 (70% 完成)**
+- [x] 儀器驅動類別實作 (10 種)
+- [x] BaseInstrumentDriver 抽象介面
+- ⏳ VISA 傳輸層整合 (需完成)
+- ⏳ Serial 傳輸層整合 (需完成)
+- [ ] 儀器連線測試與驗證
+
+**前端完善 (30% 完成)**
+- [x] TestMain, ProjectManage, TestPlanManage 完整實作
+- ⏳ TestHistory 介面 (僅 16 行佔位符)
+- ⏳ SystemConfig 介面 (僅 16 行佔位符)
+- [ ] 測試結果圖表分析
+- [ ] PDF 報表生成功能
+
+**SFC/Modbus 整合 (20% 完成)**
+- [x] SFCMeasurement 框架 (stubbed)
+- [x] modbus_logs 資料表
 - [ ] SFC WebService 客戶端實作
-- [ ] SFC 連線測試與錯誤處理
-- [ ] 前端測試歷史查詢完整介面
-- [ ] 測試結果趨勢分析與圖表
-- [ ] PDF 報表生成
+- [ ] Modbus TCP/RTU 通訊模組
+
+---
+
+### ⏳ 階段 8: 生產環境優化與測試 (待實作 0%)
+
+**安全性強化**
+- [ ] 修改預設密碼與金鑰
+- [ ] 輸入驗證完善
+- [ ] CORS 設定優化
+- [ ] SQL 注入防護加強
+
+**效能優化**
+- [ ] 資料庫查詢優化
+- [ ] Redis 快取機制
+- [ ] API 速率限制
+
+**測試與監控**
+- [ ] 完整的 pytest 測試套件 (API 端點)
+- [ ] 前端單元測試 (Vitest)
+- [ ] 監控與告警機制 (Prometheus)
+- [ ] 健康檢查完善
+- [ ] 日誌輪轉與備份策略
+
+**進階功能**
+- [ ] WebSocket 即時通訊 (取代輪詢)
 - [ ] 儀器校驗管理
-- [ ] 系統日誌與審計功能
+- [ ] 系統日誌與審計
 - [ ] 權限細粒度控制
 - [ ] 多語系支援
-- [ ] 自動化測試覆蓋
-
----
-
-### ⏳ 階段 7: 生產環境優化 (待實作)
-
-- [ ] 安全性強化 (輸入驗證、SQL 注入防護)
-- [ ] 效能優化 (資料庫查詢、快取機制)
-- [ ] 錯誤處理完善
-- [ ] API 速率限制
-- [ ] 監控與告警機制
-- [ ] 備份與恢復策略
 
 ---
 
@@ -1434,21 +1539,26 @@ docker-compose logs -f backend | grep ERROR
 
 ## 📈 專案狀態與待辦事項
 
-### 目前狀態 (v0.6.0)
+### 目前狀態 (v0.7.0 - 2026-01-30)
 
-| 項目 | 狀態 | 完成度 |
-|------|------|--------|
-| **版本** | v0.6.0 | - |
-| **完成度** | 核心架構完成 | ~80% |
-| **核心架構** | ✅ 已完成 | FastAPI + Vue 3 + MySQL |
-| **API 層** | ✅ 已完成 | 70+ 端點，8 個模組 |
-| **PDTool4 相容性** | ✅ 已完成 | 完整驗證邏輯與 runAllTest 模式 |
-| **測試覆蓋** | ✅ 已完成 | 9 個測試類別，100% 通過率 |
-| **前端介面** | ✅ 已完成 | 6 個主要頁面，PDTool4 風格 |
-| **資料庫設計** | ✅ 已完成 | 7 個模型，包含遷移 |
-| **容器化** | ✅ 已完成 | Docker Compose 完整配置 |
-| **儀器驅動** | ⚠️ Stub 實作 | 需實作實際硬體介面 |
-| **生產就緒** | ⚠️ 基本可用 | 需安全性強化 |
+| 項目 | 狀態 | 完成度 | 說明 |
+|------|------|--------|------|
+| **版本** | v0.7.0 | - | DUT 通訊系統與進階日誌整合 |
+| **整體完成度** | 核心完整 | **75-80%** | 生產就緒中 |
+| **核心架構** | ✅ 已完成 | 100% | FastAPI + Vue 3 + MySQL |
+| **API 層** | ✅ 已完成 | 95% | 8 個模組，70+ 端點 |
+| **測試引擎** | ✅ 已完成 | 98% | TestEngine + InstrumentManager |
+| **測量系統** | ✅ 已完成 | 95% | 10+ 種測量類型，完整 PDTool4 相容 |
+| **DUT 通訊** | ✅ 已完成 | 90% | 繼電器/機架控制，3K+ 行新代碼 |
+| **儀器驅動** | ⚠️ 部分完成 | 70% | 10 種驅動已實作，需 VISA/Serial 層 |
+| **資料庫** | ✅ 已完成 | 100% | 9 個表格，完整 Schema |
+| **前端核心** | ✅ 已完成 | 85% | TestMain/ProjectManage 完整 |
+| **前端管理** | ⚠️ 部分完成 | 40% | History/Config 為佔位符 |
+| **日誌系統** | ✅ 已完成 | 90% | Redis 串流、請求追蹤 |
+| **容器化** | ✅ 已完成 | 100% | Docker Compose 完整配置 |
+| **SFC 整合** | ⚠️ 框架完成 | 30% | 需 WebService 客戶端 |
+| **測試覆蓋** | ⚠️ 基本完成 | 20% | 儀器驅動測試，需完整 API 測試 |
+| **生產就緒** | ⚠️ 接近完成 | 70% | 需安全性強化與連接層完善 |
 
 ---
 
@@ -1509,7 +1619,55 @@ docker-compose logs -f backend | grep ERROR
 
 ## 📝 更新日誌
 
-### v0.6.0 (最新) - 2026-01-05 - PDTool4 完整整合
+### v0.7.0 (最新) - 2026-01-30 - DUT 通訊系統與進階功能
+
+#### ✅ DUT 通訊系統完整實作 (~3,000 行新代碼)
+
+- **繼電器控制系統** (relay_controller.py)
+  - 對應 PDTool4 的 MeasureSwitchON/MeasureSwitchOFF
+  - RelayMeasurement 測量類型整合
+  - 非同步繼電器切換控制
+
+- **機架旋轉系統** (chassis_controller.py)
+  - 對應 PDTool4 的 MyThread_CW/MyThread_CCW
+  - ChassisRotationMeasurement 測量類型整合
+  - 順時針/逆時針旋轉控制
+
+- **通訊協定層實作**
+  - LS 通訊協定 (ls_comms/)
+  - VCU 乙太網路通訊 (vcu_ether_comms/)
+  - 機架夾具二進位協定 (ltl_chassis_fixt_comms/)
+  - CRC16 校驗封包處理 (struct_message.py)
+
+#### ✅ 10 種儀器驅動完整實作 (~88KB)
+
+- **資料擷取器**: DAQ973A, DAQ6510, 34970A
+- **電源供應器**: Keithley 2303/2306, ITECH IT6723C, GW Instek PSW3072
+- **測量儀器**: Keithley 2015 DMM, MDO34 示波器, A2260B 產生器
+- **架構**: BaseInstrumentDriver 抽象基礎類別，完整 async/await
+
+#### ✅ 進階日誌系統 v2 (logging_v2.py)
+
+- Redis 串流支援 (可選)
+- 請求上下文追蹤 (request_id, user_id, session_id)
+- JSON 日誌格式選項
+- 背景日誌刷新器
+
+#### ✅ ProjectManage 前端頁面 (704 行)
+
+- 完整專案與站別 CRUD 介面
+- 基於角色的權限控制 UI (僅 Admin 可操作)
+- 空狀態與響應式設計
+- 刪除確認機制
+
+#### ✅ 文檔重組
+
+- 重新整理專案文檔結構
+- 測試結構重組 (docs/, tests/)
+
+---
+
+### v0.6.0 - 2026-01-05 - PDTool4 完整整合
 
 #### ✅ PDTool4 核心邏輯完整整合
 
@@ -1665,6 +1823,17 @@ docker-compose logs -f backend | grep ERROR
 
 ---
 
-**Last Updated**: 2026-01-05  
-**Status**: Core Architecture Complete (~80%), Production Ready Pending  
-**Latest Version**: v0.6.0 - PDTool4 Complete Integration
+**Last Updated**: 2026-01-30
+**Status**: Core Complete (75-80%), Production Ready Pending (Instrument Connection Layer & Frontend)
+**Latest Version**: v0.7.0 - DUT Communication System & Advanced Logging Integration
+
+**Key Recent Additions**:
+- ✨ DUT Communication System (~3,000 lines) - Relay control, Chassis rotation
+- ✨ 10 Instrument Drivers (~88KB) - Keysight, Keithley, ITECH, GW Instek
+- ✨ Advanced Logging v2 - Redis streaming, Request tracking
+- ✨ ProjectManage Frontend - Complete CRUD with permissions (704 lines)
+
+**Current Focus**:
+- 🔧 Instrument VISA/Serial transport layer completion
+- 🔧 TestHistory & SystemConfig frontend pages
+- 🔧 Production security hardening
