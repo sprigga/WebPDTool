@@ -337,6 +337,23 @@ async def complete_test_session(
     db.commit()
     db.refresh(session)
 
+    # 原有程式碼: 完成後不生成 CSV 報告
+    # 修改: 自動生成 CSV 報告，支援前端驅動模式
+    # 參考 test_engine.py:_finalize_test_session() 中的報告生成邏輯
+    try:
+        from app.services.report_service import report_service
+        report_path = report_service.save_session_report(session_id, db)
+        if report_path:
+            # 日誌記錄（可選）
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"CSV report generated for session {session_id}: {report_path}")
+    except Exception as report_error:
+        # 報告生成失敗不影響 session 完成，只記錄錯誤
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to generate CSV report for session {session_id}: {report_error}")
+
     return session
 
 
@@ -392,6 +409,56 @@ async def reset_instrument(
         )
 
     return session
+
+
+@router.get("/sessions/{session_id}/logs", response_model=dict)
+async def get_session_logs(
+    session_id: int,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    ✅ Added: Get real-time logs for a test session
+
+    Retrieves logs from Redis for real-time monitoring during test execution.
+    If Redis is not enabled, returns an empty list.
+
+    Args:
+        session_id: Test session ID
+        limit: Maximum number of log entries to retrieve (default: 100)
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        Dictionary with logs list and count
+    """
+    # Verify session exists
+    session = db.query(TestSessionModel).filter(TestSessionModel.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Test session not found")
+
+    # Import logging_manager (lazy import to avoid circular dependencies)
+    from app.core.logging_v2 import logging_manager
+
+    try:
+        # Get logs from Redis
+        logs = await logging_manager.get_session_logs(session_id, limit)
+        return {
+            "session_id": session_id,
+            "logs": logs,
+            "count": len(logs),
+            "source": "redis" if logs else "file"
+        }
+    except Exception as e:
+        # If Redis is not available, return empty list
+        return {
+            "session_id": session_id,
+            "logs": [],
+            "count": 0,
+            "source": "none",
+            "message": f"Log streaming not available: {str(e)}"
+        }
 
 
 @router.get("/sessions/{session_id}/results", response_model=List[TestResult])

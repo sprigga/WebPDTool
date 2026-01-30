@@ -11,6 +11,7 @@
 3. ✅ 支援所有 limit_type 和 value_type
 4. ✅ 改進錯誤處理機制
 5. ✅ 提供完整的測試覆蓋
+6. ✅ 重構 DUT 通訊功能（繼電器控制和機箱旋轉）
 
 ## 📦 提交記錄
 
@@ -215,5 +216,110 @@ if "Error: " in measured_value:
 
 ---
 
+## 📚 相關文檔索引
+
+### 重構分析文檔
+
+1. **[Polish_to_WebPDTool_Refactoring_Map.md](./Polish_to_WebPDTool_Refactoring_Map.md)** ⭐ **新增 (2026-01-30)**
+   - **完整對照分析**: Polish 模組到 WebPDTool 的詳細映射
+   - **模組層次結構**: 從 `polish/` 到 `backend/app/` 的完整對照
+   - **PDTool4 兼容性驗證**: 確認 7 種限制類型和 3 種數值類型 100% 保留
+   - **未實現功能清單**: 通訊模組、熱感打印機等硬體特定功能
+   - **架構改變分析**: 同步→異步、文件→數據庫、CLI→API
+
+2. **[PDTool4_to_WebPDTool_Gap_Analysis.md](./PDTool4_to_WebPDTool_Gap_Analysis.md)**
+   - **功能差異分析**: UseResult、SFC 整合、儀器清理等關鍵缺口
+   - **優先級評估**: 🔴 Critical / 🟡 High / 🟢 Medium / 🔵 Low
+   - **生產建議**: 4 週達到完整生產對等
+
+3. **[Backend_Frontend_Refactoring_Analysis.md](./Backend_Frontend_Refactoring_Analysis.md)**
+   - 前後端重構分析
+
+### 參考原始文檔
+
+1. **[Polish_Analysis.md](../Polish/Polish_Analysis.md)**
+   - Polish 模組完整架構分析
+
+2. **[Polish_Mfg_Common_Analysis.md](../Polish/Polish_Mfg_Common_Analysis.md)**
+   - `mfg_common/` 模組詳細分析
+
+3. **[Polish_Mfg_Config_Readers_Analysis.md](../Polish/Polish_Mfg_Config_Readers_Analysis.md)**
+   - 配置讀取模組分析
+
+---
+
+**文檔更新:** 2026-01-30
+**新增內容:**
+- Polish_to_WebPDTool_Refactoring_Map.md (完整模組對照分析)
+- 通訊模組重構 (ls_comms + VCU 基礎通訊)
+
+---
+
 *Generated: 2026-01-05*
 *Refs: Commits 1e00bf6, e0471f5, e1ee351*
+*Updated: 2026-01-30 (Added Polish refactoring analysis + DUT communication modules)*
+
+### Commit 4: DUT 通訊功能重構（2026-01-30）
+**新增文件:**
+- `backend/app/services/dut_comms/__init__.py`
+- `backend/app/services/dut_comms/relay_controller.py`
+- `backend/app/services/dut_comms/chassis_controller.py`
+- `backend/app/api/dut_control.py`
+- `backend/tests/services/test_dut_comms.py`
+- `backend/tests/services/test_measurements_integration.py`
+- `docs/refactoring/DUT_Comms_Refactoring_Complete.md`
+
+**更新文件:**
+- `backend/app/measurements/implementations.py`
+- `backend/app/main.py`
+
+**主要改進:**
+
+1. **RelayController** - 繼電器控制服務
+   - 映射 PDTool4 的 MeasureSwitchON/OFF 功能
+   - RelayState 列舉 (SWITCH_OPEN=0, SWITCH_CLOSED=1)
+   - 支援多通道控制（1-16）
+   - 狀態追蹤和查詢
+   - Singleton 模式實現
+
+2. **ChassisController** - 機箱旋轉控制服務
+   - 映射 PDTool4 的 MyThread_CW/CCW 功能
+   - RotationDirection 列舉 (CLOCKWISE=6, COUNTERCLOCKWISE=9)
+   - 非同步執行外部控制腳本
+   - 旋轉持續時間控制
+   - 超時保護機制
+
+3. **測量類別整合** - RelayMeasurement & ChassisRotationMeasurement
+   - 完整的 PDTool4 參數相容性
+   - 支援 'case' 參數（PDTool4 格式）
+   - 多重參數來源解析
+   - 錯誤處理和驗證
+
+4. **DUT Control API** - RESTful 端點
+   - `/api/dut-control/relay/*` - 繼電器控制
+   - `/api/dut-control/chassis/*` - 機箱旋轉控制
+   - 完整的請求/響應模型
+   - 用戶權限驗證
+
+5. **測試覆蓋**
+   - 17 個服務層測試 ✅
+   - 12 個測量整合測試 ✅
+   - 總計 29 個測試全部通過
+
+**PDTool4 相容性:**
+
+| PDTool4 功能 | WebPDTool 實現 | 狀態 |
+|-------------|---------------|------|
+| MeasureSwitchON | RelayMeasurement (state=ON) | ✅ 完整 |
+| MeasureSwitchOFF | RelayMeasurement (state=OFF) | ✅ 完整 |
+| MyThread_CW | ChassisRotationMeasurement (direction=CW) | ✅ 完整 |
+| MyThread_CCW | ChassisRotationMeasurement (direction=CCW) | ✅ 完整 |
+| SWITCH_OPEN=0 | RelayState.SWITCH_OPEN=0 | ✅ 完整 |
+| SWITCH_CLOSED=1 | RelayState.SWITCH_CLOSED=1 | ✅ 完整 |
+
+## 📊 完整測試統計
+
+- **Backend 測試**: 29 個測試 ✅ (DUT 通訊)
+- **Refactoring 測試**: 9 個測試類別 ✅ (測量驗證)
+- **總計**: 38+ 個測試全部通過
+

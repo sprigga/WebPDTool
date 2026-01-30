@@ -1,6 +1,31 @@
 # version: '3.8'
 
 services:
+  # ✅ Added: Redis service for real-time log streaming (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: webpdtool-redis
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Taipei
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    networks:
+      - webpdtool-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   # MySQL Database
   db:
     image: mysql:8.0
@@ -55,6 +80,11 @@ services:
 
       # CORS
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:9080,http://localhost}
+
+      # ✅ Added: Redis configuration for logging
+      REDIS_ENABLED: ${REDIS_ENABLED:-true}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_LOG_TTL: ${REDIS_LOG_TTL:-3600}
     ports:
       - "${BACKEND_PORT:-9100}:9100"
     volumes:
@@ -67,6 +97,9 @@ services:
       - webpdtool-network
     depends_on:
       db:
+        condition: service_healthy
+      # ✅ Redis is optional - backend can work without it
+      redis:
         condition: service_healthy
     healthcheck:
       # 原本: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:9100/health')"]
@@ -106,4 +139,6 @@ networks:
 
 volumes:
   mysql_data:
+    driver: local
+  redis_data:  # ✅ Added: Redis data volume
     driver: local

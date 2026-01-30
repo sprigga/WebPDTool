@@ -135,20 +135,23 @@ class ReportService:
                 return None
 
             # Get project and station names
-            project_name = session.project.name if session.project else "Unknown_Project"
-            station_name = session.station.name if session.station else "Unknown_Station"
+            # 原有程式碼: project_name = session.project.name if session.project else "Unknown_Project"
+            # 修改: TestSession 模型沒有直接的 project 關係，需要通過 station.project 訪問
+            # 修改: Project 模型使用 project_name 屬性而非 name
+            project_name = session.station.project.project_name if session.station and session.station.project else "Unknown_Project"
+            station_name = session.station.station_name if session.station else "Unknown_Station"
 
             # Determine report directory
             report_dir = self._get_report_directory(
                 project_name,
                 station_name,
-                session.started_at
+                session.start_time  # 原有程式碼: session.started_at，修改: 使用模型中的正確欄位名稱
             )
 
             # Generate filename
             filename = self._generate_filename(
                 session.serial_number,
-                session.completed_at or session.started_at
+                session.end_time or session.start_time  # 原有程式碼: session.completed_at or session.started_at
             )
 
             filepath = report_dir / filename
@@ -234,18 +237,21 @@ class ReportService:
             if not session:
                 return None
 
-            project_name = session.project.name if session.project else "Unknown_Project"
-            station_name = session.station.name if session.station else "Unknown_Station"
+            # 原有程式碼: project_name = session.project.name if session.project else "Unknown_Project"
+            # 修改: TestSession 模型沒有直接的 project 關係，需要通過 station.project 訪問
+            # 修改: Project 模型使用 project_name 屬性而非 name
+            project_name = session.station.project.project_name if session.station and session.station.project else "Unknown_Project"
+            station_name = session.station.station_name if session.station else "Unknown_Station"
 
             report_dir = self._get_report_directory(
                 project_name,
                 station_name,
-                session.started_at
+                session.start_time  # 原有程式碼: session.started_at
             )
 
             filename = self._generate_filename(
                 session.serial_number,
-                session.completed_at or session.started_at
+                session.end_time or session.start_time  # 原有程式碼: session.completed_at or session.started_at
             )
 
             filepath = report_dir / filename

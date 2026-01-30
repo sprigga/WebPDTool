@@ -384,6 +384,8 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectStore } from '@/stores/project'
+// 原有程式碼: 導入測試相關 API
+// 修改: 新增 createTestResult 和 completeTestSession API，用於保存測試結果到資料庫
 import {
   createTestSession,
   startTestExecution,
@@ -391,7 +393,9 @@ import {
   getTestSessionStatus,
   getSessionResults,
   executeSingleMeasurement,
-  resetInstrument
+  resetInstrument,
+  createTestResult,
+  completeTestSession
 } from '@/api/tests'
 import { getStationTestPlan, getStationTestPlanNames, getStationTestPlanMap } from '@/api/testplans'
 
@@ -925,6 +929,26 @@ const executeMeasurements = async () => {
       testStatus.value.status = 'COMPLETED'
       finalResult.value = 'PASS'
     }
+
+    // 新增: 方案 A - 完成測試 session
+    // 調用 completeTestSession API，更新 session 的結束時間、最終結果和統計數據
+    if (currentSession.value) {
+      try {
+        await completeTestSession(currentSession.value.id, {
+          final_result: finalResult.value,
+          total_items: testPlanItems.value.length,
+          pass_items: passCount,
+          fail_items: failCount + errorCount,  // 錯誤視為失敗
+          test_duration_seconds: Math.round(elapsedSeconds)
+        })
+        addStatusMessage('測試 session 已完成並保存', 'success')
+      } catch (completeError) {
+        console.error('Failed to complete test session:', completeError)
+        addStatusMessage(`完成 session 失敗: ${completeError.message}`, 'warning')
+        // 不影響測試流程，只記錄錯誤
+      }
+    }
+
     testCompleted.value = true
 
     // 原有程式碼: 只顯示一次測試的結果
@@ -1042,6 +1066,30 @@ const executeSingleItem = async (item, index) => {
         }
       }
       // 字串類型保持原有的 result 結果,不進行限制值檢查
+    }
+
+    // 新增: 方案 A - 保存測試結果到資料庫
+    // 在每個測項執行完畢後，立即保存結果到 test_results 表
+    if (currentSession.value && item.id) {
+      try {
+        await createTestResult(currentSession.value.id, {
+          session_id: currentSession.value.id,
+          test_plan_id: item.id,
+          item_no: item.item_no,
+          item_name: item.item_name,
+          measured_value: response.measured_value,
+          lower_limit: item.lower_limit,
+          upper_limit: item.upper_limit,
+          unit: item.unit,
+          result: result,
+          error_message: response.error_message,
+          execution_duration_ms: response.execution_duration_ms
+        })
+      } catch (saveError) {
+        // 保存失敗不影響測試流程，只記錄錯誤
+        console.error('Failed to save test result:', saveError)
+        addStatusMessage(`保存測試結果失敗: ${saveError.message}`, 'warning')
+      }
     }
 
     return {

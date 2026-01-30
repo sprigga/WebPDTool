@@ -264,3 +264,289 @@ PDTool4的測量架構採用模組化設計，通過以下機制實現靈活的�
 5. **錯誤處理** - 完整的錯誤捕捉與報告機制
 
 這種架構使得系統具有高度的可擴展性和維護性，新增測量功能只需實作對應的測量類別並在分派表中註冊即可。
+
+---
+
+# WebPDTool 重構實現狀態
+
+## 概述
+
+本節分析 WebPDTool (backend/app/) 中對 PDTool4 測量模組的重構實現狀態，特別關注 Other Measurement 相關功能。
+
+## 架構對照
+
+### PDTool4 → WebPDTool 元件映射
+
+| PDTool4 元件 | WebPDTool 元件 | 位置 |
+|-------------|----------------|------|
+| `oneCSV_atlas_2.py` | `test_engine.py` | `app/services/test_engine.py` |
+| `OtherMeasurement.py` | `implementations.py` | `app/measurements/implementations.py` |
+| Polish Framework | `BaseMeasurement` | `app/measurements/base.py` |
+| `measurement_dispatch` | `MEASUREMENT_REGISTRY` | `app/measurements/implementations.py:310` |
+
+## Other Measurement 重構狀態
+
+### 已實現功能
+
+#### 1. Wait 模式 ✅
+
+**PDTool4 實現** (`OtherMeasurement.py:34-61`):
+```python
+def measure(self):
+    if self.switch_select == 'wait':
+        # 設定時間戳記
+        TestDateTime = datetime.datetime.now(datetime.timezone.utc)
+
+        # 呼叫外部子行程
+        subprocess.check_output([
+            'python', './src/lowsheen_lib/Wait_test.py',
+            str(self.test_point_uids[0]), str(TestParams)
+        ])
+```
+
+**WebPDTool 實現** (`implementations.py:278-304`):
+```python
+class WaitMeasurement(BaseMeasurement):
+    async def execute(self) -> MeasurementResult:
+        # 支援多種參數來源: wait_msec 或 WaitmSec
+        wait_msec = (
+            get_param(self.test_params, "wait_msec", "WaitmSec") or
+            self.test_plan_item.get("wait_msec", 0)
+        )
+
+        # 參數驗證
+        if not isinstance(wait_msec, (int, float)) or wait_msec <= 0:
+            return self.create_result(
+                result="ERROR",
+                error_message=f"wait mode requires wait_msec > 0, got: {wait_msec}"
+            )
+
+        # 使用非阻塞 asyncio.sleep
+        wait_seconds = wait_msec / 1000
+        await asyncio.sleep(wait_seconds)
+
+        return self.create_result(result="PASS", measured_value=Decimal("1.0"))
+```
+
+**改進點**:
+- ✅ 從同步 `subprocess` 改為非阻塞 `asyncio.sleep`
+- ✅ 移除外部依賴 `Wait_test.py`
+- ✅ 統一錯誤處理機制
+
+#### 2. Registry 映射 ✅
+
+**位置**: `implementations.py:310-331`
+
+```python
+MEASUREMENT_REGISTRY = {
+    "DUMMY": DummyMeasurement,
+    "COMMAND_TEST": CommandTestMeasurement,
+    "POWER_READ": PowerReadMeasurement,
+    "POWER_SET": PowerSetMeasurement,
+    "SFC_TEST": SFCMeasurement,
+    "GET_SN": GetSNMeasurement,
+    "OP_JUDGE": OPJudgeMeasurement,
+    "WAIT": WaitMeasurement,          # wait 模式
+    "OTHER": DummyMeasurement,        # Other 映射至 Dummy
+    "FINAL": DummyMeasurement,
+    # 小寫變體
+    "wait": WaitMeasurement,
+    "other": DummyMeasurement,
+}
+```
+
+### 未實現功能
+
+#### 1. MeasureSwitchON/OFF 繼電器控制 ❌
+
+**PDTool4 原始功能**:
+```python
+class MeasureSwitchON(OtherMeasurement):
+    def __init__(self, ...):
+        self.relay_state = SWITCH_OPEN  # 0
+
+class MeasureSwitchOFF(OtherMeasurement):
+    def __init__(self, ...):
+        self.relay_state = SWITCH_CLOSED  # 1
+```
+
+**WebPDTool 狀態**: 未實現
+
+**建議實現**:
+```python
+class RelayMeasurement(BaseMeasurement):
+    async def execute(self) -> MeasurementResult:
+        relay_state = get_param(self.test_params, "relay_state", "case")
+        # 繼電器控制邏輯
+        # ...
+```
+
+#### 2. 機箱底座旋轉控制 (QThread) ❌
+
+**PDTool4 原始功能** (`OtherMeasurement.py:81-98`):
+```python
+class MyThread_CW(QThread):
+    def run(self):
+        subprocess.check_output([
+            'python', './chassis_comms/chassis_fixture_bat.py',
+            '/dev/ttyACM0', '6', '1'  # 6=順時針, 1=指令
+        ])
+
+class MyThread_CCW(QThread):
+    def run(self):
+        subprocess.check_output([
+            'python', './chassis_comms/chassis_fixture_bat.py',
+            '/dev/ttyACM0', '9', '1'  # 9=逆時針, 1=指令
+        ])
+```
+
+**WebPDTool 狀態**: 未實現
+
+**建議實現**:
+```python
+class ChassisMeasurement(BaseMeasurement):
+    async def execute(self) -> MeasurementResult:
+        direction = get_param(self.test_params, "direction")  # CW/CCW
+        # 非同步硬體控制
+        process = await asyncio.create_subprocess_exec(
+            'python', './chassis_comms/chassis_fixture_bat.py',
+            '/dev/ttyACM0', '6' if direction == 'CW' else '9', '1'
+        )
+        await process.wait()
+```
+
+## 測量分派機制對照
+
+### PDTool4 分派方式
+
+```python
+# oneCSV_atlas_2.py
+if exec_name == 'Other':
+    measurement_instance = OtherMeasurement.MeasureSwitchON(
+        meas_assets, str(uid),
+        switch=case,              # 決定行為模式
+        runAllTest=runAllTest,
+        TestParams=TestParams,
+        test_results=test_results
+    )
+```
+
+### WebPDTool 分派方式
+
+```python
+# measurement_service.py
+test_command = test_plan_item.test_type
+measurement_class = get_measurement_class(test_command)
+
+measurement_instance = measurement_class(
+    test_plan_item=test_plan_item,
+    test_session_id=test_session_id,
+    test_params=test_params,
+    instrument_manager=instrument_manager
+)
+
+await measurement_instance.execute()
+```
+
+## PDTool4 相容性驗證
+
+### 驗證邏輯實現
+
+**WebPDTool** 完整實現 PDTool4 的驗證邏輯:
+
+```python
+# base.py: validate_result()
+def validate_result(self, measured_value, lower_limit, upper_limit,
+                   limit_type='both', value_type='float') -> Tuple[bool, str]:
+    """
+    7 種 limit_type: lower, upper, both, equality, inequality, partial, none
+    3 種 value_type: string, integer, float
+    """
+```
+
+### runAllTest 模式
+
+**PDTool4 行為**: 失敗後繼續執行，收集所有錯誤
+
+**WebPDTool 實現**:
+```python
+# measurement_service.py
+if run_all_test:
+    # 失敗不中斷，繼續執行
+    test_results.append({
+        "test_item_id": test_item_id,
+        "status": "FAIL",
+        "error": error_message
+    })
+else:
+    # 失敗立即停止
+    raise TestExecutionException(error_message)
+```
+
+## 總結對照表
+
+| 功能類別 | PDTool4 | WebPDTool | 狀態 |
+|---------|---------|-----------|------|
+| **Wait 模式** | `OtherMeasurement.measure()` (wait) | `WaitMeasurement.execute()` | ✅ 完整 |
+| **參數解析** | `TestParams['WaitmSec']` | `get_param(test_params, "wait_msec", "WaitmSec")` | ✅ 相容 |
+| **非阻塞等待** | `subprocess` 外部呼叫 | `asyncio.sleep` 內建 | ✅ 改進 |
+| **繼電器控制** | `MeasureSwitchON/OFF` | - | ❌ 待實現 |
+| **機箱旋轉** | `MyThread_CW/CCW` | - | ❌ 待實現 |
+| **CSV 驅動** | `oneCSV_atlas_2.py` | `test_engine.py` + CSV import | ✅ 完整 |
+| **動態分派** | `measurement_dispatch` dict | `MEASUREMENT_REGISTRY` | ✅ 完整 |
+| **測試點驗證** | `test_point.execute()` | `validate_result()` | ✅ 完整 |
+| **7種 limit_type** | Polish framework | `BaseMeasurement.validate_result()` | ✅ 完整 |
+| **runAllTest 模式** | `runAllTest` 參數 | `run_all_test` 參數 | ✅ 完整 |
+
+## 後續實現建議
+
+### 1. 繼電器控制實現
+
+在 `implementations.py` 中新增:
+
+```python
+class RelayMeasurement(BaseMeasurement):
+    """繼電器狀態控制測量"""
+
+    async def execute(self) -> MeasurementResult:
+        relay_state = get_param(self.test_params, "relay_state", "case")
+
+        if relay_state in ["ON", "0", "SWITCH_OPEN"]:
+            # 開啟繼電器邏輯
+            pass
+        elif relay_state in ["OFF", "1", "SWITCH_CLOSED"]:
+            # 關閉繼電器邏輯
+            pass
+
+        return self.create_result(result="PASS")
+```
+
+### 2. 註冊到 Registry
+
+```python
+MEASUREMENT_REGISTRY = {
+    # ...
+    "RELAY": RelayMeasurement,
+    "relay": RelayMeasurement,
+}
+```
+
+### 3. 更新 command_map
+
+```python
+command_map = {
+    # ...
+    "MeasureSwitchON": "RELAY",
+    "MeasureSwitchOFF": "RELAY",
+}
+```
+
+## 架構演進洞察
+
+`★ Insight ─────────────────────────────────────`
+1. **同步到非同步架構**: PDTool4 使用同步 subprocess 呼叫外部腳本，WebPDTool 採用 FastAPI 非同步架構，使用 asyncio.sleep 取代外部 Wait_test.py，這是現代 Python 應用的標準演進模式。
+
+2. **統一抽象層**: PDTool4 各測量模組直接繼承自 Polish.Measurement，WebPDTool 建立 BaseMeasurement 統一接口，支援 prepare/execute/cleanup 三階段生命週期，並集中實現 PDTool4 相容的驗證邏輯。
+
+3. **去外部化設計**: PDTool4 依賴多個外部 Python 腳本 (Wait_test.py, chassis_fixture_bat.py)，WebPDTool 將核心功能內建於 implementations.py，降低維護複雜度並提升部署便利性。
+`─────────────────────────────────────────────────`

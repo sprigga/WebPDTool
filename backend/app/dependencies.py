@@ -1,13 +1,34 @@
 """Dependency injection functions"""
 
 from typing import Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import decode_access_token
 
 security = HTTPBearer()
+
+
+async def set_user_context(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    """
+    ✅ Added: Set user context for logging
+    Extracts user_id from JWT token and stores in request.state
+    This enables automatic user tracking in all logs
+    """
+    token = credentials.credentials
+    payload = decode_access_token(token)
+
+    if payload:
+        user_id = payload.get("id")
+        if user_id:
+            request.state.user_id = user_id
+
+    return payload  # Return payload for potential use
 
 
 async def get_current_user(

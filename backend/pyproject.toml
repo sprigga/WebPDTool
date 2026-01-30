@@ -17,6 +17,9 @@ dependencies = [
     "email-validator>=2.0.0",
     "alembic>=1.12.0",
     "python-dotenv>=1.0.0",
+    "pyserial>=3.5",
+    "pyserial-asyncio>=0.6",
+    "redis>=5.0.0",  # ✅ Added: Redis for real-time log streaming (optional)
 ]
 
 [project.optional-dependencies]

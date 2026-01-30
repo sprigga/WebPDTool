@@ -49,6 +49,15 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 9100
 
+    # ✅ Added: Logging Configuration
+    LOG_LEVEL: str = "INFO"
+    ENABLE_JSON_LOGS: bool = False
+
+    # ✅ Added: Redis Configuration (Optional) for real-time log streaming
+    REDIS_ENABLED: bool = False
+    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_LOG_TTL: int = 3600  # 1 hour
+
     # Model config for Pydantic v2
     model_config = {"env_file": ".env", "case_sensitive": True, "extra": "ignore"}
 

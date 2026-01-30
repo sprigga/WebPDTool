@@ -51,12 +51,39 @@ if [ ! -z "$VIRTUAL_ENV" ]; then
     unset VIRTUAL_ENV
 fi
 
+# 檢查虛擬環境所有者，如果屬於 root 則修復權限
+# 這解決了 Ctrl+C 中斷後或之前用 sudo 執行造成的權限問題
+VENV_PATH="./.venv"
+if [ -d "$VENV_PATH" ]; then
+    VENV_OWNER=$(stat -c "%U" "$VENV_PATH" 2>/dev/null || echo "unknown")
+    CURRENT_USER=$(whoami)
+
+    if [ "$VENV_OWNER" != "$CURRENT_USER" ]; then
+        echo -e "${YELLOW}警告: 虛擬環境所有者為 ${VENV_OWNER}，當前用戶為 ${CURRENT_USER}${NC}"
+        echo -e "${YELLOW}這會導致 uv sync 權限錯誤${NC}"
+        echo ""
+        echo -e "${GREEN}正在嘗試自動修復權限...${NC}"
+        echo -e "${YELLOW}請輸入 sudo 密碼以修復權限${NC}"
+
+        # 嘗試使用 sudo 修復權限
+        if sudo chown -R "${CURRENT_USER}:${CURRENT_USER}" "$VENV_PATH" 2>/dev/null; then
+            echo -e "${GREEN}✓ 權限修復成功${NC}"
+        else
+            echo -e "${RED}✗ 無法自動修復權限${NC}"
+            echo -e "${YELLOW}請手動執行以下命令後重試:${NC}"
+            echo -e "  ${YELLOW}sudo chown -R ${CURRENT_USER}: ${VENV_PATH}${NC}"
+            echo -e "  ${YELLOW}或刪除虛擬環境讓腳本重建:${NC}"
+            echo -e "  ${YELLOW}sudo rm -rf ${VENV_PATH}${NC}"
+            exit 1
+        fi
+    fi
+fi
+
 # 安裝/更新依賴
 echo -e "${YELLOW}檢查並安裝依賴...${NC}"
 uv sync
 
 # 驗證虛擬環境位置
-VENV_PATH="./.venv"
 if [ ! -d "$VENV_PATH" ]; then
     echo -e "${RED}錯誤: 虛擬環境未建立於 ${VENV_PATH}${NC}"
     exit 1

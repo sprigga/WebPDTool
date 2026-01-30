@@ -305,6 +305,132 @@ class WaitMeasurement(BaseMeasurement):
 
 
 # ============================================================================
+# Relay Control Measurement
+# ============================================================================
+class RelayMeasurement(BaseMeasurement):
+    """
+    Controls relay switching for DUT testing.
+    Maps to PDTool4's MeasureSwitchON/OFF functionality.
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            from app.services.dut_comms import get_relay_controller, RelayState
+
+            # Get relay parameters
+            relay_state = get_param(self.test_params, "relay_state", "case", "switch")
+            channel = get_param(self.test_params, "channel", default=1)
+            device_path = get_param(self.test_params, "device_path", default="/dev/ttyUSB0")
+
+            # Normalize state parameter
+            if isinstance(relay_state, str):
+                relay_state = relay_state.upper()
+
+            # Map state to RelayState enum
+            if relay_state in ["ON", "OPEN", "0", "SWITCH_OPEN"]:
+                target_state = RelayState.SWITCH_OPEN
+            elif relay_state in ["OFF", "CLOSED", "1", "SWITCH_CLOSED"]:
+                target_state = RelayState.SWITCH_CLOSED
+            else:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Invalid relay_state: {relay_state}. Expected ON/OFF or OPEN/CLOSED"
+                )
+
+            # Get relay controller
+            relay_controller = get_relay_controller(device_path=device_path)
+
+            # Set relay state
+            state_name = "ON" if target_state == RelayState.SWITCH_OPEN else "OFF"
+            self.logger.info(f"Setting relay channel {channel} to {state_name}")
+
+            success = await relay_controller.set_relay_state(target_state, channel)
+
+            if not success:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Failed to set relay to {state_name}"
+                )
+
+            return self.create_result(
+                result="PASS",
+                measured_value=Decimal(str(target_state))
+            )
+
+        except Exception as e:
+            self.logger.error(f"Relay measurement error: {e}", exc_info=True)
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+# ============================================================================
+# Chassis Rotation Measurement
+# ============================================================================
+class ChassisRotationMeasurement(BaseMeasurement):
+    """
+    Controls chassis fixture rotation for DUT positioning.
+    Maps to PDTool4's MyThread_CW/CCW functionality.
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            from app.services.dut_comms import get_chassis_controller, RotationDirection
+
+            # Get rotation parameters
+            direction = get_param(self.test_params, "direction", "case")
+            duration_ms = get_param(self.test_params, "duration_ms", "duration")
+            device_path = get_param(self.test_params, "device_path", default="/dev/ttyACM0")
+
+            # Normalize direction parameter
+            if isinstance(direction, str):
+                direction = direction.upper()
+
+            # Map direction to RotationDirection enum
+            if direction in ["CW", "CLOCKWISE", "6"]:
+                target_direction = RotationDirection.CLOCKWISE
+            elif direction in ["CCW", "COUNTERCLOCKWISE", "9"]:
+                target_direction = RotationDirection.COUNTERCLOCKWISE
+            else:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Invalid direction: {direction}. Expected CW/CCW or CLOCKWISE/COUNTERCLOCKWISE"
+                )
+
+            # Convert duration to int if provided
+            if duration_ms and isinstance(duration_ms, str):
+                try:
+                    duration_ms = int(duration_ms)
+                except ValueError:
+                    duration_ms = None
+
+            # Get chassis controller
+            chassis_controller = get_chassis_controller(
+                device_path=device_path,
+                config=self.config
+            )
+
+            # Execute rotation
+            direction_name = "CLOCKWISE" if target_direction == RotationDirection.CLOCKWISE else "COUNTERCLOCKWISE"
+            self.logger.info(f"Rotating chassis {direction_name}")
+
+            success = await chassis_controller.rotate(target_direction, duration_ms)
+
+            if not success:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Failed to rotate chassis {direction_name}"
+                )
+
+            return self.create_result(
+                result="PASS",
+                measured_value=Decimal(str(target_direction))
+            )
+
+        except Exception as e:
+            self.logger.error(f"Chassis rotation measurement error: {e}", exc_info=True)
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+# ============================================================================
 # Measurement Registry
 # ============================================================================
 MEASUREMENT_REGISTRY = {
@@ -316,11 +442,15 @@ MEASUREMENT_REGISTRY = {
     "GET_SN": GetSNMeasurement,
     "OP_JUDGE": OPJudgeMeasurement,
     "WAIT": WaitMeasurement,
+    "RELAY": RelayMeasurement,
+    "CHASSIS_ROTATION": ChassisRotationMeasurement,
     "OTHER": DummyMeasurement,
     "FINAL": DummyMeasurement,
     # Lowercase variants
     "command": CommandTestMeasurement,
     "wait": WaitMeasurement,
+    "relay": RelayMeasurement,
+    "chassis_rotation": ChassisRotationMeasurement,
     "other": DummyMeasurement,
     # Case type mappings
     "console": CommandTestMeasurement,
@@ -351,6 +481,10 @@ def get_measurement_class(test_command: str) -> Optional[type]:
         "CommandTest": "COMMAND_TEST",
         "PowerRead": "POWER_READ",
         "PowerSet": "POWER_SET",
+        "MeasureSwitchON": "RELAY",      # PDTool4 relay ON mapping
+        "MeasureSwitchOFF": "RELAY",     # PDTool4 relay OFF mapping
+        "ChassisRotateCW": "CHASSIS_ROTATION",   # PDTool4 clockwise rotation
+        "ChassisRotateCCW": "CHASSIS_ROTATION",  # PDTool4 counterclockwise rotation
         "console": "console",
         "comport": "comport",
         "tcpip": "tcpip",
@@ -358,6 +492,8 @@ def get_measurement_class(test_command: str) -> Optional[type]:
         "webStep1_2": "webStep1_2",
         "command": "command",
         "wait": "wait",
+        "relay": "relay",
+        "chassis_rotation": "chassis_rotation",
         "other": "other",
     }
 
