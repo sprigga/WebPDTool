@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
+from app.core.api_helpers import PermissionChecker
+from app.core.constants import ErrorMessages
 from app.schemas.project import (
     Project,
     ProjectCreate,
@@ -18,7 +20,9 @@ router = APIRouter()
 
 @router.get("", response_model=List[Project])
 async def get_projects(
-    skip: int = 0,
+    # Original code: skip parameter (inconsistent with tests.py)
+    # Modified: Renamed to offset for API consistency across all endpoints
+    offset: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -27,7 +31,7 @@ async def get_projects(
     Get list of all projects
 
     Args:
-        skip: Number of records to skip (pagination)
+        offset: Number of records to skip (pagination)
         limit: Maximum number of records to return
         db: Database session
         current_user: Current authenticated user
@@ -35,7 +39,7 @@ async def get_projects(
     Returns:
         List of projects
     """
-    projects = db.query(ProjectModel).offset(skip).limit(limit).all()
+    projects = db.query(ProjectModel).offset(offset).limit(limit).all()
     return projects
 
 
@@ -58,7 +62,10 @@ async def get_project(
     """
     project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        # Original code: Raw string
+        # raise HTTPException(status_code=404, detail="Project not found")
+        # Refactored: Use ErrorMessages constant
+        raise HTTPException(status_code=404, detail=ErrorMessages.PROJECT_NOT_FOUND)
 
     return project
 
@@ -80,12 +87,14 @@ async def create_project(
     Returns:
         Created project
     """
-    # Check if user is admin
-    if current_user.get("role") != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can create projects"
-        )
+    # Original code: Direct string comparison
+    # if current_user.get("role") != "admin":
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Only administrators can create projects"
+    #     )
+    # Refactored: Use PermissionChecker helper
+    PermissionChecker.check_admin(current_user, "create projects")
 
     # Check if project code already exists
     existing_project = db.query(ProjectModel).filter(
@@ -98,7 +107,10 @@ async def create_project(
         )
 
     # Create new project
-    db_project = ProjectModel(**project.dict())
+    # Original code: Pydantic v1 syntax
+    # db_project = ProjectModel(**project.dict())
+    # Refactored: Pydantic v2 syntax
+    db_project = ProjectModel(**project.model_dump())
     db.add(db_project)
     db.commit()
     db.refresh(db_project)
@@ -125,20 +137,28 @@ async def update_project(
     Returns:
         Updated project
     """
-    # Check if user is admin
-    if current_user.get("role") != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can update projects"
-        )
+    # Original code: Direct string comparison
+    # if current_user.get("role") != "admin":
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Only administrators can update projects"
+    #     )
+    # Refactored: Use PermissionChecker helper
+    PermissionChecker.check_admin(current_user, "update projects")
 
     # Get existing project
     db_project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
     if not db_project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        # Original code: Raw string
+        # raise HTTPException(status_code=404, detail="Project not found")
+        # Refactored: Use ErrorMessages constant
+        raise HTTPException(status_code=404, detail=ErrorMessages.PROJECT_NOT_FOUND)
 
     # Update project fields
-    update_data = project.dict(exclude_unset=True)
+    # Original code: Pydantic v1 syntax
+    # update_data = project.dict(exclude_unset=True)
+    # Refactored: Pydantic v2 syntax
+    update_data = project.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_project, key, value)
 
@@ -162,17 +182,22 @@ async def delete_project(
         db: Database session
         current_user: Current authenticated user
     """
-    # Check if user is admin
-    if current_user.get("role") != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can delete projects"
-        )
+    # Original code: Direct string comparison
+    # if current_user.get("role") != "admin":
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Only administrators can delete projects"
+    #     )
+    # Refactored: Use PermissionChecker helper
+    PermissionChecker.check_admin(current_user, "delete projects")
 
     # Get existing project
     db_project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
     if not db_project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        # Original code: Raw string
+        # raise HTTPException(status_code=404, detail="Project not found")
+        # Refactored: Use ErrorMessages constant
+        raise HTTPException(status_code=404, detail=ErrorMessages.PROJECT_NOT_FOUND)
 
     # Delete project (cascade will delete stations)
     db.delete(db_project)

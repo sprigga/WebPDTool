@@ -49,6 +49,17 @@ class SessionStatus:
     PASSED = "PASSED"
 
 
+# Valid session statuses for query parameter validation
+VALID_SESSION_STATUSES: List[str] = [
+    SessionStatus.RUNNING,
+    SessionStatus.COMPLETED,
+    SessionStatus.STOPPED,
+    SessionStatus.FAILED,
+    SessionStatus.ERROR,
+    SessionStatus.PASSED
+]
+
+
 # =============================================================================
 # Run All Test Mode (PDTool4)
 # =============================================================================
@@ -173,3 +184,13 @@ class HttpStatus:
     FORBIDDEN = 403
     NOT_FOUND = 404
     INTERNAL_SERVER_ERROR = 500
+
+
+# =============================================================================
+# Time Conversion Constants
+# =============================================================================
+
+class TimeConstants:
+    """Time conversion constants"""
+    MS_PER_SECOND = 1000  # Milliseconds per second
+    DEFAULT_DECIMAL_PLACES = 3  # Default decimal places for time conversion

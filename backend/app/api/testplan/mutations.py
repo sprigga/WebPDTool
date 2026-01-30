@@ -26,8 +26,10 @@ from app.schemas.testplan import (
 )
 from app.services.test_plan_service import test_plan_service
 from app.utils.csv_parser import TestPlanCSVParser, CSVParseError
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/stations/{station_id}/testplan/upload", response_model=TestPlanUploadResponse)
@@ -62,10 +64,12 @@ async def upload_testplan_csv(
     # Refactored: Use get_entity_or_404 helper
     station = get_entity_or_404(db, Station, station_id)
 
-    # Validate file type
-    if not file.filename.endswith('.csv'):
+    # Original: if not file.filename.endswith('.csv'):
+    # Modified: Use lower() for case-insensitive file type checking
+    # Validate file type (case-insensitive)
+    if not file.filename.lower().endswith('.csv'):
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=ErrorMessages.INVALID_FILE_TYPE
         )
 
@@ -88,7 +92,7 @@ async def upload_testplan_csv(
 
         for plan_dict in test_plan_dicts:
             try:
-                # 使用 TestPlanService 建立測試計畫項目
+                # Use TestPlanService to create test plan item
                 test_plan_data = {
                     **plan_dict,
                     'project_id': project_id,
@@ -111,13 +115,13 @@ async def upload_testplan_csv(
         )
 
     except CSVParseError as e:
-        raise HTTPException(status_code=400, detail=f"CSV parsing error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"CSV parsing error: {str(e)}")
     except Exception as e:
         db.rollback()
-        import traceback
-        error_traceback = traceback.format_exc()
-        print(f"Upload error traceback:\n{error_traceback}")
-        raise HTTPException(status_code=500, detail=f"Error uploading test plan: {str(e)}")
+        # Original code: print(f"Upload error traceback:\n{error_traceback}")
+        # Modified: Use logger for production-grade error logging with exc_info=True
+        logger.error(f"Upload error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error uploading test plan: {str(e)}")
 
 
 @router.post("/testplans", response_model=TestPlanSchema, status_code=status.HTTP_201_CREATED)
@@ -129,7 +133,7 @@ async def create_testplan_item(
     """
     Create a single test plan item
 
-    使用 TestPlanService.create_test_plan()
+    Uses TestPlanService.create_test_plan()
 
     Args:
         testplan: Test plan item data
@@ -152,10 +156,10 @@ async def create_testplan_item(
         )
         return db_testplan
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create test plan item: {str(e)}"
         )
 
@@ -169,18 +173,18 @@ async def get_testplan_item(
     """
     Get a specific test plan item by ID
 
-    使用 TestPlanService.get_test_plan_by_id()
+    Uses TestPlanService.get_test_plan_by_id()
     """
     try:
         testplan = test_plan_service.get_test_plan_by_id(db, testplan_id)
         if not testplan:
-            raise HTTPException(status_code=404, detail="Test plan item not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test plan item not found")
         return testplan
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get test plan item: {str(e)}"
         )
 
@@ -195,7 +199,7 @@ async def update_testplan_item(
     """
     Update a test plan item
 
-    使用 TestPlanService.update_test_plan()
+    Uses TestPlanService.update_test_plan()
 
     Args:
         testplan_id: Test plan item ID
@@ -209,7 +213,7 @@ async def update_testplan_item(
     PermissionChecker.check_admin_or_engineer(current_user, "update test plan items")
 
     try:
-        # 使用 TestPlanService 更新測試計畫項目
+        # Use TestPlanService to update test plan item
         update_data = testplan_update.dict(exclude_unset=True)
         db_testplan = test_plan_service.update_test_plan(
             db=db,
@@ -218,14 +222,14 @@ async def update_testplan_item(
         )
 
         if not db_testplan:
-            raise HTTPException(status_code=404, detail="Test plan item not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test plan item not found")
 
         return db_testplan
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update test plan item: {str(e)}"
         )
 
@@ -239,7 +243,7 @@ async def delete_testplan_item(
     """
     Delete a test plan item
 
-    使用 TestPlanService.delete_test_plan()
+    Uses TestPlanService.delete_test_plan()
 
     Args:
         testplan_id: Test plan item ID
@@ -249,15 +253,15 @@ async def delete_testplan_item(
     PermissionChecker.check_admin(current_user, "delete test plan items")
 
     try:
-        # 使用 TestPlanService 刪除測試計畫項目
+        # Use TestPlanService to delete test plan item
         success = test_plan_service.delete_test_plan(db, testplan_id)
         if not success:
-            raise HTTPException(status_code=404, detail="Test plan item not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test plan item not found")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete test plan item: {str(e)}"
         )
 
@@ -271,7 +275,7 @@ async def bulk_delete_testplan_items(
     """
     Bulk delete test plan items
 
-    使用 TestPlanService.bulk_delete_test_plans()
+    Uses TestPlanService.bulk_delete_test_plans()
 
     Args:
         delete_request: List of test plan IDs to delete
@@ -281,14 +285,14 @@ async def bulk_delete_testplan_items(
     PermissionChecker.check_admin(current_user, "delete test plan items")
 
     try:
-        # 使用 TestPlanService 批次刪除測試計畫項目
+        # Use TestPlanService to batch delete test plan items
         deleted_count = test_plan_service.bulk_delete_test_plans(
             db=db,
             test_plan_ids=delete_request.test_plan_ids
         )
     except Exception as e:
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to bulk delete test plan items: {str(e)}"
         )
 
@@ -302,7 +306,7 @@ async def reorder_testplan_items(
     """
     Reorder test plan items
 
-    使用 TestPlanService.reorder_test_plans()
+    Uses TestPlanService.reorder_test_plans()
 
     Args:
         reorder_request: Mapping of test plan ID to new sequence order
@@ -315,7 +319,7 @@ async def reorder_testplan_items(
     PermissionChecker.check_admin_or_engineer(current_user, "reorder test plan items")
 
     try:
-        # 使用 TestPlanService 重新排序測試計畫項目
+        # Use TestPlanService to reorder test plan items
         updated_count = test_plan_service.reorder_test_plans(
             db=db,
             item_orders=reorder_request.item_orders
@@ -327,6 +331,6 @@ async def reorder_testplan_items(
         }
     except Exception as e:
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reorder test plan items: {str(e)}"
         )

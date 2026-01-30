@@ -2,12 +2,14 @@
 DUT Control API
 Endpoints for controlling Device Under Test hardware (relay, chassis rotation)
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
 import logging
 
-from app.dependencies import get_current_user
+# 原有程式碼: from app.dependencies import get_current_active_user
+# 修改: 使用 get_current_active_user 以確保只有活躍用戶能控制 DUT 硬體
+from app.dependencies import get_current_active_user
 from app.services.dut_comms import (
     get_relay_controller,
     get_chassis_controller,
@@ -70,7 +72,7 @@ class ControlResponse(BaseModel):
 @router.post("/relay/set", response_model=ControlResponse)
 async def set_relay_state(
     request: RelayControlRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_active_user)
 ):
     """
     Set relay to specified state.
@@ -105,8 +107,10 @@ async def set_relay_state(
         success = await relay_controller.set_relay_state(target_state, request.channel)
 
         if not success:
+            # Original code: status_code=500 (raw integer)
+            # Modified: Use status.HTTP_500_INTERNAL_SERVER_ERROR constant for consistency
             raise HTTPException(
-                status_code=500,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to set relay channel {request.channel} to {state_name}"
             )
 
@@ -116,19 +120,19 @@ async def set_relay_state(
             current_state=state_name
         )
 
-    except HTTPException:
-        raise
+    # Original code: except HTTPException: raise (redundant catch-and-re-raise)
+    # Modified: Removed redundant handler - HTTPException propagates naturally
     except Exception as e:
         logger.error(f"Relay control error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/relay/on", response_model=ControlResponse)
 async def switch_relay_on(
     channel: int = 1,
     device_path: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
+    current_user: dict = Depends(get_current_active_user)
+) -> ControlResponse:
     """
     Switch relay ON (OPEN state).
 
@@ -150,8 +154,8 @@ async def switch_relay_on(
 async def switch_relay_off(
     channel: int = 1,
     device_path: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
+    current_user: dict = Depends(get_current_active_user)
+) -> ControlResponse:
     """
     Switch relay OFF (CLOSED state).
 
@@ -172,8 +176,8 @@ async def switch_relay_off(
 @router.get("/relay/status", response_model=ControlResponse)
 async def get_relay_status(
     device_path: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
+    current_user: dict = Depends(get_current_active_user)
+) -> ControlResponse:
     """
     Get current relay status.
 
@@ -203,7 +207,7 @@ async def get_relay_status(
 
     except Exception as e:
         logger.error(f"Error getting relay status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 # ============================================================================
@@ -212,7 +216,7 @@ async def get_relay_status(
 @router.post("/chassis/rotate", response_model=ControlResponse)
 async def rotate_chassis(
     request: ChassisRotationRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_active_user)
 ):
     """
     Rotate chassis fixture in specified direction.
@@ -261,19 +265,19 @@ async def rotate_chassis(
             current_state=direction_name
         )
 
-    except HTTPException:
-        raise
+    # Original code: except HTTPException: raise (redundant catch-and-re-raise)
+    # Modified: Removed redundant handler - HTTPException propagates naturally
     except Exception as e:
         logger.error(f"Chassis rotation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/chassis/rotate-cw", response_model=ControlResponse)
 async def rotate_chassis_clockwise(
     duration_ms: Optional[int] = None,
     device_path: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
+    current_user: dict = Depends(get_current_active_user)
+) -> ControlResponse:
     """
     Rotate chassis clockwise.
 
@@ -299,8 +303,8 @@ async def rotate_chassis_clockwise(
 async def rotate_chassis_counterclockwise(
     duration_ms: Optional[int] = None,
     device_path: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
+    current_user: dict = Depends(get_current_active_user)
+) -> ControlResponse:
     """
     Rotate chassis counterclockwise.
 
@@ -325,8 +329,8 @@ async def rotate_chassis_counterclockwise(
 @router.post("/chassis/stop", response_model=ControlResponse)
 async def stop_chassis_rotation(
     device_path: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
+    current_user: dict = Depends(get_current_active_user)
+) -> ControlResponse:
     """
     Stop chassis rotation.
 
@@ -345,7 +349,7 @@ async def stop_chassis_rotation(
         success = await chassis_controller.stop_rotation()
 
         if not success:
-            raise HTTPException(status_code=500, detail="Failed to stop chassis rotation")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to stop chassis rotation")
 
         return ControlResponse(
             success=True,
@@ -353,18 +357,18 @@ async def stop_chassis_rotation(
             current_state="STOPPED"
         )
 
-    except HTTPException:
-        raise
+    # Original code: except HTTPException: raise (redundant catch-and-re-raise)
+    # Modified: Removed redundant handler - HTTPException propagates naturally
     except Exception as e:
         logger.error(f"Error stopping chassis: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/chassis/status", response_model=ControlResponse)
 async def get_chassis_status(
     device_path: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
+    current_user: dict = Depends(get_current_active_user)
+) -> ControlResponse:
     """
     Get chassis rotation status.
 
@@ -387,4 +391,4 @@ async def get_chassis_status(
 
     except Exception as e:
         logger.error(f"Error getting chassis status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

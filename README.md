@@ -96,338 +96,363 @@ WebPDTool 是一個 Web 化的產品測試系統，用於執行自動化測試�
 
 ### 整體系統架構圖
 
-```plantuml
-@startuml
-!theme plain
-skinparam componentStyle rectangle
+```mermaid
+graph TB
+    %% 客戶端層
+    subgraph Client["🌐 客戶端"]
+        Browser["瀏覽器"]
+    end
 
-package "客戶端 Client" #e1f5ff {
-    [瀏覽器\nBrowser] as Browser
-}
+    %% 前端容器
+    subgraph Frontend["🟢 前端容器<br/>(Port 9080)"]
+        Nginx["⚙️ Nginx<br/>反向代理"]
+        Vue["Vue 3 應用<br/>Element Plus<br/>Pinia/Router"]
+    end
 
-package "Docker 容器環境" #fff4e6 {
-    package "前端容器 (Port 9080)" #e8f5e9 {
-        [Nginx\n反向代理] as Nginx
-        [Vue 3 應用\nElement Plus UI\nPinia Store\nVue Router] as Vue
-    }
-    
-    package "後端容器 (Port 9100)" #f3e5f5 {
-        [FastAPI\nPython 3.11+] as FastAPI
-        
-        package "API 層" {
-            [Auth API\n認證] as AuthAPI
-            [Projects API\n專案管理] as ProjectsAPI
-            [Stations API\n站別管理] as StationsAPI
-            [Test Plans API\n測試計劃] as TestPlansAPI
-            [Tests API\n測試執行] as TestsAPI
-            [Measurements API\n測量執行] as MeasurementsAPI
-            [Results API\n測試結果] as ResultsAPI
-        }
-        
-        package "服務層 Services" {
-            [TestEngine\n測試引擎] as TestEngine
-            [InstrumentManager\n儀器管理器] as InstrumentMgr
-            [MeasurementService\n測量服務] as MeasurementSvc
-            [SFC Service\nSFC整合] as SFCSvc
-        }
-        
-        package "測量模組 Measurements" {
-            [BaseMeasurement\n抽象基礎類別] as BaseMeasure
-            [PowerSet] as PowerSet
-            [PowerRead] as PowerRead
-            [CommandTest] as CommandTest
-            [其他測量模組] as OtherMeasure
-        }
-        
-        package "資料模型 Models\nSQLAlchemy ORM" {
-            [User] as UserModel
-            [Project] as ProjectModel
-            [Station] as StationModel
-            [TestPlan] as TestPlanModel
-            [TestSession] as TestSessionModel
-            [TestResult] as TestResultModel
-            [SFCLog] as SFCLogModel
-        }
-    }
-    
-    package "資料庫容器 (Port 33306)" #fce4ec {
-        database "MySQL 8.0+\nwebpdtool" as MySQL
-    }
-}
+    %% 後端容器
+    subgraph Backend["🚀 後端容器<br/>(Port 9100)"]
+        FastAPI["FastAPI<br/>Python 3.11+"]
 
-package "外部系統" #f5f5f5 {
-    [SFC System\n製造執行系統] as SFC
-    [Modbus\n設備通訊] as Modbus
-}
+        subgraph API["API 層<br/>(7個模組)"]
+            direction TB
+            AuthAPI["🔐 Auth API<br/>認證"]
+            ProjectsAPI["📁 Projects API<br/>專案管理"]
+            StationsAPI["🏠 Stations API<br/>站別管理"]
+            TestPlansAPI["📋 TestPlans API<br/>測試計劃"]
+            TestsAPI["▶️ Tests API<br/>測試執行"]
+            MeasurementsAPI["📊 Measurements API<br/>測量執行"]
+            ResultsAPI["📈 Results API<br/>測試結果"]
+        end
 
-' 連線關係
-Browser --> Nginx : HTTP
-Nginx --> Vue : 靜態資源
-Vue --> FastAPI : Axios\nAPI Calls
+        subgraph Services["服務層<br/>(4個)"]
+            TestEngine["⚙️ TestEngine<br/>測試引擎"]
+            InstrumentMgr["🔌 InstrumentMgr<br/>儀器管理"]
+            MeasurementSvc["📏 MeasurementSvc<br/>測量服務"]
+            SFCSvc["🔗 SFC Service<br/>SFC整合"]
+        end
 
-FastAPI --> AuthAPI
-FastAPI --> ProjectsAPI
-FastAPI --> StationsAPI
-FastAPI --> TestPlansAPI
-FastAPI --> TestsAPI
-FastAPI --> MeasurementsAPI
-FastAPI --> ResultsAPI
+        subgraph Measurements["測量模組層"]
+            BaseMeasure["📐 BaseMeasurement<br/>+ 10+ 實作類"]
+        end
 
-AuthAPI --> TestEngine
-ProjectsAPI --> TestEngine
-StationsAPI --> TestEngine
-TestPlansAPI --> TestEngine
-TestsAPI --> TestEngine
-MeasurementsAPI --> TestEngine
-ResultsAPI --> TestEngine
+        subgraph Models["資料模型層<br/>(7個表格)"]
+            ORM["💾 SQLAlchemy ORM<br/>User/Project/Station/<br/>TestPlan/Session/Result/SFC"]
+        end
+    end
 
-TestEngine --> InstrumentMgr
-TestEngine --> MeasurementSvc
-TestEngine --> SFCSvc
+    %% 資料庫容器
+    subgraph Database["🗄️ 資料庫<br/>(Port 33306)"]
+        MySQL[("MySQL 8.0+<br/>webpdtool")]
+    end
 
-MeasurementSvc --> BaseMeasure
-BaseMeasure <|-- PowerSet
-BaseMeasure <|-- PowerRead
-BaseMeasure <|-- CommandTest
-BaseMeasure <|-- OtherMeasure
+    %% 外部系統
+    subgraph External["🌍 外部系統"]
+        SFC["🏭 SFC System<br/>製造執行系統"]
+        Modbus["📡 Modbus<br/>設備通訊"]
+    end
 
-TestEngine --> UserModel
-TestEngine --> ProjectModel
-TestEngine --> StationModel
-TestEngine --> TestPlanModel
-TestEngine --> TestSessionModel
-TestEngine --> TestResultModel
-TestEngine --> SFCLogModel
+    %% 主要連線
+    Browser -->|HTTP| Nginx
+    Nginx --> Vue
+    Vue -->|Axios API| FastAPI
 
-UserModel --> MySQL : SQLAlchemy\nAsync
-ProjectModel --> MySQL
-StationModel --> MySQL
-TestPlanModel --> MySQL
-TestSessionModel --> MySQL
-TestResultModel --> MySQL
-SFCLogModel --> MySQL
+    FastAPI --> API
+    API --> Services
+    Services --> Measurements
+    Services --> Models
 
-SFCSvc ..> SFC : Web Service
-InstrumentMgr ..> Modbus : TCP/IP
+    Models -->|Async ORM| MySQL
+    SFCSvc -.->|WebService| SFC
+    InstrumentMgr -.->|TCP/IP| Modbus
 
-@enduml
+    %% 樣式定義
+    classDef clientStyle fill:#e1f5ff,stroke:#0277bd,stroke-width:2px,color:#000
+    classDef frontendStyle fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    classDef backendStyle fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#000
+    classDef dbStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000
+    classDef externalStyle fill:#f5f5f5,stroke:#616161,stroke-width:2px,color:#000
+
+    %% 字型大小設定 (18-20px)
+    style Client font-size:20px
+    style Frontend font-size:20px
+    style Backend font-size:20px
+    style Database font-size:20px
+    style External font-size:20px
+    style API font-size:18px
+    style Services font-size:18px
+    style Measurements font-size:18px
+    style Models font-size:18px
+
+    %% 節點寬度設定 (防止文字遮蔽)
+    style AuthAPI width:140px
+    style ProjectsAPI width:160px
+    style StationsAPI width:160px
+    style TestPlansAPI width:160px
+    style TestsAPI width:140px
+    style MeasurementsAPI width:170px
+    style ResultsAPI width:160px
+    style TestEngine width:150px
+    style InstrumentMgr width:170px
+    style MeasurementSvc width:170px
+    style SFCSvc width:150px
+    style BaseMeasure width:170px
+    style ORM width:200px
+
+    %% 應用樣式
+    class Browser clientStyle
+    class Nginx,Vue frontendStyle
+    class FastAPI,AuthAPI,ProjectsAPI,StationsAPI,TestPlansAPI,TestsAPI,MeasurementsAPI,ResultsAPI,TestEngine,InstrumentMgr,MeasurementSvc,SFCSvc,BaseMeasure,ORM backendStyle
+    class MySQL dbStyle
+    class SFC,Modbus externalStyle
+```
+
+> **📖 架構說明**: 主圖展示系統整體分層結構，API→Services→Models/Measurements 的詳細連線關係見下圖。
+
+### API 連線關係詳圖
+
+```mermaid
+graph LR
+    %% API → Services 連線
+    AuthAPI --> TestEngine
+    ProjectsAPI --> TestEngine
+    StationsAPI --> TestEngine
+    TestPlansAPI --> TestEngine
+    TestsAPI --> TestEngine
+    MeasurementsAPI --> MeasurementSvc
+    ResultsAPI --> TestEngine
+
+    %% Services 內部連線
+    TestEngine --> InstrumentMgr
+    TestEngine --> MeasurementSvc
+    TestEngine --> SFCSvc
+    MeasurementSvc --> BaseMeasure
+
+    %% Services → Models 連線
+    TestEngine --> ORM
+    MeasurementSvc --> ORM
+
+    %% Models → Database 連線
+    ORM --> MySQL
+
+    classDef apiStyle fill:#e1bee7,stroke:#4a148c,stroke-width:2px
+    classDef svcStyle fill:#c5cae9,stroke:#1a237e,stroke-width:2px
+    classDef modelStyle fill:#ffccbc,stroke:#bf360c,stroke-width:2px
+
+    class AuthAPI,ProjectsAPI,StationsAPI,TestPlansAPI,TestsAPI,MeasurementsAPI,ResultsAPI apiStyle
+    class TestEngine,InstrumentMgr,MeasurementSvc,SFCSvc,BaseMeasure svcStyle
+    class ORM,MySQL modelStyle
 ```
 
 ### 測試執行流程
 
-```plantuml
-@startuml
-!theme plain
-skinparam activityBackgroundColor #fff
-skinparam activityBorderColor #000
-skinparam activityStartColor #90ee90
-skinparam activityEndColor #ffcccb
-skinparam activityDiamondBackgroundColor #ffd700
-skinparam activityDiamondBorderColor #000
+```mermaid
+flowchart TD
+    Start([🟢 開始]) --> Login["👤 登入"]
+    Login --> ValidateUser{{"驗證?"}}
+    ValidateUser -->|❌| Login
+    ValidateUser -->|✅| GetToken["🔑 取得Token"]
 
-start
+    GetToken --> SelectProject["📁 選擇專案"]
+    SelectProject --> LoadConfig["⚙️ 載入設定"]
+    LoadConfig --> LoadTestPlan["📋 載入測試計劃"]
 
-:使用者登入;
+    LoadTestPlan --> InputSN["🔢 輸入SN"]
+    InputSN --> ValidateSN{{"SN有效?"}}
+    ValidateSN -->|❌| InputSN
+    ValidateSN -->|✅| CreateSession["💾 創建會話"]
 
-repeat
-    :驗證使用者;
-repeat while (驗證成功?) is (否) not (是)
+    CreateSession --> StartTest["▶️ 開始測試"]
+    StartTest --> GetNextItem["➡️ 下一項目"]
 
-:取得 JWT Token;
+    GetNextItem --> HasItem{{"還有項?"}}
+    HasItem -->|❌| CalcResult["📊 計算結果"]
+    HasItem -->|✅| LoadMeasure["📏 載入測量"]
 
-:選擇專案/站別;
-:載入站別設定;
-:載入測試計劃;
+    LoadMeasure --> Execute["⚡ 執行測量"]
+    Execute --> GetValue["📈 取得值"]
+    GetValue --> Validate["✅ 驗證限制"]
 
-repeat
-    :輸入序號 SN;
-    
-    repeat
-        :驗證序號;
-    repeat while (序號有效?) is (無效) not (有效)
-    
-    #87ceeb:創建測試會話\nTestSession;
-    
-    :開始測試;
-    
-    repeat
-        :取得下一個測試項目;
-        
-        if (還有測試項目?) then (是)
-            :載入測量模組;
-            :執行測量;
-            :取得測量值;
-            :驗證限制值\nlimit_type & value_type;
-            
-            #87ceeb:儲存測試結果\nTestResult;
-            :更新前端UI;
-            
-            if (測試失敗?) then (是且非runAllTest)
-                break
-            else (否或runAllTest模式)
-                -> 繼續;
-            endif
-        else (否)
-            break
-        endif
-    repeat while (繼續測試項目)
-    
-    :計算最終結果;
-    
-    #87ceeb:更新測試會話\nfinal_result;
-    
-    if (需要SFC上傳?) then (是)
-        :上傳結果到SFC;
-        #87ceeb:記錄SFC日誌\nSFCLog;
-    endif
-    
-    :顯示測試報告;
-    
-repeat while (繼續測試?) is (是) not (否)
+    Validate --> SaveResult["💾 儲存結果"]
+    SaveResult --> UpdateUI["🔄 更新UI"]
 
-stop
+    UpdateUI --> TestFailed{{"失敗?"}}
+    TestFailed -->|❌| CalcResult
+    TestFailed -->|✅| GetNextItem
 
-@enduml
+    CalcResult --> UpdateSession["💾 更新會話"]
+
+    UpdateSession --> NeedSFC{{"需SFC?"}}
+    NeedSFC -->|✅| UploadSFC["📤 上傳SFC"]
+    UploadSFC --> LogSFC["📝 記錄日誌"]
+    LogSFC --> ShowReport["📄 顯示報告"]
+    NeedSFC -->|❌| ShowReport
+
+    ShowReport --> ContinueTest{{"繼續?"}}
+    ContinueTest -->|✅| InputSN
+    ContinueTest -->|❌| End([🔴 結束])
+
+    %% 樣式定義
+    classDef dbOp fill:#87ceeb,stroke:#0277bd,stroke-width:2px
+    classDef dec fill:#ffd700,stroke:#f57f17,stroke-width:2px
+    classDef startN fill:#90ee90,stroke:#2e7d32,stroke-width:2px
+    classDef endN fill:#ffcccb,stroke:#c62828,stroke-width:2px
+    classDef act fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+
+    %% 字型大小 16-18px
+    style Start font-size:18px
+    style End font-size:18px
+    style Login font-size:16px,width:120px
+    style GetToken font-size:16px,width:130px
+    style SelectProject font-size:16px,width:120px
+    style LoadConfig font-size:16px,width:120px
+    style LoadTestPlan font-size:16px,width:130px
+    style InputSN font-size:16px,width:120px
+    style CreateSession font-size:16px,width:130px
+    style StartTest font-size:16px,width:120px
+    style GetNextItem font-size:16px,width:130px
+    style LoadMeasure font-size:16px,width:130px
+    style Execute font-size:16px,width:120px
+    style GetValue font-size:16px,width:120px
+    style Validate font-size:16px,width:120px
+    style SaveResult font-size:16px,width:130px
+    style UpdateUI font-size:16px,width:120px
+    style CalcResult font-size:16px,width:130px
+    style UpdateSession font-size:16px,width:130px
+    style UploadSFC font-size:16px,width:120px
+    style LogSFC font-size:16px,width:120px
+    style ShowReport font-size:16px,width:130px
+
+    %% 應用樣式
+    class CreateSession,SaveResult,UpdateSession,LogSFC dbOp
+    class ValidateUser,ValidateSN,HasItem,TestFailed,NeedSFC,ContinueTest dec
+    class Login,GetToken,SelectProject,LoadConfig,LoadTestPlan,InputSN,StartTest,GetNextItem,LoadMeasure,Execute,GetValue,Validate,UpdateUI,CalcResult,UploadSFC,ShowReport act
+    class Start startN
+    class End endN
 ```
 
 ### 資料庫關係圖
 
-```plantuml
-@startuml
-!theme plain
-skinparam linetype ortho
+```mermaid
+erDiagram
+    users ||--o{ test_sessions : "執行測試"
+    projects ||--o{ stations : "包含站別"
+    stations ||--o{ test_plans : "包含測試計劃"
+    stations ||--o{ test_sessions : "執行測試"
+    test_plans ||--o{ test_results : "產生結果"
+    test_sessions ||--|{ test_results : "包含測試結果"
+    test_sessions ||--o{ sfc_logs : "產生SFC日誌"
 
-entity "users" as users {
-  *id : int <<PK>>
-  --
-  *username : varchar(50) <<UK>> -- 使用者名稱
-  *password_hash : varchar(255) -- 密碼雜湊
-  *role : enum -- 角色 (ENGINEER/OPERATOR/ADMIN)
-  full_name : varchar(100) -- 全名
-  email : varchar(100) -- 電子郵件
-  is_active : boolean -- 啟用狀態
-  created_at : timestamp -- 建立時間
-  updated_at : timestamp -- 更新時間
-}
+    users {
+        int id PK
+        varchar(50) username UK "使用者名稱"
+        varchar(255) password_hash "密碼雜湊"
+        enum role "角色(ENGINEER/OPERATOR/ADMIN)"
+        varchar(100) full_name "全名"
+        varchar(100) email "電子郵件"
+        boolean is_active "啟用狀態"
+        timestamp created_at "建立時間"
+        timestamp updated_at "更新時間"
+    }
 
-entity "projects" as projects {
-  *id : int <<PK>>
-  --
-  *project_code : varchar(50) <<UK>> -- 專案代碼
-  *project_name : varchar(100) -- 專案名稱
-  description : text -- 描述
-  is_active : boolean -- 啟用狀態
-  created_at : timestamp -- 建立時間
-  updated_at : timestamp -- 更新時間
-}
+    projects {
+        int id PK
+        varchar(50) project_code UK "專案代碼"
+        varchar(100) project_name "專案名稱"
+        text description "描述"
+        boolean is_active "啟用狀態"
+        timestamp created_at "建立時間"
+        timestamp updated_at "更新時間"
+    }
 
-entity "stations" as stations {
-  *id : int <<PK>>
-  --
-  *station_code : varchar(50) -- 站別代碼
-  station_name : varchar(100) -- 站別名稱
-  *project_id : int <<FK>> -- 專案ID
-  test_plan_path : varchar(255) -- 測試計劃路徑
-  is_active : boolean -- 啟用狀態
-  created_at : timestamp -- 建立時間
-  updated_at : timestamp -- 更新時間
-}
+    stations {
+        int id PK
+        varchar(50) station_code "站別代碼"
+        varchar(100) station_name "站別名稱"
+        int project_id FK "專案ID"
+        varchar(255) test_plan_path "測試計劃路徑"
+        boolean is_active "啟用狀態"
+        timestamp created_at "建立時間"
+        timestamp updated_at "更新時間"
+    }
 
-entity "test_plans" as test_plans {
-  *id : int <<PK>>
-  --
-  *station_id : int <<FK>> -- 站別ID
-  item_no : int -- 測試項目編號
-  item_name : varchar(100) -- 測試項目名稱
-  test_type : varchar(50) -- 測試類型
-  parameters : json -- 測試參數
-  lower_limit : decimal(15,6) -- 下限值
-  upper_limit : decimal(15,6) -- 上限值
-  unit : varchar(20) -- 單位
-  enabled : boolean -- 啟用狀態
-  sequence_order : int -- 執行順序
-  created_at : timestamp -- 建立時間
-  updated_at : timestamp -- 更新時間
-}
+    test_plans {
+        int id PK
+        int station_id FK "站別ID"
+        int item_no "測試項目編號"
+        varchar(100) item_name "測試項目名稱"
+        varchar(50) test_type "測試類型"
+        json parameters "測試參數"
+        decimal lower_limit "下限值"
+        decimal upper_limit "上限值"
+        varchar(20) unit "單位"
+        boolean enabled "啟用狀態"
+        int sequence_order "執行順序"
+        timestamp created_at "建立時間"
+        timestamp updated_at "更新時間"
+    }
 
-entity "test_sessions" as test_sessions {
-  *id : int <<PK>>
-  --
-  serial_number : varchar(100) -- 產品序號
-  *station_id : int <<FK>> -- 站別ID
-  *user_id : int <<FK>> -- 使用者ID
-  start_time : timestamp -- 開始時間
-  end_time : timestamp -- 結束時間
-  final_result : enum -- 最終結果 (PASS/FAIL/ABORT)
-  total_items : int -- 總項目數
-  pass_items : int -- 通過項目數
-  fail_items : int -- 失敗項目數
-  test_duration_seconds : int -- 測試時長(秒)
-  created_at : timestamp -- 建立時間
-}
+    test_sessions {
+        int id PK
+        varchar(100) serial_number "產品序號"
+        int station_id FK "站別ID"
+        int user_id FK "使用者ID"
+        timestamp start_time "開始時間"
+        timestamp end_time "結束時間"
+        enum final_result "最終結果(PASS/FAIL/ABORT)"
+        int total_items "總項目數"
+        int pass_items "通過項目數"
+        int fail_items "失敗項目數"
+        int test_duration_seconds "測試時長(秒)"
+        timestamp created_at "建立時間"
+    }
 
-entity "test_results" as test_results {
-  *id : bigint <<PK>>
-  --
-  *session_id : int <<FK>> -- 測試會話ID
-  *test_plan_id : int <<FK>> -- 測試計劃ID
-  item_no : int -- 測試項目編號
-  item_name : varchar(100) -- 測試項目名稱
-  measured_value : decimal(15,6) -- 測量值
-  lower_limit : decimal(15,6) -- 下限值
-  upper_limit : decimal(15,6) -- 上限值
-  unit : varchar(20) -- 單位
-  result : enum -- 結果 (PASS/FAIL/SKIP/ERROR)
-  error_message : text -- 錯誤訊息
-  test_time : timestamp -- 測試時間
-  execution_duration_ms : int -- 執行時長(毫秒)
-}
+    test_results {
+        bigint id PK
+        int session_id FK "測試會話ID"
+        int test_plan_id FK "測試計劃ID"
+        int item_no "測試項目編號"
+        varchar(100) item_name "測試項目名稱"
+        decimal measured_value "測量值"
+        decimal lower_limit "下限值"
+        decimal upper_limit "上限值"
+        varchar(20) unit "單位"
+        enum result "結果(PASS/FAIL/SKIP/ERROR)"
+        text error_message "錯誤訊息"
+        timestamp test_time "測試時間"
+        int execution_duration_ms "執行時長(毫秒)"
+    }
 
-entity "sfc_logs" as sfc_logs {
-  *id : bigint <<PK>>
-  --
-  *session_id : int <<FK>> -- 測試會話ID
-  operation : varchar(50) -- 操作類型
-  request_data : json -- 請求資料
-  response_data : json -- 回應資料
-  status : enum -- 狀態 (SUCCESS/FAILED/TIMEOUT)
-  error_message : text -- 錯誤訊息
-  created_at : timestamp -- 建立時間
-}
+    sfc_logs {
+        bigint id PK
+        int session_id FK "測試會話ID"
+        varchar(50) operation "操作類型"
+        json request_data "請求資料"
+        json response_data "回應資料"
+        enum status "狀態(SUCCESS/FAILED/TIMEOUT)"
+        text error_message "錯誤訊息"
+        timestamp created_at "建立時間"
+    }
 
-entity "configurations" as configurations {
-  *id : int <<PK>>
-  --
-  *config_key : varchar(100) <<UK>> -- 設定鍵值
-  config_value : json -- 設定值
-  category : varchar(50) -- 類別
-  description : text -- 描述
-  is_system : boolean -- 系統設定
-  created_at : timestamp -- 建立時間
-  updated_at : timestamp -- 更新時間
-}
+    configurations {
+        int id PK
+        varchar(100) config_key UK "設定鍵值"
+        json config_value "設定值"
+        varchar(50) category "類別"
+        text description "描述"
+        boolean is_system "系統設定"
+        timestamp created_at "建立時間"
+        timestamp updated_at "更新時間"
+    }
 
-entity "modbus_logs" as modbus_logs {
-  *id : bigint <<PK>>
-  --
-  register_address : int -- 暫存器位址
-  operation : enum -- 操作 (READ/WRITE)
-  value : varchar(255) -- 值
-  status : enum -- 狀態 (SUCCESS/FAILED)
-  error_message : text -- 錯誤訊息
-  created_at : timestamp -- 建立時間
-}
-
-' 關係定義
-users ||--o{ test_sessions : "執行測試"
-projects ||--o{ stations : "包含站別"
-stations ||--o{ test_plans : "包含測試計劃"
-stations ||--o{ test_sessions : "執行測試"
-test_plans ||--o{ test_results : "產生結果"
-test_sessions ||--|{ test_results : "包含測試結果"
-test_sessions ||--o{ sfc_logs : "產生SFC日誌"
-
-@enduml
+    modbus_logs {
+        bigint id PK
+        int register_address "暫存器位址"
+        enum operation "操作(READ/WRITE)"
+        varchar(255) value "值"
+        enum status "狀態(SUCCESS/FAILED)"
+        text error_message "錯誤訊息"
+        timestamp created_at "建立時間"
+    }
 ```
 
 ---
@@ -701,6 +726,60 @@ WebPDTool/
   - **ChassisRotationMeasurement** - 機架旋轉控制 ✨ **新增** (對應 PDTool4 MyThread_CW/CCW)
 
 - **registry.py**: MEASUREMENT_REGISTRY 測量類型註冊表
+
+---
+
+#### 架構分析與設計模式
+
+**測量抽象層 (Measurement Abstraction Layer)**
+
+WebPDTool 實現了完整的測量抽象層，與 PDTool4 的 Polish 框架對應：
+
+| 層級 | PDTool4 (Polish) | WebPDTool (FastAPI) | 功能 |
+|------|-----------------|-------------------|------|
+| 抽象基類 | `polish.Measurement` | `BaseMeasurement` | 定義測量介面 |
+| 生命週期 | `setup()`/`measure()`/`teardown()` | `prepare()`/`execute()`/`cleanup()` | 三階段執行 |
+| 測試點 | `test_point` | `MeasurementResult` | 結果資料結構 |
+| 驗證邏輯 | `test_point_runAllTest.py` | `validate_result()` | 限制檢查 |
+
+**測量分派機制 (Measurement Dispatch)**
+
+```python
+# PDTool4: oneCSV_atlas_2.py
+if exec_name == 'SFCtest':
+    SFC_GONOGOMeasurement.MeasureSwitchON(...).run()
+elif exec_name == 'PowerSet':
+    PowerSetMeasurement.MeasureSwitchON(...).run()
+
+# WebPDTool: registry.py + MEASUREMENT_REGISTRY
+MEASUREMENT_REGISTRY = {
+    'SFCtest': SFCMeasurement,
+    'PowerSet': PowerSetMeasurement,
+    'PowerRead': PowerReadMeasurement,
+    'CommandTest': CommandTestMeasurement,
+    'getSN': GetSNMeasurement,
+    'OPjudge': OPJudgeMeasurement,
+    'Wait': WaitMeasurement,
+    'Relay': RelayMeasurement,
+    'ChassisRotation': ChassisRotationMeasurement,
+}
+```
+
+**資料流模式 (Data Flow Pattern)**
+
+```
+CSV Test Plan → 測量分派 → 執行測量 → 驗證結果 → 儲存資料庫
+     ↓              ↓            ↓           ↓            ↓
+   params     Registry      execute()   validate()   TestResult
+```
+
+**關鍵設計決策**
+
+1. **非同步優先**: 所有 I/O 操作使用 async/await，支援高併發
+2. **Singleton 模式**: InstrumentManager 確保儀器連線唯一性
+3. **Registry 模式**: 動態測量類型註冊，易於擴展
+4. **三階段執行**: prepare → execute → cleanup，對應 Polish 的 setup → measure → teardown
+5. **runAllTest 相容**: 錯誤收集與繼續執行邏輯完整實作
 
 ---
 

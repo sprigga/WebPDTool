@@ -1,11 +1,12 @@
 """
 Test Execution API Endpoints
 """
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from typing import List
+from typing import List, Optional
 from datetime import datetime
+import logging
 
 from app.core.database import get_db
 from app.dependencies import get_current_active_user
@@ -27,6 +28,19 @@ from app.schemas.test_result import (
 )
 from app.services.test_engine import test_engine
 from app.services.instrument_manager import instrument_manager
+from app.core.constants import TimeConstants
+
+# Module-level logger
+logger = logging.getLogger(__name__)
+
+# Check if report service is available
+try:
+    from app.services.report_service import report_service
+    REPORT_SERVICE_AVAILABLE = True
+except ImportError:
+    REPORT_SERVICE_AVAILABLE = False
+    report_service = None
+    logger.warning("Report service not available")
 
 router = APIRouter()
 
@@ -178,19 +192,17 @@ async def get_test_session_status(
     pass_items = sum(1 for r in results if r.result == "PASS")
     fail_items = sum(1 for r in results if r.result == "FAIL")
 
-    # 原有程式碼: Calculate elapsed time (wall-clock time)
-    # elapsed_time = None
-    # if session.start_time:
-    #     end = session.end_time if session.end_time else datetime.utcnow()
-    #     elapsed_time = int((end - session.start_time).total_seconds())
-
-    # 修改: Calculate elapsed time by summing all test items' execution_duration_ms
+    # Calculate elapsed time by summing all test items' execution_duration_ms
+    # (Previous implementation used wall-clock time - see git history for details)
     elapsed_time = None
     if results:
-        # 累計所有測項的執行時間(毫秒),並轉換為秒(保留3位小數)
+        # Sum execution time (ms) of all test items and convert to seconds
         total_duration_ms = sum(int(r.execution_duration_ms or 0) for r in results)
         if total_duration_ms > 0:
-            elapsed_time = round(total_duration_ms / 1000.0, 3)
+            elapsed_time = round(
+                total_duration_ms / TimeConstants.MS_PER_SECOND,
+                TimeConstants.DEFAULT_DECIMAL_PLACES
+            )
 
     # Determine status
     if session.end_time:
@@ -240,8 +252,22 @@ async def create_test_result(
             detail="session_id in URL and body must match"
         )
 
-    # Create test result
-    db_result = TestResultModel(**result_data.dict())
+    # Original: db_result = TestResultModel(**result_data.dict())
+    # Modified: Explicit field mapping to avoid bypassing Pydantic validation
+    # Create test result with explicit field mapping
+    db_result = TestResultModel(
+        session_id=result_data.session_id,
+        test_plan_id=result_data.test_plan_id,
+        item_no=result_data.item_no,
+        item_name=result_data.item_name,
+        measured_value=result_data.measured_value,
+        lower_limit=result_data.lower_limit,
+        upper_limit=result_data.upper_limit,
+        unit=result_data.unit,
+        result=result_data.result,
+        error_message=result_data.error_message,
+        execution_duration_ms=result_data.execution_duration_ms
+    )
     db.add(db_result)
     db.commit()
     db.refresh(db_result)
@@ -280,19 +306,42 @@ async def create_test_results_batch(
             detail="session_id in URL and body must match"
         )
 
-    # Create test results
-    created_count = 0
-    for result_data in batch_data.results:
-        db_result = TestResultModel(**result_data.dict())
-        db.add(db_result)
-        created_count += 1
+    # Original: Batch insert lacked transaction safety handling
+    # Modified: Add try-except and rollback mechanism
+    try:
+        # Original: db_result = TestResultModel(**result_data.dict())
+        # Modified: Explicit field mapping to avoid bypassing Pydantic validation
+        # Create test results with explicit field mapping
+        created_count = 0
+        for result_data in batch_data.results:
+            db_result = TestResultModel(
+                session_id=result_data.session_id,
+                test_plan_id=result_data.test_plan_id,
+                item_no=result_data.item_no,
+                item_name=result_data.item_name,
+                measured_value=result_data.measured_value,
+                lower_limit=result_data.lower_limit,
+                upper_limit=result_data.upper_limit,
+                unit=result_data.unit,
+                result=result_data.result,
+                error_message=result_data.error_message,
+                execution_duration_ms=result_data.execution_duration_ms
+            )
+            db.add(db_result)
+            created_count += 1
 
-    db.commit()
+        db.commit()
 
-    return {
-        "message": "Test results created successfully",
-        "created_count": created_count
-    }
+        return {
+            "message": "Test results created successfully",
+            "created_count": created_count
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Batch insert failed, all changes rolled back: {str(e)}"
+        )
 
 
 @router.post("/sessions/{session_id}/complete", response_model=TestSession)
@@ -337,22 +386,17 @@ async def complete_test_session(
     db.commit()
     db.refresh(session)
 
-    # 原有程式碼: 完成後不生成 CSV 報告
-    # 修改: 自動生成 CSV 報告，支援前端驅動模式
-    # 參考 test_engine.py:_finalize_test_session() 中的報告生成邏輯
-    try:
-        from app.services.report_service import report_service
-        report_path = report_service.save_session_report(session_id, db)
-        if report_path:
-            # 日誌記錄（可選）
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"CSV report generated for session {session_id}: {report_path}")
-    except Exception as report_error:
-        # 報告生成失敗不影響 session 完成，只記錄錯誤
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Failed to generate CSV report for session {session_id}: {report_error}")
+    # Original: CSV report was not generated after completion
+    # Modified: Auto-generate CSV report to support frontend-driven mode
+    # Refer to report generation logic in test_engine.py:_finalize_test_session()
+    if REPORT_SERVICE_AVAILABLE and report_service:
+        try:
+            report_path = report_service.save_session_report(session_id, db)
+            if report_path:
+                logger.info(f"CSV report generated for session {session_id}: {report_path}")
+        except Exception as report_error:
+            # Report generation failure does not affect session completion, only log the error
+            logger.error(f"Failed to generate CSV report for session {session_id}: {report_error}")
 
     return session
 
@@ -407,8 +451,8 @@ async def reset_instrument(
             status_code=500,
             detail=f"Error resetting instrument: {str(e)}"
         )
-
-    return session
+    # Original: return session  # ← This line was unreachable (removed)
+    # Modified: Remove unreachable dead code to avoid confusion and potential bugs
 
 
 @router.get("/sessions/{session_id}/logs", response_model=dict)
@@ -519,8 +563,14 @@ async def list_test_sessions(
     if station_id:
         query = query.filter(TestSessionModel.station_id == station_id)
 
+    # Original: query = query.filter(TestSessionModel.serial_number.like(f"%{serial_number}%"))
+    # Modified: Use parameterized query to prevent SQL injection risk
     if serial_number:
-        query = query.filter(TestSessionModel.serial_number.like(f"%{serial_number}%"))
+        # SQLAlchemy handles parameterization automatically, but using concat is more explicit and safe
+        from sqlalchemy import func
+        query = query.filter(
+            TestSessionModel.serial_number.like(func.concat('%', serial_number, '%'))
+        )
 
     sessions = query.order_by(
         desc(TestSessionModel.start_time)

@@ -12,6 +12,8 @@ from app.core.database import get_db
 from app.dependencies import get_current_active_user
 from app.services.measurement_service import measurement_service
 from app.models.test_session import TestSession as TestSessionModel
+from app.schemas.measurement import MeasurementResponse
+from app.config.instruments import AVAILABLE_INSTRUMENTS, MEASUREMENT_TEMPLATES
 
 router = APIRouter()
 
@@ -23,17 +25,6 @@ class MeasurementRequest(BaseModel):
     switch_mode: str  # e.g., 'DAQ973A', 'MODEL2303', 'comport', etc.
     test_params: Dict[str, Any]
     run_all_test: bool = False
-
-
-class MeasurementResponse(BaseModel):
-    """Response model for measurement results"""
-    test_point_id: str
-    measurement_type: str
-    result: str  # PASS, FAIL, ERROR
-    measured_value: Optional[str] = None  # 修改: 支援字串和數值類型
-    error_message: Optional[str] = None
-    test_time: datetime
-    execution_duration_ms: Optional[int] = None
 
 
 class BatchMeasurementRequest(BaseModel):
@@ -76,26 +67,14 @@ async def execute_measurement(
             user_id=current_user.get("sub")
         )
 
-        # 修正: 將所有 measured_value 轉換為字串類型以符合 schema 定義
-        # schema 定義: measured_value: Optional[str] = None
-        measured_value = result.measured_value
-        if measured_value is not None:
-            # 原有程式碼: 如果是 Decimal 類型，轉換為字串或浮點數
-            # 修改: 統一轉換為字串，因為 schema 期望的是 str 類型
-            from decimal import Decimal
-            if isinstance(measured_value, Decimal):
-                measured_value = str(float(measured_value))  # Decimal -> float -> str (避免科學記號)
-            elif isinstance(measured_value, (int, float)):
-                measured_value = str(measured_value)  # 數值轉字串
-            elif not isinstance(measured_value, str):
-                measured_value = str(measured_value)  # 其他類型轉字串
-            # 如果已經是字串，保持不變
-
+        # Original code: Complex type conversion logic in API layer (lines 79-92)
+        # Refactored: Type conversion moved to MeasurementResponse field validator
+        # See app/schemas/measurement.py:convert_measured_value_to_string
         return MeasurementResponse(
             test_point_id=request.test_point_id,
             measurement_type=request.measurement_type,
             result=result.result,
-            measured_value=measured_value,
+            measured_value=result.measured_value,  # Validator handles type conversion
             error_message=result.error_message,
             test_time=result.test_time,
             execution_duration_ms=result.execution_duration_ms
@@ -322,36 +301,12 @@ async def get_available_instruments():
 
     Returns instruments that can be used for measurements, similar to
     PDTool4's instrument discovery and configuration system.
+
+    Original code: 30+ lines of hardcoded instrument dictionaries
+    Modified: Loaded from app.config.instruments module for easier maintenance
     """
     try:
-        # This would typically read from instrument configuration files
-        available_instruments = {
-            "power_supplies": [
-                {"id": "DAQ973A", "type": "DAQ973A", "description": "Keysight DAQ973A"},
-                {"id": "MODEL2303", "type": "MODEL2303", "description": "Keysight Model 2303"},
-                {"id": "MODEL2306", "type": "MODEL2306", "description": "Keysight Model 2306"},
-                {"id": "IT6723C", "type": "IT6723C", "description": "ITECH IT6723C"},
-                {"id": "PSW3072", "type": "PSW3072", "description": "Rigol PSW3072"},
-                {"id": "2260B", "type": "2260B", "description": "Keysight 2260B"},
-                {"id": "APS7050", "type": "APS7050", "description": "Agilent APS7050"}
-            ],
-            "multimeters": [
-                {"id": "34970A", "type": "34970A", "description": "Keysight 34970A"},
-                {"id": "DAQ6510", "type": "DAQ6510", "description": "Keysight DAQ6510"},
-                {"id": "KEITHLEY2015", "type": "KEITHLEY2015", "description": "Keithley 2015 Multimeter"}
-            ],
-            "communication": [
-                {"id": "comport", "type": "serial", "description": "Serial Port Communication"},
-                {"id": "tcpip", "type": "tcpip", "description": "TCP/IP Communication"},
-                {"id": "console", "type": "console", "description": "Console Command Execution"},
-                {"id": "android_adb", "type": "adb", "description": "Android ADB Communication"}
-            ],
-            "rf_analyzers": [
-                {"id": "MDO34", "type": "MDO34", "description": "Tektronix MDO34"},
-                {"id": "MT8870A_INF", "type": "MT8870A", "description": "Anritsu MT8870A"}
-            ]
-        }
-        return available_instruments
+        return AVAILABLE_INSTRUMENTS
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -366,96 +321,12 @@ async def get_measurement_templates():
 
     Returns standardized templates for different measurement types,
     making it easier to configure test parameters.
+
+    Original code: 87+ lines of hardcoded template dictionaries
+    Modified: Loaded from app.config.instruments module for easier maintenance
     """
     try:
-        templates = {
-            "PowerSet": {
-                "DAQ973A": {
-                    "required": ["Instrument", "Channel", "Item"],
-                    "optional": ["Volt", "Curr", "Sense", "Range"],
-                    "example": {
-                        "Instrument": "daq973a_1",
-                        "Channel": "101",
-                        "Item": "volt",
-                        "Volt": "5.0",
-                        "Curr": "1.0"
-                    }
-                },
-                "MODEL2303": {
-                    "required": ["Instrument", "SetVolt", "SetCurr"],
-                    "optional": ["Channel", "OVP", "OCP"],
-                    "example": {
-                        "Instrument": "model2303_1",
-                        "SetVolt": "5.0",
-                        "SetCurr": "2.0"
-                    }
-                },
-                "MODEL2306": {
-                    "required": ["Instrument", "Channel", "SetVolt", "SetCurr"],
-                    "optional": ["OVP", "OCP", "Delay"],
-                    "example": {
-                        "Instrument": "model2306_1",
-                        "Channel": "1",
-                        "SetVolt": "5.0",
-                        "SetCurr": "2.0"
-                    }
-                }
-            },
-            "PowerRead": {
-                "DAQ973A": {
-                    "required": ["Instrument", "Channel", "Item", "Type"],
-                    "optional": ["Range", "NPLC"],
-                    "example": {
-                        "Instrument": "daq973a_1",
-                        "Channel": "101",
-                        "Item": "volt",
-                        "Type": "DC"
-                    }
-                },
-                "34970A": {
-                    "required": ["Instrument", "Channel", "Item"],
-                    "optional": ["Range", "NPLC"],
-                    "example": {
-                        "Instrument": "34970a_1",
-                        "Channel": "101",
-                        "Item": "volt"
-                    }
-                },
-                "KEITHLEY2015": {
-                    "required": ["Instrument", "Command"],
-                    "optional": ["Range", "NPLC"],
-                    "example": {
-                        "Instrument": "keithley2015_1",
-                        "Command": "READ?",
-                    }
-                }
-            },
-            "CommandTest": {
-                "comport": {
-                    "required": ["Port", "Baud", "Command"],
-                    "optional": ["keyWord", "spiltCount", "splitLength", "EqLimit"],
-                    "example": {
-                        "Port": "COM4",
-                        "Baud": "9600",
-                        "Command": "AT+VERSION",
-                        "keyWord": "VERSION",
-                        "spiltCount": "1",
-                        "splitLength": "10"
-                    }
-                },
-                "tcpip": {
-                    "required": ["Host", "Port", "Command"],
-                    "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
-                    "example": {
-                        "Host": "192.168.1.100",
-                        "Port": "5025",
-                        "Command": "*IDN?",
-                        "Timeout": "5"
-                    }
-                }
-            }
-        }
-        return templates
+        return MEASUREMENT_TEMPLATES
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

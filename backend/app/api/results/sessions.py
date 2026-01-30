@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.api_helpers import calculate_test_statistics
+from app.core.constants import VALID_SESSION_STATUSES
 from app.dependencies import get_current_active_user
 from app.models.test_result import TestResult as TestResultModel
 from app.models.test_session import TestSession as TestSessionModel
@@ -21,6 +22,36 @@ from app.models.project import Project as ProjectModel
 from app.models.station import Station as StationModel
 
 router = APIRouter()
+
+
+def convert_results_to_response(results: List[TestResultModel]) -> List['MeasurementResultResponse']:
+    """
+    Convert database results to API response format.
+
+    Extracts duplicate conversion logic to improve maintainability.
+
+    Args:
+        results: List of TestResult database models
+
+    Returns:
+        List of MeasurementResultResponse schemas
+    """
+    return [
+        MeasurementResultResponse(
+            id=r.id,
+            test_session_id=r.test_session_id,
+            item_no=r.item_no,
+            item_name=r.item_name,
+            result=r.result,
+            measured_value=r.measured_value,
+            min_limit=r.min_limit,
+            max_limit=r.max_limit,
+            error_message=r.error_message,
+            execution_duration_ms=r.execution_duration_ms,
+            created_at=r.created_at
+        )
+        for r in results
+    ]
 
 
 class MeasurementResultResponse(BaseModel):
@@ -60,11 +91,22 @@ class TestSessionResponse(BaseModel):
 
 @router.get("/sessions", response_model=List[TestSessionResponse])
 async def get_test_sessions(
-    skip: int = Query(0, ge=0),
+    # Original code: skip parameter (inconsistent with tests.py which uses offset)
+    # Modified: Renamed to offset for API consistency - FastAPI convention uses offset
+    offset: int = Query(0, ge=0, description="Number of records to skip (pagination)"),
     limit: int = Query(100, ge=1, le=1000),
-    project_id: int | None = Query(None),
-    station_id: int | None = Query(None),
-    status: str | None = Query(None),
+    # Original code: No validation on query parameters
+    # project_id: int | None = Query(None),
+    # station_id: int | None = Query(None),
+    # status: str | None = Query(None),
+    # Refactored: Add validation constraints
+    project_id: int | None = Query(None, gt=0, description="Project ID (must be positive)"),
+    station_id: int | None = Query(None, gt=0, description="Station ID (must be positive)"),
+    status: str | None = Query(
+        None,
+        pattern=f"^({'|'.join(VALID_SESSION_STATUSES)})$",
+        description=f"Session status (valid values: {', '.join(VALID_SESSION_STATUSES)})"
+    ),
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
     db: Session = Depends(get_db),
@@ -97,7 +139,7 @@ async def get_test_sessions(
 
         # Order by most recent first
         sessions = query.order_by(desc(TestSessionModel.started_at))\
-                      .offset(skip)\
+                      .offset(offset)\
                       .limit(limit)\
                       .all()
 
@@ -113,23 +155,9 @@ async def get_test_sessions(
             # Refactored: Use calculate_test_statistics helper
             stats = calculate_test_statistics(results)
 
-            # Convert results to response format
-            result_responses = [
-                MeasurementResultResponse(
-                    id=r.id,
-                    test_session_id=r.test_session_id,
-                    item_no=r.item_no,
-                    item_name=r.item_name,
-                    result=r.result,
-                    measured_value=r.measured_value,
-                    min_limit=r.min_limit,
-                    max_limit=r.max_limit,
-                    error_message=r.error_message,
-                    execution_duration_ms=r.execution_duration_ms,
-                    created_at=r.created_at
-                )
-                for r in results
-            ]
+            # Original code: Duplicated result conversion logic
+            # Refactored: Use convert_results_to_response helper
+            result_responses = convert_results_to_response(results)
 
             response.append(TestSessionResponse(
                 id=session.id,
@@ -188,23 +216,9 @@ async def get_test_session(
         # Refactored: Use calculate_test_statistics helper
         stats = calculate_test_statistics(results)
 
-        # Convert results to response format
-        result_responses = [
-            MeasurementResultResponse(
-                id=r.id,
-                test_session_id=r.test_session_id,
-                item_no=r.item_no,
-                item_name=r.item_name,
-                result=r.result,
-                measured_value=r.measured_value,
-                min_limit=r.min_limit,
-                max_limit=r.max_limit,
-                error_message=r.error_message,
-                execution_duration_ms=r.execution_duration_ms,
-                created_at=r.created_at
-            )
-            for r in results
-        ]
+        # Original code: Duplicated result conversion logic
+        # Refactored: Use convert_results_to_response helper
+        result_responses = convert_results_to_response(results)
 
         return TestSessionResponse(
             id=session.id,

@@ -39,7 +39,9 @@ class MeasurementResultResponse(BaseModel):
 
 @router.get("/results", response_model=List[MeasurementResultResponse])
 async def get_measurement_results(
-    skip: int = Query(0, ge=0),
+    # Original code: skip parameter (inconsistent with tests.py which uses offset)
+    # Modified: Renamed to offset for API consistency
+    offset: int = Query(0, ge=0, description="Number of records to skip (pagination)"),
     limit: int = Query(1000, ge=1, le=5000),
     session_id: int | None = Query(None),
     test_item_name: str | None = Query(None),
@@ -68,7 +70,7 @@ async def get_measurement_results(
 
         # Order by creation time
         results = query.order_by(desc(TestResultModel.created_at))\
-                      .offset(skip)\
+                      .offset(offset)\
                       .limit(limit)\
                       .all()
 
