@@ -1,0 +1,62 @@
+{
+  "_comment": "Phase 2 Instrument Configuration Examples",
+  "_version": "1.0",
+  "_description": "Example configurations for Phase 2 instruments: APS7050, N5182A, Analog Discovery 2, FTM_On",
+  "instruments": {
+    "APS7050_1": {
+      "id": "APS7050_1",
+      "type": "APS7050",
+      "name": "GW Instek APS7050 AC/DC Power Source",
+      "connection": {
+        "type": "VISA",
+        "address": "TCPIP0::192.168.1.50::inst0::INSTR",
+        "timeout": 5000
+      },
+      "enabled": true,
+      "description": "AC/DC power with built-in DMM and relay control"
+    },
+    "N5182A_1": {
+      "id": "N5182A_1",
+      "type": "N5182A",
+      "name": "Agilent N5182A MXG Signal Generator",
+      "connection": {
+        "type": "GPIB",
+        "board": 0,
+        "address": 16,
+        "timeout": 5000
+      },
+      "enabled": true,
+      "description": "RF signal generator with CW and ARB modes"
+    },
+    "AD2_1": {
+      "id": "AD2_1",
+      "type": "ANALOG_DISCOVERY_2",
+      "name": "Digilent Analog Discovery 2",
+      "connection": {
+        "type": "VISA",
+        "address": "USB0::0x03EB::0x2401::SN12345",
+        "timeout": 5000
+      },
+      "enabled": false,
+      "description": "USB oscilloscope and function generator (requires WaveForms SDK)"
+    },
+    "FTM_1": {
+      "id": "FTM_1",
+      "type": "FTM_ON",
+      "name": "WiFi FTM Test Interface",
+      "connection": {
+        "type": "ADB",
+        "address": "adb",
+        "timeout": 30000
+      },
+      "enabled": false,
+      "description": "WiFi RF testing via ADB (requires Android device with Qualcomm chipset)"
+    }
+  },
+  "_notes": [
+    "APS7050: Use channel 101-120 for output, 21-22 for current measurement",
+    "N5182A: GPIB address 16 is default, adjust as needed",
+    "AD2: USB address format: USB0::vendorID::productID::serialNumber",
+    "FTM_On: Requires ADB in PATH and connected Android device"
+  ]
+}
