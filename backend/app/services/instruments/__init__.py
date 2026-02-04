@@ -18,6 +18,7 @@ from app.services.instruments.mdo34 import MDO34Driver
 from app.services.instruments.aps7050 import APS7050Driver
 from app.services.instruments.n5182a import N5182ADriver
 from app.services.instruments.analog_discovery_2 import AnalogDiscovery2Driver
+from app.services.instruments.ftm_on import FTMOnDriver
 
 __all__ = [
     "BaseInstrumentDriver",
@@ -34,6 +35,7 @@ __all__ = [
     "APS7050Driver",
     "N5182ADriver",
     "AnalogDiscovery2Driver",
+    "FTMOnDriver",
 ]
 
 
@@ -53,6 +55,7 @@ INSTRUMENT_DRIVERS = {
     "N5182A": N5182ADriver,
     "ANALOG_DISCOVERY_2": AnalogDiscovery2Driver,
     "AD2": AnalogDiscovery2Driver,
+    "FTM_ON": FTMOnDriver,
     # Add more as they are migrated
 }
 
