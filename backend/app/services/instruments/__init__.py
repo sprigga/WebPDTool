@@ -17,6 +17,7 @@ from app.services.instruments.keithley2015 import KEITHLEY2015Driver
 from app.services.instruments.mdo34 import MDO34Driver
 from app.services.instruments.aps7050 import APS7050Driver
 from app.services.instruments.n5182a import N5182ADriver
+from app.services.instruments.analog_discovery_2 import AnalogDiscovery2Driver
 
 __all__ = [
     "BaseInstrumentDriver",
@@ -32,6 +33,7 @@ __all__ = [
     "MDO34Driver",
     "APS7050Driver",
     "N5182ADriver",
+    "AnalogDiscovery2Driver",
 ]
 
 
@@ -49,6 +51,8 @@ INSTRUMENT_DRIVERS = {
     "MDO34": MDO34Driver,
     "APS7050": APS7050Driver,
     "N5182A": N5182ADriver,
+    "ANALOG_DISCOVERY_2": AnalogDiscovery2Driver,
+    "AD2": AnalogDiscovery2Driver,
     # Add more as they are migrated
 }
 
