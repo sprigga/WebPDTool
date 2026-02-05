@@ -62,45 +62,51 @@ Mermaid 是一種 "Code-as-Diagram" 的工具，想要繪製出專業、易讀�
 
 ## 4. 樣式管理：統一視覺風格
 
-避免在節點後直接寫 `style`，應使用 `classDef` 進行全域管理。
+### Mermaid 圖表最佳實務與高可讀性設定指南
 
-### 定義與應用
-1.  **定義類別**：在圖表頂部定義顏色與邊框。
-2.  **應用類別**：使用 `:::` 運算子套用。
+本文整理如何使用 Mermaid 語法繪製清晰、好讀、不易出錯的圖表，特別針對「字型大小適中」「字體適合閱讀」「元件不遮蔽字體」三大原則，並延伸其他實務考量與常見錯誤修復方法。
 
+#### 一、核心三大原則
 
-# 專用 Mermaid 圖表規範範本  
+1. **字型大小適中**  
+   - 推薦範圍：14px ~ 18px  
+   - 最常用且多數人覺得舒適：**16px**
 
-## 1. 核心原則（請所有成員嚴格遵守）
+2. **字體適合閱讀**  
+   - 推薦使用 sans-serif 無襯線字型  
+   - 常見安全選擇（依序優先）：  
+     - Arial, Helvetica, sans-serif  
+     - "Helvetica Neue", Arial, sans-serif  
+     - system-ui, -apple-system, BlinkMacOSystemFont, "Segoe UI", Roboto, sans-serif
 
-1. 可讀性第一：即使不渲染圖，純文字也要能大致看懂流程
-2. 結構三段式寫法（強制）：
-   - 第一段：全部節點定義（id + 形狀 + 文字）
-   - 第二段：子圖（subgraph） + 主要連線關係
-   - 第三段：樣式定義（classDef + class）
-3. 禁止使用 A、B、C、D、E 等無意義命名
-4. 單張圖主要節點建議控制在 8–15 個，超過請拆分或使用多層 subgraph
-5. 決策說明、動作、狀態盡量寫在箭頭標籤上，而非節點內
-6. 中文長文字一律使用 `<br>` 或 `<br/>` 換行
-7. 每張圖必須使用下方統一的 `init` 主題區塊
+3. **元件不要遮蔽字體**  
+   - 增加節點內距（padding）  
+   - 加大節點間距（nodeSpacing / rankSpacing）  
+   - 適當設定圖表整體留白（diagramPadding）
 
-## 2. 標準 init 主題區塊（每張圖最上方必貼）
+#### 二、推薦的萬用高可讀性模板（最穩定版本）
 
 ```mermaid
 %%{init: {
   "theme": "base",
   "themeVariables": {
-    "fontFamily": "Microsoft JhengHei, 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif",
-    "fontSize": "14px",
-    "primaryColor": "#4a90e2",
-    "primaryTextColor": "#ffffff",
-    "primaryBorderColor": "#2a6099",
-    "secondaryColor": "#f39c12",
+    "fontSize": "16px",
+    "fontFamily": "Arial, Helvetica, sans-serif",
+    "primaryTextColor": "#333333",
     "lineColor": "#555555",
-    "edgeLabelBackground": "rgba(255,255,255,0.92)",
-    "clusterBkg": "#f0f4ff",
-    "clusterBorder": "#a0c0ff"
+    "primaryColor": "#f0f0f0"
+  },
+  "flowchart": {
+    "padding": 20,
+    "nodeSpacing": 60,
+    "rankSpacing": 80,
+    "curve": "basis",
+    "diagramPadding": 30
   }
 }}%%
+graph TD
+    A[這是比較長的節點文字<br>會自動換行] --> B[下一步]
+    B --> C[結束]
+```    
 
 

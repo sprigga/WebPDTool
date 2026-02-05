@@ -97,76 +97,95 @@ WebPDTool 是一個 Web 化的產品測試系統，用於執行自動化測試�
 ### 整體系統架構圖
 
 ```mermaid
-graph TB
-    %% 客戶端層 - 使用者瀏覽器存取點
-    subgraph Client["🌐 使用者端"]
-        Browser["Web 瀏覽器<br/>(Chrome/Edge/Firefox)"]
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontSize": "16px",
+    "fontFamily": "Arial, Helvetica, sans-serif",
+    "primaryTextColor": "#333333",
+    "lineColor": "#555555",
+    "primaryColor": "#f0f0f0"
+  },
+  "flowchart": {
+    "padding": 20,
+    "nodeSpacing": 60,
+    "rankSpacing": 80,
+    "curve": "basis",
+    "diagramPadding": 30
+  }
+}}%%
+graph TD
+    %% 此圖展示系統整體分層結構與主要資料流向
+
+    %% 客戶端層
+    subgraph ClientLayer["🌐 使用者端"]
+        BrowserNode[Web 瀏覽器<br/>Chrome/Edge/Firefox]
     end
 
-    %% 前端容器 - Vue 3 SPA 應用
-    subgraph Frontend["🟢 前端服務<br/>(Port: 9080)"]
-        Nginx["Nginx 反向代理<br/>靜態資源服務"]
-        Vue["Vue 3 應用程式<br/>───────────<br/>• Element Plus UI<br/>• Pinia 狀態管理<br/>• Vue Router 路由"]
+    %% 前端層
+    subgraph FrontendLayer["🟢 前端服務 Port: 9080"]
+        NginxNode[Nginx 反向代理<br/>靜態資源服務]
+        VueNode[Vue 3 應用程式<br/>───────────<br/>Element Plus UI<br/>Pinia 狀態管理<br/>Vue Router 路由]
     end
 
-    %% 後端容器 - FastAPI RESTful API
-    subgraph Backend["🚀 後端服務<br/>(Port: 9100)"]
-        FastAPI["FastAPI 應用入口<br/>Python 3.11+ 非同步框架"]
+    %% 後端層
+    subgraph BackendLayer["🚀 後端服務 Port: 9100"]
+        FastAPINode[FastAPI 應用入口<br/>Python 3.11+ 非同步框架]
 
-        subgraph API["API 路由層<br/>(8個模組, 70+ 端點)"]
+        subgraph APILayer["API 路由層 - 8個模組, 70+ 端點"]
             direction TB
-            AuthAPI["🔐 認證授權模組<br/>JWT Token 管理"]
-            ProjectsAPI["📁 專案管理模組<br/>CRUD 操作"]
-            StationsAPI["🏠 站別管理模組<br/>測試站配置"]
-            TestPlansAPI["📋 測試計劃模組<br/>測試項目管理"]
-            TestsAPI["▶️ 測試執行模組<br/>會話控制與狀態"]
-            MeasurementsAPI["📊 測量執行模組<br/>儀器驅動協調"]
-            ResultsAPI["📈 測試結果模組<br/>資料查詢與匯出"]
-            DUTControlAPI["🔧 DUT 控制模組<br/>繼電器/機架控制"]
+            AuthAPINode[🔐 認證授權模組<br/>JWT Token 管理]
+            ProjectsAPINode[📁 專案管理模組<br/>CRUD 操作]
+            StationsAPINode[🏠 站別管理模組<br/>測試站配置]
+            TestPlansAPINode[📋 測試計劃模組<br/>測試項目管理]
+            TestsAPINode[▶️ 測試執行模組<br/>會話控制與狀態]
+            MeasurementsAPINode[📊 測量執行模組<br/>儀器驅動協調]
+            ResultsAPINode[📈 測試結果模組<br/>資料查詢與匯出]
+            DUTControlAPINode[🔧 DUT 控制模組<br/>繼電器/機架控制]
         end
 
-        subgraph Services["業務邏輯層<br/>(4個核心服務)"]
-            TestEngine["⚙️ 測試引擎<br/>─────────<br/>• 測試編排與調度<br/>• 非同步執行控制<br/>• 會話狀態管理<br/>• runAllTest 模式"]
-            InstrumentMgr["🔌 儀器管理器<br/>─────────<br/>• Singleton 連線池<br/>• 儀器狀態追蹤<br/>• 26 種驅動支援"]
-            MeasurementSvc["📏 測量服務<br/>─────────<br/>• 測量任務協調<br/>• PDTool4 相容驗證<br/>• 錯誤收集處理"]
-            SFCSvc["🔗 SFC 服務<br/>─────────<br/>• MES 系統整合<br/>• 製造資料上傳"]
+        subgraph ServicesLayer["業務邏輯層 - 4個核心服務"]
+            TestEngineNode[⚙️ 測試引擎<br/>─────────<br/>測試編排與調度<br/>非同步執行控制<br/>會話狀態管理<br/>runAllTest 模式]
+            InstrumentMgrNode[🔌 儀器管理器<br/>─────────<br/>Singleton 連線池<br/>儀器狀態追蹤<br/>26 種驅動支援]
+            MeasurementSvcNode[📏 測量服務<br/>─────────<br/>測量任務協調<br/>PDTool4 相容驗證<br/>錯誤收集處理]
+            SFCSvcNode[🔗 SFC 服務<br/>─────────<br/>MES 系統整合<br/>製造資料上傳]
         end
 
-        subgraph Measurements["測量抽象層<br/>(10+ 測量類型)"]
-            BaseMeasure["📐 BaseMeasurement 基類<br/>──────────────<br/>• prepare/execute/cleanup<br/>• 7 種 limit_type 驗證<br/>• 3 種 value_type 轉換"]
+        subgraph MeasurementsLayer["測量抽象層 - 10+ 測量類型"]
+            BaseMeasureNode[📐 BaseMeasurement 基類<br/>──────────────<br/>prepare/execute/cleanup<br/>7 種 limit_type 驗證<br/>3 種 value_type 轉換]
         end
 
-        subgraph Models["資料持久層<br/>(9 個資料表)"]
-            ORM["💾 SQLAlchemy ORM<br/>───────────<br/>• User/Project/Station<br/>• TestPlan/Session<br/>• TestResult/SFCLog<br/>• Configuration"]
+        subgraph ModelsLayer["資料持久層 - 9 個資料表"]
+            ORMNode[💾 SQLAlchemy ORM<br/>───────────<br/>User/Project/Station<br/>TestPlan/Session<br/>TestResult/SFCLog<br/>Configuration]
         end
     end
 
-    %% 資料庫容器
-    subgraph Database["🗄️ 資料庫服務<br/>(Port: 33306)"]
-        MySQL[("MySQL 8.0+<br/>────────<br/>• 資料庫: webpdtool<br/>• 字元集: utf8mb4<br/>• 連線池: 非同步")]
+    %% 資料庫層
+    subgraph DatabaseLayer["🗄️ 資料庫服務 Port: 33306"]
+        MySQLNode[(MySQL 8.0+<br/>────────<br/>資料庫: webpdtool<br/>字元集: utf8mb4<br/>連線池: 非同步)]
     end
 
-    %% 外部系統整合
-    subgraph External["🌍 外部系統整合"]
-        SFC["🏭 SFC 製造執行系統<br/>WebService 通訊"]
-        Modbus["📡 Modbus 設備通訊<br/>TCP/IP 協定"]
-        Instruments["🔬 測試儀器<br/>────────<br/>• Keysight/Keithley<br/>• R&S/Anritsu<br/>• 26 種驅動支援"]
+    %% 外部系統
+    subgraph ExternalLayer["🌍 外部系統整合"]
+        SFCNode[🏭 SFC 製造執行系統<br/>WebService 通訊]
+        ModbusNode[📡 Modbus 設備通訊<br/>TCP/IP 協定]
+        InstrumentsNode[🔬 測試儀器<br/>────────<br/>Keysight/Keithley<br/>R&S/Anritsu<br/>26 種驅動支援]
     end
 
     %% 主要資料流向
-    Browser -->|HTTPS 請求| Nginx
-    Nginx -->|反向代理| Vue
-    Vue -->|REST API 呼叫<br/>Axios + JWT| FastAPI
+    BrowserNode -->|HTTPS 請求| NginxNode
+    NginxNode -->|反向代理| VueNode
+    VueNode -->|REST API 呼叫<br/>Axios + JWT| FastAPINode
 
-    FastAPI -->|路由分派| API
-    API -->|呼叫| Services
-    Services -->|執行| Measurements
-    Services -->|存取| Models
+    FastAPINode -->|路由分派| APILayer
+    APILayer -->|呼叫| ServicesLayer
+    ServicesLayer -->|執行| MeasurementsLayer
+    ServicesLayer -->|存取| ModelsLayer
 
-    Models -->|非同步 ORM<br/>SQLAlchemy 2.0| MySQL
-    SFCSvc -.->|HTTPS POST<br/>JSON 格式| SFC
-    InstrumentMgr -.->|TCP/IP<br/>VISA/SSH/CAN| Instruments
-    InstrumentMgr -.->|Modbus RTU/TCP| Modbus
+    ModelsLayer -->|非同步 ORM<br/>SQLAlchemy 2.0| MySQLNode
+    SFCSvcNode -.->|HTTPS POST<br/>JSON 格式| SFCNode
+    InstrumentMgrNode -.->|TCP/IP<br/>VISA/SSH/CAN| InstrumentsNode
+    InstrumentMgrNode -.->|Modbus RTU/TCP| ModbusNode
 
     %% 樣式定義
     classDef clientStyle fill:#e1f5ff,stroke:#0277bd,stroke-width:2px,color:#000
@@ -175,17 +194,11 @@ graph TB
     classDef dbStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000
     classDef externalStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
 
-    classDef subgraphLg font-size:20px,font-weight:bold
-    classDef subgraphMd font-size:18px
-
-    class Browser clientStyle
-    class Nginx,Vue frontendStyle
-    class FastAPI,AuthAPI,ProjectsAPI,StationsAPI,TestPlansAPI,TestsAPI,MeasurementsAPI,ResultsAPI,DUTControlAPI,TestEngine,InstrumentMgr,MeasurementSvc,SFCSvc,BaseMeasure,ORM backendStyle
-    class MySQL dbStyle
-    class SFC,Modbus,Instruments externalStyle
-
-    class Client,Frontend,Backend,Database,External subgraphLg
-    class API,Services,Measurements,Models subgraphMd
+    class BrowserNode clientStyle
+    class NginxNode,VueNode frontendStyle
+    class FastAPINode,AuthAPINode,ProjectsAPINode,StationsAPINode,TestPlansAPINode,TestsAPINode,MeasurementsAPINode,ResultsAPINode,DUTControlAPINode,TestEngineNode,InstrumentMgrNode,MeasurementSvcNode,SFCSvcNode,BaseMeasureNode,ORMNode backendStyle
+    class MySQLNode dbStyle
+    class SFCNode,ModbusNode,InstrumentsNode externalStyle
 ```
 
 > **📖 架構說明**: 主圖展示系統整體分層結構，API→Services→Models/Measurements 的詳細連線關係見下圖。
@@ -195,59 +208,78 @@ graph TB
 此圖展示 API 端點如何調用業務邏輯服務，以及服務之間的協作關係。
 
 ```mermaid
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontSize": "16px",
+    "fontFamily": "Arial, Helvetica, sans-serif",
+    "primaryTextColor": "#333333",
+    "lineColor": "#555555",
+    "primaryColor": "#f0f0f0"
+  },
+  "flowchart": {
+    "padding": 20,
+    "nodeSpacing": 60,
+    "rankSpacing": 80,
+    "curve": "basis",
+    "diagramPadding": 30
+  }
+}}%%
 graph LR
-    subgraph API["📡 API 路由層 - 接收 HTTP 請求"]
-        AuthAPI["認證 API"]
-        ProjectsAPI["專案 API"]
-        StationsAPI["站別 API"]
-        TestPlansAPI["測試計劃 API"]
-        TestsAPI["測試執行 API"]
-        MeasurementsAPI["測量執行 API"]
-        ResultsAPI["測試結果 API"]
-        DUTControlAPI["DUT 控制 API"]
+    %% 此圖展示 API、Service、Measurement、Model 之間的調用關係
+
+    subgraph APIGroup["📡 API 路由層 - 接收 HTTP 請求"]
+        AuthAPI[認證 API]
+        ProjectsAPI[專案 API]
+        StationsAPI[站別 API]
+        TestPlansAPI[測試計劃 API]
+        TestsAPI[測試執行 API]
+        MeasurementsAPI[測量執行 API]
+        ResultsAPI[測試結果 API]
+        DUTControlAPI[DUT 控制 API]
     end
 
-    subgraph Services["⚙️ 業務邏輯層 - 實現核心功能"]
-        TestEngine["測試引擎<br/>(TestEngine)"]
-        InstrumentMgr["儀器管理器<br/>(InstrumentMgr)"]
-        MeasurementSvc["測量服務<br/>(MeasurementSvc)"]
-        SFCSvc["SFC 服務<br/>(SFC Service)"]
+    subgraph ServicesGroup["⚙️ 業務邏輯層 - 實現核心功能"]
+        TestEngineService[測試引擎<br/>TestEngine]
+        InstrumentMgrService[儀器管理器<br/>InstrumentMgr]
+        MeasurementSvcService[測量服務<br/>MeasurementSvc]
+        SFCSvcService[SFC 服務<br/>SFC Service]
     end
 
-    subgraph Measurements["📏 測量抽象層 - 執行具體測量"]
-        BaseMeasure["測量基類<br/>(BaseMeasurement)"]
+    subgraph MeasurementsGroup["📏 測量抽象層 - 執行具體測量"]
+        BaseMeasureClass[測量基類<br/>BaseMeasurement]
     end
 
-    subgraph Models["💾 資料存取層 - ORM 操作"]
-        ORM["SQLAlchemy<br/>ORM 模型"]
+    subgraph ModelsGroup["💾 資料存取層 - ORM 操作"]
+        ORMLayer[SQLAlchemy<br/>ORM 模型]
     end
 
-    subgraph DB["🗄️ 持久化儲存"]
-        MySQL[("MySQL<br/>資料庫")]
+    subgraph DBGroup["🗄️ 持久化儲存"]
+        MySQLDB[(MySQL<br/>資料庫)]
     end
 
     %% API → Services 調用關係
-    AuthAPI -->|Token 驗證/刷新| TestEngine
-    ProjectsAPI -->|CRUD 操作| TestEngine
-    StationsAPI -->|配置管理| TestEngine
-    TestPlansAPI -->|計劃載入/驗證| TestEngine
-    TestsAPI -->|會話控制/狀態| TestEngine
-    MeasurementsAPI -->|測量調度| MeasurementSvc
-    ResultsAPI -->|結果查詢| TestEngine
-    DUTControlAPI -->|繼電器/機架| TestEngine
+    AuthAPI -->|Token 驗證/刷新| TestEngineService
+    ProjectsAPI -->|CRUD 操作| TestEngineService
+    StationsAPI -->|配置管理| TestEngineService
+    TestPlansAPI -->|計劃載入/驗證| TestEngineService
+    TestsAPI -->|會話控制/狀態| TestEngineService
+    MeasurementsAPI -->|測量調度| MeasurementSvcService
+    ResultsAPI -->|結果查詢| TestEngineService
+    DUTControlAPI -->|繼電器/機架| TestEngineService
 
     %% Services 內部協作
-    TestEngine -->|獲取儀器連線| InstrumentMgr
-    TestEngine -->|協調測量| MeasurementSvc
-    TestEngine -->|上傳製造資料| SFCSvc
-    MeasurementSvc -->|執行測量邏輯| BaseMeasure
+    TestEngineService -->|獲取儀器連線| InstrumentMgrService
+    TestEngineService -->|協調測量| MeasurementSvcService
+    TestEngineService -->|上傳製造資料| SFCSvcService
+    MeasurementSvcService -->|執行測量邏輯| BaseMeasureClass
 
     %% Services → Models 資料存取
-    TestEngine -->|讀寫測試資料| ORM
-    MeasurementSvc -->|儲存測量結果| ORM
+    TestEngineService -->|讀寫測試資料| ORMLayer
+    MeasurementSvcService -->|儲存測量結果| ORMLayer
 
     %% Models → Database 持久化
-    ORM -->|非同步 ORM 操作<br/>SQLAlchemy 2.0| MySQL
+    ORMLayer -->|非同步 ORM 操作<br/>SQLAlchemy 2.0| MySQLDB
 
     %% 樣式定義
     classDef apiStyle fill:#e1bee7,stroke:#4a148c,stroke-width:2px,color:#000
@@ -257,10 +289,10 @@ graph LR
     classDef dbStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
 
     class AuthAPI,ProjectsAPI,StationsAPI,TestPlansAPI,TestsAPI,MeasurementsAPI,ResultsAPI,DUTControlAPI apiStyle
-    class TestEngine,InstrumentMgr,MeasurementSvc,SFCSvc svcStyle
-    class BaseMeasure measureStyle
-    class ORM modelStyle
-    class MySQL dbStyle
+    class TestEngineService,InstrumentMgrService,MeasurementSvcService,SFCSvcService svcStyle
+    class BaseMeasureClass measureStyle
+    class ORMLayer modelStyle
+    class MySQLDB dbStyle
 ```
 
 ### 測試執行完整流程
@@ -268,55 +300,116 @@ graph LR
 此流程圖展示從使用者登入到測試完成的完整生命週期，包含 runAllTest 模式的錯誤處理邏輯。
 
 ```mermaid
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontSize": "16px",
+    "fontFamily": "Arial, Helvetica, sans-serif",
+    "primaryTextColor": "#333333",
+    "lineColor": "#555555",
+    "primaryColor": "#f0f0f0"
+  },
+  "flowchart": {
+    "padding": 20,
+    "nodeSpacing": 60,
+    "rankSpacing": 80,
+    "curve": "basis",
+    "diagramPadding": 30
+  }
+}}%%
 flowchart TD
-    Start([🟢 流程開始]) --> Login["使用者登入<br/>輸入帳號密碼"]
-    Login --> ValidateUser{{"身分驗證<br/>通過?"}}
+    %% 此圖展示測試執行的完整生命週期，包含 runAllTest 模式的錯誤容錯處理
+
+    Start([🟢 流程開始])
+    Login[使用者登入<br/>輸入帳號密碼]
+    ValidateUser{{身分驗證<br/>通過?}}
+    GetToken[取得 JWT Token<br/>儲存至 localStorage]
+
+    SelectProject[選擇測試專案<br/>與站別]
+    LoadConfig[載入站別配置<br/>儀器連線設定]
+    LoadTestPlan[載入測試計劃<br/>CSV 項目清單]
+
+    InputSN[輸入產品序號<br/>掃描條碼]
+    ValidateSN{{SN 格式<br/>有效?}}
+    CreateSession[創建測試會話<br/>記錄至 test_sessions]
+
+    StartTest[啟動測試執行<br/>POST /api/tests/sessions/start]
+    GetNextItem[獲取下一測試項目<br/>依 sequence_order 排序]
+
+    HasItem{{還有未執行<br/>測試項目?}}
+    CalcResult[計算最終結果<br/>PASS/FAIL 統計]
+    LoadMeasure[載入測量配置<br/>MEASUREMENT_REGISTRY]
+
+    Execute[執行測量<br/>prepare → execute → cleanup]
+    GetValue[獲取測量值<br/>儀器讀取/命令執行]
+    Validate[驗證測試點<br/>validate_result 方法]
+
+    SaveResult[儲存測試結果<br/>記錄至 test_results]
+    UpdateUI[更新前端 UI<br/>顯示即時狀態]
+
+    TestFailed{{測試項目<br/>失敗?}}
+    CheckRunAllTest{{runAllTest<br/>模式?}}
+    CollectError[收集錯誤資訊<br/>繼續執行下一項]
+
+    UpdateSession[更新會話狀態<br/>final_result, 統計資料]
+
+    NeedSFC{{站別配置<br/>需上傳 SFC?}}
+    UploadSFC[上傳至 SFC 系統<br/>MES 製造資料]
+    LogSFC[記錄 SFC 日誌<br/>sfc_logs 表]
+    ShowReport[顯示測試報告<br/>PASS/FAIL 摘要]
+
+    ContinueTest{{繼續測試<br/>下一個產品?}}
+    End([🔴 流程結束])
+
+    %% 流程連接
+    Start --> Login
+    Login --> ValidateUser
     ValidateUser -->|❌ 驗證失敗| Login
-    ValidateUser -->|✅ 驗證成功| GetToken["取得 JWT Token<br/>儲存至 localStorage"]
+    ValidateUser -->|✅ 驗證成功| GetToken
 
-    GetToken --> SelectProject["選擇測試專案<br/>與站別"]
-    SelectProject --> LoadConfig["載入站別配置<br/>儀器連線設定"]
-    LoadConfig --> LoadTestPlan["載入測試計劃<br/>CSV 項目清單"]
+    GetToken --> SelectProject
+    SelectProject --> LoadConfig
+    LoadConfig --> LoadTestPlan
 
-    LoadTestPlan --> InputSN["輸入產品序號<br/>掃描條碼"]
-    InputSN --> ValidateSN{{"SN 格式<br/>有效?"}}
+    LoadTestPlan --> InputSN
+    InputSN --> ValidateSN
     ValidateSN -->|❌ 無效格式| InputSN
-    ValidateSN -->|✅ 格式正確| CreateSession["創建測試會話<br/>記錄至 test_sessions"]
+    ValidateSN -->|✅ 格式正確| CreateSession
 
-    CreateSession --> StartTest["啟動測試執行<br/>POST /api/tests/sessions/start"]
-    StartTest --> GetNextItem["獲取下一測試項目<br/>依 sequence_order 排序"]
+    CreateSession --> StartTest
+    StartTest --> GetNextItem
 
-    GetNextItem --> HasItem{{"還有未執行<br/>測試項目?"}}
-    HasItem -->|❌ 無更多項目| CalcResult["計算最終結果<br/>PASS/FAIL 統計"]
-    HasItem -->|✅ 有下一項目| LoadMeasure["載入測量配置<br/>MEASUREMENT_REGISTRY"]
+    GetNextItem --> HasItem
+    HasItem -->|❌ 無更多項目| CalcResult
+    HasItem -->|✅ 有下一項目| LoadMeasure
 
-    LoadMeasure --> Execute["執行測量<br/>prepare → execute → cleanup"]
-    Execute --> GetValue["獲取測量值<br/>儀器讀取/命令執行"]
-    GetValue --> Validate["驗證測試點<br/>validate_result()"]
+    LoadMeasure --> Execute
+    Execute --> GetValue
+    GetValue --> Validate
 
-    Validate --> SaveResult["儲存測試結果<br/>記錄至 test_results"]
-    SaveResult --> UpdateUI["更新前端 UI<br/>顯示即時狀態"]
+    Validate --> SaveResult
+    SaveResult --> UpdateUI
 
-    UpdateUI --> TestFailed{{"測試項目<br/>失敗?"}}
+    UpdateUI --> TestFailed
     TestFailed -->|❌ PASS| GetNextItem
-    TestFailed -->|✅ FAIL/ERROR| CheckRunAllTest{{"runAllTest<br/>模式?"}}
+    TestFailed -->|✅ FAIL/ERROR| CheckRunAllTest
 
-    CheckRunAllTest -->|✅ 啟用| CollectError["收集錯誤資訊<br/>繼續執行下一項"]
+    CheckRunAllTest -->|✅ 啟用| CollectError
     CheckRunAllTest -->|❌ 停用| CalcResult
 
     CollectError --> GetNextItem
 
-    CalcResult --> UpdateSession["更新會話狀態<br/>final_result, 統計資料"]
+    CalcResult --> UpdateSession
 
-    UpdateSession --> NeedSFC{{"站別配置<br/>需上傳 SFC?"}}
-    NeedSFC -->|✅ 需要上傳| UploadSFC["上傳至 SFC 系統<br/>MES 製造資料"]
-    UploadSFC --> LogSFC["記錄 SFC 日誌<br/>sfc_logs 表"]
-    LogSFC --> ShowReport["顯示測試報告<br/>PASS/FAIL 摘要"]
+    UpdateSession --> NeedSFC
+    NeedSFC -->|✅ 需要上傳| UploadSFC
+    UploadSFC --> LogSFC
+    LogSFC --> ShowReport
     NeedSFC -->|❌ 不需上傳| ShowReport
 
-    ShowReport --> ContinueTest{{"繼續測試<br/>下一個產品?"}}
+    ShowReport --> ContinueTest
     ContinueTest -->|✅ 繼續| InputSN
-    ContinueTest -->|❌ 結束| End([🔴 流程結束])
+    ContinueTest -->|❌ 結束| End
 
     %% 樣式定義
     classDef dbOp fill:#bbdefb,stroke:#1565c0,stroke-width:2px,color:#000
