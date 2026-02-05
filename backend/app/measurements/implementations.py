@@ -431,6 +431,258 @@ class ChassisRotationMeasurement(BaseMeasurement):
 
 
 # ============================================================================
+# RF_Tool (MT8872A) Measurements
+# ============================================================================
+class RF_Tool_LTE_TX_Measurement(BaseMeasurement):
+    """
+    LTE TX measurement using RF_Tool (MT8872A).
+    Measures LTE transmit power, channel power, and spectral characteristics.
+
+    Parameters:
+        instrument: Instrument name in config (default: 'RF_Tool_1')
+        band: LTE band (e.g., 'B1', 'B3', 'B7', 'B38', 'B41')
+        channel: Channel number
+        bandwidth: Channel bandwidth in MHz (default: 10.0)
+
+    TODO: Integrate with real InstrumentManager and RF_ToolDriver
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            # Get and validate parameters
+            instrument_name = get_param(self.test_params, 'instrument', default='RF_Tool_1')
+            band = get_param(self.test_params, 'band')
+            channel = get_param(self.test_params, 'channel')
+            bandwidth = get_param(self.test_params, 'bandwidth', default=10.0)
+
+            # Validate required parameters
+            if band is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message="Missing required parameter: band"
+                )
+            if channel is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message="Missing required parameter: channel"
+                )
+
+            try:
+                channel = int(channel)
+                bandwidth = float(bandwidth)
+            except (ValueError, TypeError) as e:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Invalid parameter type: {e}"
+                )
+
+            self.logger.info(f"RF_Tool LTE TX measurement: band={band}, channel={channel}, bw={bandwidth}MHz")
+
+            # TODO: Integrate with real RF_ToolDriver via InstrumentManager
+            # driver = await instrument_manager.get_driver(instrument_name)
+            # tx_result = await driver.measure_lte_tx_power(band, channel, bandwidth)
+            # measured_power = Decimal(str(tx_result['tx_power']))
+
+            # Simulated result (placeholder)
+            measured_power = Decimal('23.5')  # Typical TX power in dBm
+
+            # Validate against limits
+            is_valid, error_msg = self.validate_result(measured_power)
+
+            # Generate error message for BOTH_LIMIT if validation failed
+            if not is_valid and error_msg is None:
+                if self.lower_limit is not None and self.upper_limit is not None:
+                    error_msg = f"Value {measured_power} outside range [{self.lower_limit}, {self.upper_limit}]"
+                elif self.lower_limit is not None:
+                    error_msg = f"Value {measured_power} < lower limit {self.lower_limit}"
+                elif self.upper_limit is not None:
+                    error_msg = f"Value {measured_power} > upper limit {self.upper_limit}"
+
+            return self.create_result(
+                result="PASS" if is_valid else "FAIL",
+                measured_value=measured_power,
+                error_message=error_msg if not is_valid else None
+            )
+
+        except Exception as e:
+            self.logger.error(f"RF_Tool LTE TX measurement error: {e}")
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+class RF_Tool_LTE_RX_Measurement(BaseMeasurement):
+    """
+    LTE RX sensitivity measurement using RF_Tool (MT8872A).
+    Measures DUT receiver performance at various signal levels.
+
+    Parameters:
+        instrument: Instrument name in config (default: 'RF_Tool_1')
+        band: LTE band (e.g., 'B1', 'B3', 'B7', 'B38', 'B41')
+        channel: Channel number
+        test_power: Signal generator power in dBm (default: -90.0)
+        min_throughput: Minimum throughput threshold in Mbps (default: 10.0)
+
+    TODO: Integrate with real InstrumentManager and RF_ToolDriver
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            # Get and validate parameters
+            instrument_name = get_param(self.test_params, 'instrument', default='RF_Tool_1')
+            band = get_param(self.test_params, 'band')
+            channel = get_param(self.test_params, 'channel')
+            test_power = get_param(self.test_params, 'test_power', default=-90.0)
+
+            # Validate required parameters
+            if band is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message="Missing required parameter: band"
+                )
+            if channel is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message="Missing required parameter: channel"
+                )
+
+            try:
+                channel = int(channel)
+                test_power = float(test_power)
+            except (ValueError, TypeError) as e:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Invalid parameter type: {e}"
+                )
+
+            self.logger.info(f"RF_Tool LTE RX measurement: band={band}, channel={channel}, power={test_power}dBm")
+
+            # TODO: Integrate with real RF_ToolDriver via InstrumentManager
+            # driver = await instrument_manager.get_driver(instrument_name)
+            # rx_result = await driver.measure_lte_rx_sensitivity(band, channel, test_power)
+            # rssi = Decimal(str(rx_result['rssi']))
+
+            # Simulated result (placeholder) - RSSI slightly weaker than test power
+            rssi = Decimal(str(test_power - 1.2))  # Simulate some path loss
+
+            # Validate against limits
+            is_valid, error_msg = self.validate_result(rssi)
+
+            # Generate error message for BOTH_LIMIT if validation failed
+            if not is_valid and error_msg is None:
+                if self.lower_limit is not None and self.upper_limit is not None:
+                    error_msg = f"Value {rssi} outside range [{self.lower_limit}, {self.upper_limit}]"
+                elif self.lower_limit is not None:
+                    error_msg = f"Value {rssi} < lower limit {self.lower_limit}"
+                elif self.upper_limit is not None:
+                    error_msg = f"Value {rssi} > upper limit {self.upper_limit}"
+
+            return self.create_result(
+                result="PASS" if is_valid else "FAIL",
+                measured_value=rssi,
+                error_message=error_msg if not is_valid else None
+            )
+
+        except Exception as e:
+            self.logger.error(f"RF_Tool LTE RX measurement error: {e}")
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+# ============================================================================
+# CMW100 Measurements
+# ============================================================================
+class CMW100_BLE_Measurement(BaseMeasurement):
+    """
+    Bluetooth LE measurement using CMW100.
+    Measures BLE TX power, frequency error, and modulation characteristics.
+
+    Parameters:
+        instrument: Instrument name in config (default: 'CMW100_1')
+        connector: RF connector number (default: 1)
+        frequency: Frequency in MHz (default: 2440.0)
+        expected_power: Expected TX power in dBm (default: -5.0)
+
+    TODO: Integrate with real InstrumentManager and CMW100Driver
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            # Get parameters (for future use)
+            instrument_name = get_param(self.test_params, 'instrument', default='CMW100_1')
+            connector = int(get_param(self.test_params, 'connector', default=1))
+            frequency = float(get_param(self.test_params, 'frequency', default=2440.0))
+            expected_power = float(get_param(self.test_params, 'expected_power', default=-5.0))
+
+            self.logger.info(f"CMW100 BLE measurement: connector={connector}, freq={frequency}MHz")
+
+            # TODO: Integrate with real CMW100Driver via InstrumentManager
+            # driver = await instrument_manager.get_driver(instrument_name)
+            # ble_result = await driver.measure_ble_tx_power(connector, frequency)
+            # measured_power = Decimal(str(ble_result['tx_power']))
+
+            # Simulated result (placeholder)
+            measured_power = Decimal('-5.2')  # Typical BLE power
+
+            # Validate against limits
+            is_valid, error_msg = self.validate_result(measured_power)
+
+            return self.create_result(
+                result="PASS" if is_valid else "FAIL",
+                measured_value=measured_power,
+                error_message=error_msg if not is_valid else None
+            )
+
+        except Exception as e:
+            self.logger.error(f"CMW100 BLE measurement error: {e}")
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+class CMW100_WiFi_Measurement(BaseMeasurement):
+    """
+    WiFi measurement using CMW100.
+    Measures WiFi TX power, EVM, and spectral mask compliance.
+
+    Parameters:
+        instrument: Instrument name in config (default: 'CMW100_1')
+        connector: RF connector number (default: 1)
+        standard: WiFi standard ('11a/b/g/n/ac/ax') (default: '11ac')
+        channel: WiFi channel number (default: 36)
+        bandwidth: Channel bandwidth in MHz (default: 20)
+
+    TODO: Integrate with real InstrumentManager and CMW100Driver
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            # Get parameters (for future use)
+            instrument_name = get_param(self.test_params, 'instrument', default='CMW100_1')
+            connector = int(get_param(self.test_params, 'connector', default=1))
+            standard = get_param(self.test_params, 'standard', default='11ac')
+            channel = int(get_param(self.test_params, 'channel', default=36))
+
+            self.logger.info(f"CMW100 WiFi measurement: connector={connector}, std={standard}, ch={channel}")
+
+            # TODO: Integrate with real CMW100Driver via InstrumentManager
+            # driver = await instrument_manager.get_driver(instrument_name)
+            # wifi_result = await driver.measure_wifi_tx_power(connector, standard, channel)
+            # measured_power = Decimal(str(wifi_result['tx_power']))
+
+            # Simulated result (placeholder)
+            measured_power = Decimal('15.2')  # Typical WiFi power
+
+            # Validate against limits
+            is_valid, error_msg = self.validate_result(measured_power)
+
+            return self.create_result(
+                result="PASS" if is_valid else "FAIL",
+                measured_value=measured_power,
+                error_message=error_msg if not is_valid else None
+            )
+
+        except Exception as e:
+            self.logger.error(f"CMW100 WiFi measurement error: {e}")
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+# ============================================================================
 # Measurement Registry
 # ============================================================================
 MEASUREMENT_REGISTRY = {
@@ -446,6 +698,12 @@ MEASUREMENT_REGISTRY = {
     "CHASSIS_ROTATION": ChassisRotationMeasurement,
     "OTHER": DummyMeasurement,
     "FINAL": DummyMeasurement,
+    # RF_Tool (MT8872A) measurements
+    "RF_TOOL_LTE_TX": RF_Tool_LTE_TX_Measurement,
+    "RF_TOOL_LTE_RX": RF_Tool_LTE_RX_Measurement,
+    # CMW100 measurements
+    "CMW100_BLE": CMW100_BLE_Measurement,
+    "CMW100_WIFI": CMW100_WiFi_Measurement,
     # Lowercase variants
     "command": CommandTestMeasurement,
     "wait": WaitMeasurement,
@@ -485,6 +743,16 @@ def get_measurement_class(test_command: str) -> Optional[type]:
         "MeasureSwitchOFF": "RELAY",     # PDTool4 relay OFF mapping
         "ChassisRotateCW": "CHASSIS_ROTATION",   # PDTool4 clockwise rotation
         "ChassisRotateCCW": "CHASSIS_ROTATION",  # PDTool4 counterclockwise rotation
+        # RF_Tool (MT8872A) mappings
+        "RF_Tool_LTE_TX": "RF_TOOL_LTE_TX",
+        "RF_Tool_LTE_RX": "RF_TOOL_LTE_RX",
+        "RFTOOLTETX": "RF_TOOL_LTE_TX",  # Alternative naming
+        "RFTOOLTETRX": "RF_TOOL_LTE_RX",  # Alternative naming
+        # CMW100 mappings
+        "CMW100_BLE": "CMW100_BLE",
+        "CMW100_WiFi": "CMW100_WIFI",
+        "CMW100WIFI": "CMW100_WIFI",  # Alternative naming
+        # Console/COM/TCP mappings
         "console": "console",
         "comport": "comport",
         "tcpip": "tcpip",
