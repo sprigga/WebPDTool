@@ -444,11 +444,16 @@ class RF_Tool_LTE_TX_Measurement(BaseMeasurement):
         channel: Channel number
         bandwidth: Channel bandwidth in MHz (default: 10.0)
 
-    TODO: Integrate with real InstrumentManager and RF_ToolDriver
+    Integration: Uses MT8872ADriver from backend/app/services/instruments/mt8872a.py
     """
 
     async def execute(self) -> MeasurementResult:
         try:
+            # Import required modules lazily to avoid circular imports
+            from app.services.instrument_connection import get_connection_pool
+            from app.services.instruments import get_driver_class
+            from app.core.instrument_config import get_instrument_settings
+
             # Get and validate parameters
             instrument_name = get_param(self.test_params, 'instrument', default='RF_Tool_1')
             band = get_param(self.test_params, 'band')
@@ -478,13 +483,43 @@ class RF_Tool_LTE_TX_Measurement(BaseMeasurement):
 
             self.logger.info(f"RF_Tool LTE TX measurement: band={band}, channel={channel}, bw={bandwidth}MHz")
 
-            # TODO: Integrate with real RF_ToolDriver via InstrumentManager
-            # driver = await instrument_manager.get_driver(instrument_name)
-            # tx_result = await driver.measure_lte_tx_power(band, channel, bandwidth)
-            # measured_power = Decimal(str(tx_result['tx_power']))
+            # Get instrument configuration
+            instrument_settings = get_instrument_settings()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument {instrument_name} not found in configuration"
+                )
 
-            # Simulated result (placeholder)
-            measured_power = Decimal('23.5')  # Typical TX power in dBm
+            # Get driver class
+            driver_class = get_driver_class(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver found for instrument type: {config.type}"
+                )
+
+            # Get connection and create driver
+            connection_pool = get_connection_pool()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+
+                # Initialize if needed
+                if not hasattr(driver, '_initialized'):
+                    await driver.initialize()
+                    driver._initialized = True
+
+                # Execute measurement using real driver
+                tx_result = await driver.measure_lte_tx_power(band, channel, bandwidth)
+
+            # Check for measurement errors
+            if tx_result.get('status') == 'ERROR':
+                error_msg = tx_result.get('error', 'Unknown error')
+                return self.create_result(result="ERROR", error_message=error_msg)
+
+            # Extract measured power value
+            measured_power = tx_result['tx_power_avg']
 
             # Validate against limits
             is_valid, error_msg = self.validate_result(measured_power)
@@ -505,7 +540,7 @@ class RF_Tool_LTE_TX_Measurement(BaseMeasurement):
             )
 
         except Exception as e:
-            self.logger.error(f"RF_Tool LTE TX measurement error: {e}")
+            self.logger.error(f"RF_Tool LTE TX measurement error: {e}", exc_info=True)
             return self.create_result(result="ERROR", error_message=str(e))
 
 
@@ -521,16 +556,22 @@ class RF_Tool_LTE_RX_Measurement(BaseMeasurement):
         test_power: Signal generator power in dBm (default: -90.0)
         min_throughput: Minimum throughput threshold in Mbps (default: 10.0)
 
-    TODO: Integrate with real InstrumentManager and RF_ToolDriver
+    Integration: Uses MT8872ADriver from backend/app/services/instruments/mt8872a.py
     """
 
     async def execute(self) -> MeasurementResult:
         try:
+            # Import required modules lazily to avoid circular imports
+            from app.services.instrument_connection import get_connection_pool
+            from app.services.instruments import get_driver_class
+            from app.core.instrument_config import get_instrument_settings
+
             # Get and validate parameters
             instrument_name = get_param(self.test_params, 'instrument', default='RF_Tool_1')
             band = get_param(self.test_params, 'band')
             channel = get_param(self.test_params, 'channel')
             test_power = get_param(self.test_params, 'test_power', default=-90.0)
+            min_throughput = get_param(self.test_params, 'min_throughput', default=10.0)
 
             # Validate required parameters
             if band is None:
@@ -547,6 +588,7 @@ class RF_Tool_LTE_RX_Measurement(BaseMeasurement):
             try:
                 channel = int(channel)
                 test_power = float(test_power)
+                min_throughput = float(min_throughput)
             except (ValueError, TypeError) as e:
                 return self.create_result(
                     result="ERROR",
@@ -555,13 +597,43 @@ class RF_Tool_LTE_RX_Measurement(BaseMeasurement):
 
             self.logger.info(f"RF_Tool LTE RX measurement: band={band}, channel={channel}, power={test_power}dBm")
 
-            # TODO: Integrate with real RF_ToolDriver via InstrumentManager
-            # driver = await instrument_manager.get_driver(instrument_name)
-            # rx_result = await driver.measure_lte_rx_sensitivity(band, channel, test_power)
-            # rssi = Decimal(str(rx_result['rssi']))
+            # Get instrument configuration
+            instrument_settings = get_instrument_settings()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument {instrument_name} not found in configuration"
+                )
 
-            # Simulated result (placeholder) - RSSI slightly weaker than test power
-            rssi = Decimal(str(test_power - 1.2))  # Simulate some path loss
+            # Get driver class
+            driver_class = get_driver_class(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver found for instrument type: {config.type}"
+                )
+
+            # Get connection and create driver
+            connection_pool = get_connection_pool()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+
+                # Initialize if needed
+                if not hasattr(driver, '_initialized'):
+                    await driver.initialize()
+                    driver._initialized = True
+
+                # Execute measurement using real driver
+                rx_result = await driver.measure_lte_rx_sensitivity(band, channel, test_power, min_throughput)
+
+            # Check for measurement errors
+            if rx_result.get('status') == 'ERROR':
+                error_msg = rx_result.get('error', 'Unknown error')
+                return self.create_result(result="ERROR", error_message=error_msg)
+
+            # Extract RSSI value
+            rssi = rx_result['rssi']
 
             # Validate against limits
             is_valid, error_msg = self.validate_result(rssi)
@@ -582,7 +654,7 @@ class RF_Tool_LTE_RX_Measurement(BaseMeasurement):
             )
 
         except Exception as e:
-            self.logger.error(f"RF_Tool LTE RX measurement error: {e}")
+            self.logger.error(f"RF_Tool LTE RX measurement error: {e}", exc_info=True)
             return self.create_result(result="ERROR", error_message=str(e))
 
 
@@ -600,29 +672,74 @@ class CMW100_BLE_Measurement(BaseMeasurement):
         frequency: Frequency in MHz (default: 2440.0)
         expected_power: Expected TX power in dBm (default: -5.0)
 
-    TODO: Integrate with real InstrumentManager and CMW100Driver
+    Integration: Uses CMW100Driver from backend/app/services/instruments/cmw100.py
     """
 
     async def execute(self) -> MeasurementResult:
         try:
-            # Get parameters (for future use)
+            # Import required modules lazily to avoid circular imports
+            from app.services.instrument_connection import get_connection_pool
+            from app.services.instruments import get_driver_class
+            from app.core.instrument_config import get_instrument_settings
+
+            # Get parameters
             instrument_name = get_param(self.test_params, 'instrument', default='CMW100_1')
             connector = int(get_param(self.test_params, 'connector', default=1))
             frequency = float(get_param(self.test_params, 'frequency', default=2440.0))
             expected_power = float(get_param(self.test_params, 'expected_power', default=-5.0))
+            burst_type = get_param(self.test_params, 'burst_type', default='LE')
 
             self.logger.info(f"CMW100 BLE measurement: connector={connector}, freq={frequency}MHz")
 
-            # TODO: Integrate with real CMW100Driver via InstrumentManager
-            # driver = await instrument_manager.get_driver(instrument_name)
-            # ble_result = await driver.measure_ble_tx_power(connector, frequency)
-            # measured_power = Decimal(str(ble_result['tx_power']))
+            # Get instrument configuration
+            instrument_settings = get_instrument_settings()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument {instrument_name} not found in configuration"
+                )
 
-            # Simulated result (placeholder)
-            measured_power = Decimal('-5.2')  # Typical BLE power
+            # Get driver class
+            driver_class = get_driver_class(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver found for instrument type: {config.type}"
+                )
+
+            # Get connection and create driver
+            connection_pool = get_connection_pool()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+
+                # Initialize if needed
+                if not hasattr(driver, '_initialized'):
+                    await driver.initialize()
+                    driver._initialized = True
+
+                # Execute measurement using real driver
+                ble_result = await driver.measure_ble_tx_power(connector, frequency, expected_power, burst_type)
+
+            # Check for measurement errors
+            if ble_result.get('status') == 'ERROR':
+                error_msg = ble_result.get('error', 'Unknown error')
+                return self.create_result(result="ERROR", error_message=error_msg)
+
+            # Extract measured power value
+            measured_power = ble_result['tx_power']
 
             # Validate against limits
             is_valid, error_msg = self.validate_result(measured_power)
+
+            # Generate error message if validation failed
+            if not is_valid and error_msg is None:
+                if self.lower_limit is not None and self.upper_limit is not None:
+                    error_msg = f"Value {measured_power} outside range [{self.lower_limit}, {self.upper_limit}]"
+                elif self.lower_limit is not None:
+                    error_msg = f"Value {measured_power} < lower limit {self.lower_limit}"
+                elif self.upper_limit is not None:
+                    error_msg = f"Value {measured_power} > upper limit {self.upper_limit}"
 
             return self.create_result(
                 result="PASS" if is_valid else "FAIL",
@@ -631,7 +748,7 @@ class CMW100_BLE_Measurement(BaseMeasurement):
             )
 
         except Exception as e:
-            self.logger.error(f"CMW100 BLE measurement error: {e}")
+            self.logger.error(f"CMW100 BLE measurement error: {e}", exc_info=True)
             return self.create_result(result="ERROR", error_message=str(e))
 
 
@@ -643,33 +760,82 @@ class CMW100_WiFi_Measurement(BaseMeasurement):
     Parameters:
         instrument: Instrument name in config (default: 'CMW100_1')
         connector: RF connector number (default: 1)
-        standard: WiFi standard ('11a/b/g/n/ac/ax') (default: '11ac')
+        standard: WiFi standard ('a/g', 'ac', 'ax') (default: 'ac')
         channel: WiFi channel number (default: 36)
         bandwidth: Channel bandwidth in MHz (default: 20)
 
-    TODO: Integrate with real InstrumentManager and CMW100Driver
+    Integration: Uses CMW100Driver from backend/app/services/instruments/cmw100.py
     """
 
     async def execute(self) -> MeasurementResult:
         try:
-            # Get parameters (for future use)
+            # Import required modules lazily to avoid circular imports
+            from app.services.instrument_connection import get_connection_pool
+            from app.services.instruments import get_driver_class
+            from app.core.instrument_config import get_instrument_settings
+
+            # Get parameters
             instrument_name = get_param(self.test_params, 'instrument', default='CMW100_1')
             connector = int(get_param(self.test_params, 'connector', default=1))
-            standard = get_param(self.test_params, 'standard', default='11ac')
+            standard = get_param(self.test_params, 'standard', default='ac')
             channel = int(get_param(self.test_params, 'channel', default=36))
+            bandwidth = int(get_param(self.test_params, 'bandwidth', default=20))
+            expected_power = get_param(self.test_params, 'expected_power')
 
-            self.logger.info(f"CMW100 WiFi measurement: connector={connector}, std={standard}, ch={channel}")
+            self.logger.info(f"CMW100 WiFi measurement: connector={connector}, std={standard}, ch={channel}, bw={bandwidth}MHz")
 
-            # TODO: Integrate with real CMW100Driver via InstrumentManager
-            # driver = await instrument_manager.get_driver(instrument_name)
-            # wifi_result = await driver.measure_wifi_tx_power(connector, standard, channel)
-            # measured_power = Decimal(str(wifi_result['tx_power']))
+            # Get instrument configuration
+            instrument_settings = get_instrument_settings()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument {instrument_name} not found in configuration"
+                )
 
-            # Simulated result (placeholder)
-            measured_power = Decimal('15.2')  # Typical WiFi power
+            # Get driver class
+            driver_class = get_driver_class(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver found for instrument type: {config.type}"
+                )
+
+            # Get connection and create driver
+            connection_pool = get_connection_pool()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+
+                # Initialize if needed
+                if not hasattr(driver, '_initialized'):
+                    await driver.initialize()
+                    driver._initialized = True
+
+                # Execute measurement using real driver
+                wifi_result = await driver.measure_wifi_tx_power(
+                    connector, standard, channel, bandwidth,
+                    float(expected_power) if expected_power else None
+                )
+
+            # Check for measurement errors
+            if wifi_result.get('status') == 'ERROR':
+                error_msg = wifi_result.get('error', 'Unknown error')
+                return self.create_result(result="ERROR", error_message=error_msg)
+
+            # Extract measured power value
+            measured_power = wifi_result['tx_power']
 
             # Validate against limits
             is_valid, error_msg = self.validate_result(measured_power)
+
+            # Generate error message if validation failed
+            if not is_valid and error_msg is None:
+                if self.lower_limit is not None and self.upper_limit is not None:
+                    error_msg = f"Value {measured_power} outside range [{self.lower_limit}, {self.upper_limit}]"
+                elif self.lower_limit is not None:
+                    error_msg = f"Value {measured_power} < lower limit {self.lower_limit}"
+                elif self.upper_limit is not None:
+                    error_msg = f"Value {measured_power} > upper limit {self.upper_limit}"
 
             return self.create_result(
                 result="PASS" if is_valid else "FAIL",
@@ -678,7 +844,352 @@ class CMW100_WiFi_Measurement(BaseMeasurement):
             )
 
         except Exception as e:
-            self.logger.error(f"CMW100 WiFi measurement error: {e}")
+            self.logger.error(f"CMW100 WiFi measurement error: {e}", exc_info=True)
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+# ============================================================================
+# L6MPU SSH Measurements
+# ============================================================================
+class L6MPU_LTE_Check_Measurement(BaseMeasurement):
+    """
+    LTE module SIM card check using L6MPU SSH driver.
+    Checks SIM card status via microcom and AT+CPIN? command.
+
+    Parameters:
+        instrument: Instrument name in config (default: 'L6MPU_1')
+        timeout: Command timeout in seconds (default: 5.0)
+
+    Integration: Uses L6MPUSSHDriver from backend/app/services/instruments/l6mpu_ssh.py
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            # Import required modules lazily
+            from app.services.instrument_connection import get_connection_pool
+            from app.services.instruments import get_driver_class
+            from app.core.instrument_config import get_instrument_settings
+
+            # Get parameters
+            instrument_name = get_param(self.test_params, 'instrument', default='L6MPU_1')
+            timeout = float(get_param(self.test_params, 'timeout', default=5.0))
+
+            self.logger.info(f"L6MPU LTE check: instrument={instrument_name}")
+
+            # Get instrument configuration
+            instrument_settings = get_instrument_settings()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument {instrument_name} not found in configuration"
+                )
+
+            # Get driver class
+            driver_class = get_driver_class(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver found for instrument type: {config.type}"
+                )
+
+            # Get connection and create driver
+            connection_pool = get_connection_pool()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+
+                # Initialize if needed
+                if not hasattr(driver, '_initialized'):
+                    await driver.initialize()
+                    driver._initialized = True
+
+                # Execute LTE check
+                result = await driver.lte_check(timeout=timeout)
+
+            # Check result
+            if result.get('status') == 'ERROR':
+                return self.create_result(result="ERROR", error_message=result.get('error', 'Unknown error'))
+
+            # SIM ready indicates success
+            is_valid = result.get('sim_ready', False)
+            measured_value = Decimal("1.0") if is_valid else Decimal("0.0")
+
+            return self.create_result(
+                result="PASS" if is_valid else "FAIL",
+                measured_value=measured_value,
+                error_message=None if is_valid else "SIM card not ready"
+            )
+
+        except Exception as e:
+            self.logger.error(f"L6MPU LTE check error: {e}", exc_info=True)
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+class L6MPU_PLC_Test_Measurement(BaseMeasurement):
+    """
+    PLC network connectivity test using L6MPU SSH driver.
+    Tests PLC connectivity via ping on eth0/eth1 interfaces.
+
+    Parameters:
+        instrument: Instrument name in config (default: 'L6MPU_1')
+        interface: Network interface ('eth0' or 'eth1') (default: 'eth0')
+        count: Number of ping packets (default: 4)
+
+    Integration: Uses L6MPUSSHDriver from backend/app/services/instruments/l6mpu_ssh.py
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            # Import required modules lazily
+            from app.services.instrument_connection import get_connection_pool
+            from app.services.instruments import get_driver_class
+            from app.core.instrument_config import get_instrument_settings
+
+            # Get parameters
+            instrument_name = get_param(self.test_params, 'instrument', default='L6MPU_1')
+            interface = get_param(self.test_params, 'interface', default='eth0')
+            count = int(get_param(self.test_params, 'count', default=4))
+
+            self.logger.info(f"L6MPU PLC test: instrument={instrument_name}, interface={interface}")
+
+            # Get instrument configuration
+            instrument_settings = get_instrument_settings()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument {instrument_name} not found in configuration"
+                )
+
+            # Get driver class
+            driver_class = get_driver_class(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver found for instrument type: {config.type}"
+                )
+
+            # Get connection and create driver
+            connection_pool = get_connection_pool()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+
+                # Initialize if needed
+                if not hasattr(driver, '_initialized'):
+                    await driver.initialize()
+                    driver._initialized = True
+
+                # Execute PLC ping test
+                result = await driver.plc_ping_test(interface=interface, count=count)
+
+            # Check result
+            if result.get('status') == 'ERROR':
+                return self.create_result(result="ERROR", error_message=result.get('error', 'Unknown error'))
+
+            # Success if ping completed without 100% packet loss
+            packet_loss = result.get('packet_loss', 100)
+            is_valid = packet_loss < 100
+
+            # Use packet loss inverse as measured value (0% loss = 1.0, 100% loss = 0.0)
+            measured_value = Decimal(str((100 - packet_loss) / 100.0))
+
+            return self.create_result(
+                result="PASS" if is_valid else "FAIL",
+                measured_value=measured_value,
+                error_message=None if is_valid else f"100% packet loss"
+            )
+
+        except Exception as e:
+            self.logger.error(f"L6MPU PLC test error: {e}", exc_info=True)
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+# ============================================================================
+# SMCV100B Measurements
+# ============================================================================
+class SMCV100B_RF_Output_Measurement(BaseMeasurement):
+    """
+    RF signal generation using SMCV100B.
+    Supports DAB, AM, FM modulation modes.
+
+    Parameters:
+        instrument: Instrument name in config (default: 'SMCV100B_1')
+        mode: Modulation mode ('DAB', 'AM', 'FM', 'IQ', 'RF')
+        frequency: Carrier frequency in MHz (required for RF modes)
+        power: RF power in dBm (required for RF modes)
+        file: Transport stream file (required for DAB mode)
+        enable: Enable/disable for IQ/RF modes
+
+    Integration: Uses SMCV100BDriver from backend/app/services/instruments/smcv100b.py
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            # Import required modules lazily
+            from app.services.instrument_connection import get_connection_pool
+            from app.services.instruments import get_driver_class
+            from app.core.instrument_config import get_instrument_settings
+
+            # Get parameters
+            instrument_name = get_param(self.test_params, 'instrument', default='SMCV100B_1')
+            mode = get_param(self.test_params, 'mode', default='FM')
+            frequency = get_param(self.test_params, 'frequency')
+            power = get_param(self.test_params, 'power')
+            transport_file = get_param(self.test_params, 'file')
+            enable = get_param(self.test_params, 'enable', default=True)
+
+            self.logger.info(f"SMCV100B RF output: mode={mode}")
+
+            # Get instrument configuration
+            instrument_settings = get_instrument_settings()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument {instrument_name} not found in configuration"
+                )
+
+            # Get driver class
+            driver_class = get_driver_class(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver found for instrument type: {config.type}"
+                )
+
+            # Build command params
+            cmd_params = {'mode': mode}
+
+            if frequency is not None:
+                cmd_params['frequency'] = float(frequency)
+            if power is not None:
+                cmd_params['power'] = float(power)
+            if transport_file is not None:
+                cmd_params['file'] = transport_file
+            if enable is not None:
+                if isinstance(enable, str):
+                    enable = enable.lower() in ('true', '1', 'yes', 'on')
+                cmd_params['enable'] = enable
+
+            # Get connection and create driver
+            connection_pool = get_connection_pool()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+
+                # Initialize if needed
+                if not hasattr(driver, '_initialized'):
+                    await driver.initialize()
+                    driver._initialized = True
+
+                # Execute RF output command
+                output = await driver.execute_command(cmd_params)
+
+            # Success if command completed
+            return self.create_result(
+                result="PASS",
+                measured_value=Decimal("1.0")
+            )
+
+        except Exception as e:
+            self.logger.error(f"SMCV100B RF output error: {e}", exc_info=True)
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+# ============================================================================
+# PEAK CAN Measurements
+# ============================================================================
+class PEAK_CAN_Message_Measurement(BaseMeasurement):
+    """
+    CAN message communication using PEAK-System PCAN hardware.
+    Supports CAN and CAN-FD message transmission and reception.
+
+    Parameters:
+        instrument: Instrument name in config (default: 'PEAK_CAN_1')
+        operation: Operation type ('write', 'read', 'write_read')
+        can_id: CAN identifier (hex or decimal)
+        data: Message data (hex comma-separated string)
+        is_extended: Use extended frame format (29-bit ID)
+        is_fd: Use CAN-FD format
+        timeout: Receive timeout in seconds
+        filter_id: Filter messages by ID when reading
+
+    Integration: Uses PEAKCANDriver from backend/app/services/instruments/peak_can.py
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            # Import required modules lazily
+            from app.services.instrument_connection import get_connection_pool
+            from app.services.instruments import get_driver_class
+            from app.core.instrument_config import get_instrument_settings
+
+            # Get parameters
+            instrument_name = get_param(self.test_params, 'instrument', default='PEAK_CAN_1')
+            operation = get_param(self.test_params, 'operation', default='read')
+
+            self.logger.info(f"PEAK CAN operation: {operation}")
+
+            # Get instrument configuration
+            instrument_settings = get_instrument_settings()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument {instrument_name} not found in configuration"
+                )
+
+            # Get driver class
+            driver_class = get_driver_class(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver found for instrument type: {config.type}"
+                )
+
+            # Build command params
+            cmd_params = {'operation': operation}
+
+            # Add optional parameters
+            for key in ['can_id', 'id', 'data', 'is_extended', 'extended', 'is_fd', 'fd', 'timeout', 'filter_id', 'filter']:
+                value = get_param(self.test_params, key)
+                if value is not None:
+                    # Normalize key names
+                    param_key = key
+                    if key == 'id':
+                        param_key = 'can_id'
+                    elif key == 'extended':
+                        param_key = 'is_extended'
+                    elif key == 'fd':
+                        param_key = 'is_fd'
+                    elif key == 'filter':
+                        param_key = 'filter_id'
+                    cmd_params[param_key] = value
+
+            # Get connection and create driver
+            connection_pool = get_connection_pool()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+
+                # Initialize if needed
+                if not hasattr(driver, '_initialized'):
+                    await driver.initialize()
+                    driver._initialized = True
+
+                # Execute CAN command
+                output = await driver.execute_command(cmd_params)
+
+            # Check for error in output
+            if 'Error' in output or 'ERROR' in output:
+                return self.create_result(result="ERROR", error_message=output)
+
+            # Success
+            return self.create_result(
+                result="PASS",
+                measured_value=Decimal("1.0")
+            )
+
+        except Exception as e:
+            self.logger.error(f"PEAK CAN error: {e}", exc_info=True)
             return self.create_result(result="ERROR", error_message=str(e))
 
 
@@ -704,6 +1215,13 @@ MEASUREMENT_REGISTRY = {
     # CMW100 measurements
     "CMW100_BLE": CMW100_BLE_Measurement,
     "CMW100_WIFI": CMW100_WiFi_Measurement,
+    # L6MPU measurements
+    "L6MPU_LTE_CHECK": L6MPU_LTE_Check_Measurement,
+    "L6MPU_PLC_TEST": L6MPU_PLC_Test_Measurement,
+    # SMCV100B measurements
+    "SMCV100B_RF": SMCV100B_RF_Output_Measurement,
+    # PEAK CAN measurements
+    "PEAK_CAN": PEAK_CAN_Message_Measurement,
     # Lowercase variants
     "command": CommandTestMeasurement,
     "wait": WaitMeasurement,
@@ -752,6 +1270,17 @@ def get_measurement_class(test_command: str) -> Optional[type]:
         "CMW100_BLE": "CMW100_BLE",
         "CMW100_WiFi": "CMW100_WIFI",
         "CMW100WIFI": "CMW100_WIFI",  # Alternative naming
+        # L6MPU mappings
+        "L6MPU_LTE": "L6MPU_LTE_CHECK",
+        "L6MPU_PLC": "L6MPU_PLC_TEST",
+        "L6MPULTE": "L6MPU_LTE_CHECK",
+        "L6MPUPPLC": "L6MPU_PLC_TEST",
+        # SMCV100B mappings
+        "SMCV100B": "SMCV100B_RF",
+        "SMCV": "SMCV100B_RF",
+        # PEAK CAN mappings
+        "PEAK": "PEAK_CAN",
+        "PCAN": "PEAK_CAN",
         # Console/COM/TCP mappings
         "console": "console",
         "comport": "comport",

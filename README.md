@@ -172,31 +172,9 @@ graph TB
     classDef dbStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000
     classDef externalStyle fill:#f5f5f5,stroke:#616161,stroke-width:2px,color:#000
 
-    %% 字型大小設定 (18-20px)
-    style Client font-size:20px
-    style Frontend font-size:20px
-    style Backend font-size:20px
-    style Database font-size:20px
-    style External font-size:20px
-    style API font-size:18px
-    style Services font-size:18px
-    style Measurements font-size:18px
-    style Models font-size:18px
-
-    %% 節點寬度設定 (防止文字遮蔽)
-    style AuthAPI width:140px
-    style ProjectsAPI width:160px
-    style StationsAPI width:160px
-    style TestPlansAPI width:160px
-    style TestsAPI width:140px
-    style MeasurementsAPI width:170px
-    style ResultsAPI width:160px
-    style TestEngine width:150px
-    style InstrumentMgr width:170px
-    style MeasurementSvc width:170px
-    style SFCSvc width:150px
-    style BaseMeasure width:170px
-    style ORM width:200px
+    %% 子圖字型大小 (18-20px)
+    classDef subgraphLg font-size:20px
+    classDef subgraphMd font-size:18px
 
     %% 應用樣式
     class Browser clientStyle
@@ -204,6 +182,9 @@ graph TB
     class FastAPI,AuthAPI,ProjectsAPI,StationsAPI,TestPlansAPI,TestsAPI,MeasurementsAPI,ResultsAPI,TestEngine,InstrumentMgr,MeasurementSvc,SFCSvc,BaseMeasure,ORM backendStyle
     class MySQL dbStyle
     class SFC,Modbus externalStyle
+
+    class Client,Frontend,Backend,Database,External subgraphLg
+    class API,Services,Measurements,Models subgraphMd
 ```
 
 > **📖 架構說明**: 主圖展示系統整體分層結構，API→Services→Models/Measurements 的詳細連線關係見下圖。
@@ -232,15 +213,19 @@ graph LR
     MeasurementSvc --> ORM
 
     %% Models → Database 連線
-    ORM --> MySQL
+    ORM --> MySQL[(MySQL)]
 
+    %% 樣式定義
     classDef apiStyle fill:#e1bee7,stroke:#4a148c,stroke-width:2px
     classDef svcStyle fill:#c5cae9,stroke:#1a237e,stroke-width:2px
     classDef modelStyle fill:#ffccbc,stroke:#bf360c,stroke-width:2px
+    classDef dbStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
 
+    %% 應用樣式
     class AuthAPI,ProjectsAPI,StationsAPI,TestPlansAPI,TestsAPI,MeasurementsAPI,ResultsAPI apiStyle
     class TestEngine,InstrumentMgr,MeasurementSvc,SFCSvc,BaseMeasure svcStyle
-    class ORM,MySQL modelStyle
+    class ORM modelStyle
+    class MySQL dbStyle
 ```
 
 ### 測試執行流程
@@ -293,34 +278,10 @@ flowchart TD
 
     %% 樣式定義
     classDef dbOp fill:#87ceeb,stroke:#0277bd,stroke-width:2px
-    classDef dec fill:#ffd700,stroke:#f57f17,stroke-width:2px
-    classDef startN fill:#90ee90,stroke:#2e7d32,stroke-width:2px
-    classDef endN fill:#ffcccb,stroke:#c62828,stroke-width:2px
+    classDef dec fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef startN fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+    classDef endN fill:#ffcdd2,stroke:#c62828,stroke-width:2px
     classDef act fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-
-    %% 字型大小 16-18px
-    style Start font-size:18px
-    style End font-size:18px
-    style Login font-size:16px,width:120px
-    style GetToken font-size:16px,width:130px
-    style SelectProject font-size:16px,width:120px
-    style LoadConfig font-size:16px,width:120px
-    style LoadTestPlan font-size:16px,width:130px
-    style InputSN font-size:16px,width:120px
-    style CreateSession font-size:16px,width:130px
-    style StartTest font-size:16px,width:120px
-    style GetNextItem font-size:16px,width:130px
-    style LoadMeasure font-size:16px,width:130px
-    style Execute font-size:16px,width:120px
-    style GetValue font-size:16px,width:120px
-    style Validate font-size:16px,width:120px
-    style SaveResult font-size:16px,width:130px
-    style UpdateUI font-size:16px,width:120px
-    style CalcResult font-size:16px,width:130px
-    style UpdateSession font-size:16px,width:130px
-    style UploadSFC font-size:16px,width:120px
-    style LogSFC font-size:16px,width:120px
-    style ShowReport font-size:16px,width:130px
 
     %% 應用樣式
     class CreateSession,SaveResult,UpdateSession,LogSFC dbOp

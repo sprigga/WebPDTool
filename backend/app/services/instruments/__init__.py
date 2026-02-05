@@ -19,6 +19,15 @@ from app.services.instruments.aps7050 import APS7050Driver
 from app.services.instruments.n5182a import N5182ADriver
 from app.services.instruments.analog_discovery_2 import AnalogDiscovery2Driver
 from app.services.instruments.ftm_on import FTMOnDriver
+# Phase 3 RF Instrument Drivers
+from app.services.instruments.cmw100 import CMW100Driver
+from app.services.instruments.mt8872a import MT8872ADriver
+# Phase 3 Low Priority Instrument Drivers
+from app.services.instruments.l6mpu_ssh import L6MPUSSHDriver
+from app.services.instruments.l6mpu_ssh_comport import L6MPUSSHComPortDriver
+from app.services.instruments.l6mpu_pos_ssh import L6MPUPOSSHDriver
+from app.services.instruments.peak_can import PEAKCANDriver
+from app.services.instruments.smcv100b import SMCV100BDriver
 
 __all__ = [
     "BaseInstrumentDriver",
@@ -36,6 +45,15 @@ __all__ = [
     "N5182ADriver",
     "AnalogDiscovery2Driver",
     "FTMOnDriver",
+    # Phase 3 RF drivers
+    "CMW100Driver",
+    "MT8872ADriver",
+    # Phase 3 Low Priority drivers
+    "L6MPUSSHDriver",
+    "L6MPUSSHComPortDriver",
+    "L6MPUPOSSHDriver",
+    "PEAKCANDriver",
+    "SMCV100BDriver",
 ]
 
 
@@ -56,6 +74,18 @@ INSTRUMENT_DRIVERS = {
     "ANALOG_DISCOVERY_2": AnalogDiscovery2Driver,
     "AD2": AnalogDiscovery2Driver,
     "FTM_ON": FTMOnDriver,
+    # Phase 3 RF Instrument Drivers
+    "CMW100": CMW100Driver,
+    "MT8872A": MT8872ADriver,
+    "RF_TOOL": MT8872ADriver,  # Alternative naming for MT8872A
+    # Phase 3 Low Priority Instrument Drivers
+    "L6MPU_SSH": L6MPUSSHDriver,
+    "L6MPU": L6MPUSSHDriver,  # Short name
+    "L6MPU_SSH_COMPORT": L6MPUSSHComPortDriver,
+    "L6MPU_POS_SSH": L6MPUPOSSHDriver,
+    "PEAK_CAN": PEAKCANDriver,
+    "PCAN": PEAKCANDriver,  # Alternative naming
+    "SMCV100B": SMCV100BDriver,
     # Add more as they are migrated
 }
 
