@@ -98,90 +98,91 @@ WebPDTool 是一個 Web 化的產品測試系統，用於執行自動化測試�
 
 ```mermaid
 graph TB
-    %% 客戶端層
-    subgraph Client["🌐 客戶端"]
-        Browser["瀏覽器"]
+    %% 客戶端層 - 使用者瀏覽器存取點
+    subgraph Client["🌐 使用者端"]
+        Browser["Web 瀏覽器<br/>(Chrome/Edge/Firefox)"]
     end
 
-    %% 前端容器
-    subgraph Frontend["🟢 前端容器<br/>(Port 9080)"]
-        Nginx["⚙️ Nginx<br/>反向代理"]
-        Vue["Vue 3 應用<br/>Element Plus<br/>Pinia/Router"]
+    %% 前端容器 - Vue 3 SPA 應用
+    subgraph Frontend["🟢 前端服務<br/>(Port: 9080)"]
+        Nginx["Nginx 反向代理<br/>靜態資源服務"]
+        Vue["Vue 3 應用程式<br/>───────────<br/>• Element Plus UI<br/>• Pinia 狀態管理<br/>• Vue Router 路由"]
     end
 
-    %% 後端容器
-    subgraph Backend["🚀 後端容器<br/>(Port 9100)"]
-        FastAPI["FastAPI<br/>Python 3.11+"]
+    %% 後端容器 - FastAPI RESTful API
+    subgraph Backend["🚀 後端服務<br/>(Port: 9100)"]
+        FastAPI["FastAPI 應用入口<br/>Python 3.11+ 非同步框架"]
 
-        subgraph API["API 層<br/>(7個模組)"]
+        subgraph API["API 路由層<br/>(8個模組, 70+ 端點)"]
             direction TB
-            AuthAPI["🔐 Auth API<br/>認證"]
-            ProjectsAPI["📁 Projects API<br/>專案管理"]
-            StationsAPI["🏠 Stations API<br/>站別管理"]
-            TestPlansAPI["📋 TestPlans API<br/>測試計劃"]
-            TestsAPI["▶️ Tests API<br/>測試執行"]
-            MeasurementsAPI["📊 Measurements API<br/>測量執行"]
-            ResultsAPI["📈 Results API<br/>測試結果"]
+            AuthAPI["🔐 認證授權模組<br/>JWT Token 管理"]
+            ProjectsAPI["📁 專案管理模組<br/>CRUD 操作"]
+            StationsAPI["🏠 站別管理模組<br/>測試站配置"]
+            TestPlansAPI["📋 測試計劃模組<br/>測試項目管理"]
+            TestsAPI["▶️ 測試執行模組<br/>會話控制與狀態"]
+            MeasurementsAPI["📊 測量執行模組<br/>儀器驅動協調"]
+            ResultsAPI["📈 測試結果模組<br/>資料查詢與匯出"]
+            DUTControlAPI["🔧 DUT 控制模組<br/>繼電器/機架控制"]
         end
 
-        subgraph Services["服務層<br/>(4個)"]
-            TestEngine["⚙️ TestEngine<br/>測試引擎"]
-            InstrumentMgr["🔌 InstrumentMgr<br/>儀器管理"]
-            MeasurementSvc["📏 MeasurementSvc<br/>測量服務"]
-            SFCSvc["🔗 SFC Service<br/>SFC整合"]
+        subgraph Services["業務邏輯層<br/>(4個核心服務)"]
+            TestEngine["⚙️ 測試引擎<br/>─────────<br/>• 測試編排與調度<br/>• 非同步執行控制<br/>• 會話狀態管理<br/>• runAllTest 模式"]
+            InstrumentMgr["🔌 儀器管理器<br/>─────────<br/>• Singleton 連線池<br/>• 儀器狀態追蹤<br/>• 26 種驅動支援"]
+            MeasurementSvc["📏 測量服務<br/>─────────<br/>• 測量任務協調<br/>• PDTool4 相容驗證<br/>• 錯誤收集處理"]
+            SFCSvc["🔗 SFC 服務<br/>─────────<br/>• MES 系統整合<br/>• 製造資料上傳"]
         end
 
-        subgraph Measurements["測量模組層"]
-            BaseMeasure["📐 BaseMeasurement<br/>+ 10+ 實作類"]
+        subgraph Measurements["測量抽象層<br/>(10+ 測量類型)"]
+            BaseMeasure["📐 BaseMeasurement 基類<br/>──────────────<br/>• prepare/execute/cleanup<br/>• 7 種 limit_type 驗證<br/>• 3 種 value_type 轉換"]
         end
 
-        subgraph Models["資料模型層<br/>(7個表格)"]
-            ORM["💾 SQLAlchemy ORM<br/>User/Project/Station/<br/>TestPlan/Session/Result/SFC"]
+        subgraph Models["資料持久層<br/>(9 個資料表)"]
+            ORM["💾 SQLAlchemy ORM<br/>───────────<br/>• User/Project/Station<br/>• TestPlan/Session<br/>• TestResult/SFCLog<br/>• Configuration"]
         end
     end
 
     %% 資料庫容器
-    subgraph Database["🗄️ 資料庫<br/>(Port 33306)"]
-        MySQL[("MySQL 8.0+<br/>webpdtool")]
+    subgraph Database["🗄️ 資料庫服務<br/>(Port: 33306)"]
+        MySQL[("MySQL 8.0+<br/>────────<br/>• 資料庫: webpdtool<br/>• 字元集: utf8mb4<br/>• 連線池: 非同步")]
     end
 
-    %% 外部系統
-    subgraph External["🌍 外部系統"]
-        SFC["🏭 SFC System<br/>製造執行系統"]
-        Modbus["📡 Modbus<br/>設備通訊"]
+    %% 外部系統整合
+    subgraph External["🌍 外部系統整合"]
+        SFC["🏭 SFC 製造執行系統<br/>WebService 通訊"]
+        Modbus["📡 Modbus 設備通訊<br/>TCP/IP 協定"]
+        Instruments["🔬 測試儀器<br/>────────<br/>• Keysight/Keithley<br/>• R&S/Anritsu<br/>• 26 種驅動支援"]
     end
 
-    %% 主要連線
-    Browser -->|HTTP| Nginx
-    Nginx --> Vue
-    Vue -->|Axios API| FastAPI
+    %% 主要資料流向
+    Browser -->|HTTPS 請求| Nginx
+    Nginx -->|反向代理| Vue
+    Vue -->|REST API 呼叫<br/>Axios + JWT| FastAPI
 
-    FastAPI --> API
-    API --> Services
-    Services --> Measurements
-    Services --> Models
+    FastAPI -->|路由分派| API
+    API -->|呼叫| Services
+    Services -->|執行| Measurements
+    Services -->|存取| Models
 
-    Models -->|Async ORM| MySQL
-    SFCSvc -.->|WebService| SFC
-    InstrumentMgr -.->|TCP/IP| Modbus
+    Models -->|非同步 ORM<br/>SQLAlchemy 2.0| MySQL
+    SFCSvc -.->|HTTPS POST<br/>JSON 格式| SFC
+    InstrumentMgr -.->|TCP/IP<br/>VISA/SSH/CAN| Instruments
+    InstrumentMgr -.->|Modbus RTU/TCP| Modbus
 
     %% 樣式定義
     classDef clientStyle fill:#e1f5ff,stroke:#0277bd,stroke-width:2px,color:#000
     classDef frontendStyle fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
     classDef backendStyle fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#000
     classDef dbStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000
-    classDef externalStyle fill:#f5f5f5,stroke:#616161,stroke-width:2px,color:#000
+    classDef externalStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
 
-    %% 子圖字型大小 (18-20px)
-    classDef subgraphLg font-size:20px
+    classDef subgraphLg font-size:20px,font-weight:bold
     classDef subgraphMd font-size:18px
 
-    %% 應用樣式
     class Browser clientStyle
     class Nginx,Vue frontendStyle
-    class FastAPI,AuthAPI,ProjectsAPI,StationsAPI,TestPlansAPI,TestsAPI,MeasurementsAPI,ResultsAPI,TestEngine,InstrumentMgr,MeasurementSvc,SFCSvc,BaseMeasure,ORM backendStyle
+    class FastAPI,AuthAPI,ProjectsAPI,StationsAPI,TestPlansAPI,TestsAPI,MeasurementsAPI,ResultsAPI,DUTControlAPI,TestEngine,InstrumentMgr,MeasurementSvc,SFCSvc,BaseMeasure,ORM backendStyle
     class MySQL dbStyle
-    class SFC,Modbus externalStyle
+    class SFC,Modbus,Instruments externalStyle
 
     class Client,Frontend,Backend,Database,External subgraphLg
     class API,Services,Measurements,Models subgraphMd
@@ -189,163 +190,221 @@ graph TB
 
 > **📖 架構說明**: 主圖展示系統整體分層結構，API→Services→Models/Measurements 的詳細連線關係見下圖。
 
-### API 連線關係詳圖
+### API 層與服務層連線關係
+
+此圖展示 API 端點如何調用業務邏輯服務，以及服務之間的協作關係。
 
 ```mermaid
 graph LR
-    %% API → Services 連線
-    AuthAPI --> TestEngine
-    ProjectsAPI --> TestEngine
-    StationsAPI --> TestEngine
-    TestPlansAPI --> TestEngine
-    TestsAPI --> TestEngine
-    MeasurementsAPI --> MeasurementSvc
-    ResultsAPI --> TestEngine
+    subgraph API["📡 API 路由層 - 接收 HTTP 請求"]
+        AuthAPI["認證 API"]
+        ProjectsAPI["專案 API"]
+        StationsAPI["站別 API"]
+        TestPlansAPI["測試計劃 API"]
+        TestsAPI["測試執行 API"]
+        MeasurementsAPI["測量執行 API"]
+        ResultsAPI["測試結果 API"]
+        DUTControlAPI["DUT 控制 API"]
+    end
 
-    %% Services 內部連線
-    TestEngine --> InstrumentMgr
-    TestEngine --> MeasurementSvc
-    TestEngine --> SFCSvc
-    MeasurementSvc --> BaseMeasure
+    subgraph Services["⚙️ 業務邏輯層 - 實現核心功能"]
+        TestEngine["測試引擎<br/>(TestEngine)"]
+        InstrumentMgr["儀器管理器<br/>(InstrumentMgr)"]
+        MeasurementSvc["測量服務<br/>(MeasurementSvc)"]
+        SFCSvc["SFC 服務<br/>(SFC Service)"]
+    end
 
-    %% Services → Models 連線
-    TestEngine --> ORM
-    MeasurementSvc --> ORM
+    subgraph Measurements["📏 測量抽象層 - 執行具體測量"]
+        BaseMeasure["測量基類<br/>(BaseMeasurement)"]
+    end
 
-    %% Models → Database 連線
-    ORM --> MySQL[(MySQL)]
+    subgraph Models["💾 資料存取層 - ORM 操作"]
+        ORM["SQLAlchemy<br/>ORM 模型"]
+    end
+
+    subgraph DB["🗄️ 持久化儲存"]
+        MySQL[("MySQL<br/>資料庫")]
+    end
+
+    %% API → Services 調用關係
+    AuthAPI -->|Token 驗證/刷新| TestEngine
+    ProjectsAPI -->|CRUD 操作| TestEngine
+    StationsAPI -->|配置管理| TestEngine
+    TestPlansAPI -->|計劃載入/驗證| TestEngine
+    TestsAPI -->|會話控制/狀態| TestEngine
+    MeasurementsAPI -->|測量調度| MeasurementSvc
+    ResultsAPI -->|結果查詢| TestEngine
+    DUTControlAPI -->|繼電器/機架| TestEngine
+
+    %% Services 內部協作
+    TestEngine -->|獲取儀器連線| InstrumentMgr
+    TestEngine -->|協調測量| MeasurementSvc
+    TestEngine -->|上傳製造資料| SFCSvc
+    MeasurementSvc -->|執行測量邏輯| BaseMeasure
+
+    %% Services → Models 資料存取
+    TestEngine -->|讀寫測試資料| ORM
+    MeasurementSvc -->|儲存測量結果| ORM
+
+    %% Models → Database 持久化
+    ORM -->|非同步 ORM 操作<br/>SQLAlchemy 2.0| MySQL
 
     %% 樣式定義
-    classDef apiStyle fill:#e1bee7,stroke:#4a148c,stroke-width:2px
-    classDef svcStyle fill:#c5cae9,stroke:#1a237e,stroke-width:2px
-    classDef modelStyle fill:#ffccbc,stroke:#bf360c,stroke-width:2px
-    classDef dbStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef apiStyle fill:#e1bee7,stroke:#4a148c,stroke-width:2px,color:#000
+    classDef svcStyle fill:#c5cae9,stroke:#1a237e,stroke-width:2px,color:#000
+    classDef measureStyle fill:#b2dfdb,stroke:#00695c,stroke-width:2px,color:#000
+    classDef modelStyle fill:#ffccbc,stroke:#bf360c,stroke-width:2px,color:#000
+    classDef dbStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
 
-    %% 應用樣式
-    class AuthAPI,ProjectsAPI,StationsAPI,TestPlansAPI,TestsAPI,MeasurementsAPI,ResultsAPI apiStyle
-    class TestEngine,InstrumentMgr,MeasurementSvc,SFCSvc,BaseMeasure svcStyle
+    class AuthAPI,ProjectsAPI,StationsAPI,TestPlansAPI,TestsAPI,MeasurementsAPI,ResultsAPI,DUTControlAPI apiStyle
+    class TestEngine,InstrumentMgr,MeasurementSvc,SFCSvc svcStyle
+    class BaseMeasure measureStyle
     class ORM modelStyle
     class MySQL dbStyle
 ```
 
-### 測試執行流程
+### 測試執行完整流程
+
+此流程圖展示從使用者登入到測試完成的完整生命週期，包含 runAllTest 模式的錯誤處理邏輯。
 
 ```mermaid
 flowchart TD
-    Start([🟢 開始]) --> Login["👤 登入"]
-    Login --> ValidateUser{{"驗證?"}}
-    ValidateUser -->|❌| Login
-    ValidateUser -->|✅| GetToken["🔑 取得Token"]
+    Start([🟢 流程開始]) --> Login["使用者登入<br/>輸入帳號密碼"]
+    Login --> ValidateUser{{"身分驗證<br/>通過?"}}
+    ValidateUser -->|❌ 驗證失敗| Login
+    ValidateUser -->|✅ 驗證成功| GetToken["取得 JWT Token<br/>儲存至 localStorage"]
 
-    GetToken --> SelectProject["📁 選擇專案"]
-    SelectProject --> LoadConfig["⚙️ 載入設定"]
-    LoadConfig --> LoadTestPlan["📋 載入測試計劃"]
+    GetToken --> SelectProject["選擇測試專案<br/>與站別"]
+    SelectProject --> LoadConfig["載入站別配置<br/>儀器連線設定"]
+    LoadConfig --> LoadTestPlan["載入測試計劃<br/>CSV 項目清單"]
 
-    LoadTestPlan --> InputSN["🔢 輸入SN"]
-    InputSN --> ValidateSN{{"SN有效?"}}
-    ValidateSN -->|❌| InputSN
-    ValidateSN -->|✅| CreateSession["💾 創建會話"]
+    LoadTestPlan --> InputSN["輸入產品序號<br/>掃描條碼"]
+    InputSN --> ValidateSN{{"SN 格式<br/>有效?"}}
+    ValidateSN -->|❌ 無效格式| InputSN
+    ValidateSN -->|✅ 格式正確| CreateSession["創建測試會話<br/>記錄至 test_sessions"]
 
-    CreateSession --> StartTest["▶️ 開始測試"]
-    StartTest --> GetNextItem["➡️ 下一項目"]
+    CreateSession --> StartTest["啟動測試執行<br/>POST /api/tests/sessions/start"]
+    StartTest --> GetNextItem["獲取下一測試項目<br/>依 sequence_order 排序"]
 
-    GetNextItem --> HasItem{{"還有項?"}}
-    HasItem -->|❌| CalcResult["📊 計算結果"]
-    HasItem -->|✅| LoadMeasure["📏 載入測量"]
+    GetNextItem --> HasItem{{"還有未執行<br/>測試項目?"}}
+    HasItem -->|❌ 無更多項目| CalcResult["計算最終結果<br/>PASS/FAIL 統計"]
+    HasItem -->|✅ 有下一項目| LoadMeasure["載入測量配置<br/>MEASUREMENT_REGISTRY"]
 
-    LoadMeasure --> Execute["⚡ 執行測量"]
-    Execute --> GetValue["📈 取得值"]
-    GetValue --> Validate["✅ 驗證限制"]
+    LoadMeasure --> Execute["執行測量<br/>prepare → execute → cleanup"]
+    Execute --> GetValue["獲取測量值<br/>儀器讀取/命令執行"]
+    GetValue --> Validate["驗證測試點<br/>validate_result()"]
 
-    Validate --> SaveResult["💾 儲存結果"]
-    SaveResult --> UpdateUI["🔄 更新UI"]
+    Validate --> SaveResult["儲存測試結果<br/>記錄至 test_results"]
+    SaveResult --> UpdateUI["更新前端 UI<br/>顯示即時狀態"]
 
-    UpdateUI --> TestFailed{{"失敗?"}}
-    TestFailed -->|❌| CalcResult
-    TestFailed -->|✅| GetNextItem
+    UpdateUI --> TestFailed{{"測試項目<br/>失敗?"}}
+    TestFailed -->|❌ PASS| GetNextItem
+    TestFailed -->|✅ FAIL/ERROR| CheckRunAllTest{{"runAllTest<br/>模式?"}}
 
-    CalcResult --> UpdateSession["💾 更新會話"]
+    CheckRunAllTest -->|✅ 啟用| CollectError["收集錯誤資訊<br/>繼續執行下一項"]
+    CheckRunAllTest -->|❌ 停用| CalcResult
 
-    UpdateSession --> NeedSFC{{"需SFC?"}}
-    NeedSFC -->|✅| UploadSFC["📤 上傳SFC"]
-    UploadSFC --> LogSFC["📝 記錄日誌"]
-    LogSFC --> ShowReport["📄 顯示報告"]
-    NeedSFC -->|❌| ShowReport
+    CollectError --> GetNextItem
 
-    ShowReport --> ContinueTest{{"繼續?"}}
-    ContinueTest -->|✅| InputSN
-    ContinueTest -->|❌| End([🔴 結束])
+    CalcResult --> UpdateSession["更新會話狀態<br/>final_result, 統計資料"]
+
+    UpdateSession --> NeedSFC{{"站別配置<br/>需上傳 SFC?"}}
+    NeedSFC -->|✅ 需要上傳| UploadSFC["上傳至 SFC 系統<br/>MES 製造資料"]
+    UploadSFC --> LogSFC["記錄 SFC 日誌<br/>sfc_logs 表"]
+    LogSFC --> ShowReport["顯示測試報告<br/>PASS/FAIL 摘要"]
+    NeedSFC -->|❌ 不需上傳| ShowReport
+
+    ShowReport --> ContinueTest{{"繼續測試<br/>下一個產品?"}}
+    ContinueTest -->|✅ 繼續| InputSN
+    ContinueTest -->|❌ 結束| End([🔴 流程結束])
 
     %% 樣式定義
-    classDef dbOp fill:#87ceeb,stroke:#0277bd,stroke-width:2px
-    classDef dec fill:#fff9c4,stroke:#f57f17,stroke-width:2px
-    classDef startN fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
-    classDef endN fill:#ffcdd2,stroke:#c62828,stroke-width:2px
-    classDef act fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef dbOp fill:#bbdefb,stroke:#1565c0,stroke-width:2px,color:#000
+    classDef decision fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
+    classDef startN fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px,color:#000
+    classDef endN fill:#ffcdd2,stroke:#c62828,stroke-width:2px,color:#000
+    classDef act fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000
+    classDef error fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#000
 
     %% 應用樣式
     class CreateSession,SaveResult,UpdateSession,LogSFC dbOp
-    class ValidateUser,ValidateSN,HasItem,TestFailed,NeedSFC,ContinueTest dec
+    class ValidateUser,ValidateSN,HasItem,TestFailed,CheckRunAllTest,NeedSFC,ContinueTest decision
     class Login,GetToken,SelectProject,LoadConfig,LoadTestPlan,InputSN,StartTest,GetNextItem,LoadMeasure,Execute,GetValue,Validate,UpdateUI,CalcResult,UploadSFC,ShowReport act
+    class CollectError error
     class Start startN
     class End endN
 ```
 
 ### 資料庫關係圖
 
+展示系統中 9 個核心資料表之間的關聯性與資料流向。
+
 ```mermaid
 erDiagram
+    %% 使用者與測試會話關係
     users ||--o{ test_sessions : "執行測試"
-    projects ||--o{ stations : "包含站別"
-    stations ||--o{ test_plans : "包含測試計劃"
-    stations ||--o{ test_sessions : "執行測試"
-    test_plans ||--o{ test_results : "產生結果"
-    test_sessions ||--|{ test_results : "包含測試結果"
-    test_sessions ||--o{ sfc_logs : "產生SFC日誌"
 
+    %% 專案與站別關係
+    projects ||--o{ stations : "包含站別"
+
+    %% 站別與測試計劃/會話關係
+    stations ||--o{ test_plans : "定義測試計劃"
+    stations ||--o{ test_sessions : "執行測試會話"
+
+    %% 測試計劃與測試結果關係
+    test_plans ||--o{ test_results : "產生測試結果"
+
+    %% 測試會話與測試結果/SFC日誌關係
+    test_sessions ||--|{ test_results : "包含測試結果"
+    test_sessions ||--o{ sfc_logs : "產生 SFC 日誌"
+
+    %% 資料表定義
     users {
-        int id PK
-        varchar(50) username UK "使用者名稱"
-        varchar(255) password_hash "密碼雜湊"
-        enum role "角色(ENGINEER/OPERATOR/ADMIN)"
+        bigint id PK "主鍵"
+        varchar(50) username UK "使用者名稱(唯一)"
+        varchar(255) password_hash "bcrypt 密碼雜湊"
+        enum role "角色: ADMIN/ENGINEER/OPERATOR"
         varchar(100) full_name "全名"
         varchar(100) email "電子郵件"
-        boolean is_active "啟用狀態"
+        boolean is_active "帳號啟用狀態"
         timestamp created_at "建立時間"
         timestamp updated_at "更新時間"
     }
 
     projects {
-        int id PK
-        varchar(50) project_code UK "專案代碼"
+        int id PK "主鍵"
+        varchar(50) project_code UK "專案代碼(唯一)"
         varchar(100) project_name "專案名稱"
-        text description "描述"
+        text description "專案描述"
         boolean is_active "啟用狀態"
         timestamp created_at "建立時間"
         timestamp updated_at "更新時間"
     }
 
     stations {
-        int id PK
+        int id PK "主鍵"
         varchar(50) station_code "站別代碼"
         varchar(100) station_name "站別名稱"
-        int project_id FK "專案ID"
-        varchar(255) test_plan_path "測試計劃路徑"
+        int project_id FK "所屬專案 ID"
+        varchar(255) test_plan_path "測試計劃檔案路徑"
+        json config_json "站別配置(JSON)"
         boolean is_active "啟用狀態"
         timestamp created_at "建立時間"
         timestamp updated_at "更新時間"
     }
 
     test_plans {
-        int id PK
-        int station_id FK "站別ID"
+        int id PK "主鍵"
+        int station_id FK "所屬站別 ID"
         int item_no "測試項目編號"
         varchar(100) item_name "測試項目名稱"
-        varchar(50) test_type "測試類型"
-        json parameters "測試參數"
+        varchar(50) test_type "測試類型(10+種)"
+        json parameters "測試參數(JSON)"
         decimal lower_limit "下限值"
         decimal upper_limit "上限值"
-        varchar(20) unit "單位"
+        varchar(20) limit_type "限制類型(7種)"
+        varchar(20) value_type "值類型(3種)"
+        varchar(20) unit "測量單位"
         boolean enabled "啟用狀態"
         int sequence_order "執行順序"
         timestamp created_at "建立時間"
@@ -353,14 +412,14 @@ erDiagram
     }
 
     test_sessions {
-        int id PK
-        varchar(100) serial_number "產品序號"
-        int station_id FK "站別ID"
-        int user_id FK "使用者ID"
+        int id PK "主鍵"
+        varchar(100) serial_number "產品序號(SN)"
+        int station_id FK "執行站別 ID"
+        int user_id FK "執行者 ID"
         timestamp start_time "開始時間"
         timestamp end_time "結束時間"
-        enum final_result "最終結果(PASS/FAIL/ABORT)"
-        int total_items "總項目數"
+        enum final_result "最終結果: PASS/FAIL/ABORT"
+        int total_items "總測試項目數"
         int pass_items "通過項目數"
         int fail_items "失敗項目數"
         int test_duration_seconds "測試時長(秒)"
@@ -368,49 +427,49 @@ erDiagram
     }
 
     test_results {
-        bigint id PK
-        int session_id FK "測試會話ID"
-        int test_plan_id FK "測試計劃ID"
+        bigint id PK "主鍵"
+        int session_id FK "測試會話 ID"
+        int test_plan_id FK "測試計劃 ID"
         int item_no "測試項目編號"
         varchar(100) item_name "測試項目名稱"
-        decimal measured_value "測量值"
-        decimal lower_limit "下限值"
-        decimal upper_limit "上限值"
-        varchar(20) unit "單位"
-        enum result "結果(PASS/FAIL/SKIP/ERROR)"
+        decimal measured_value "實際測量值"
+        decimal lower_limit "規格下限"
+        decimal upper_limit "規格上限"
+        varchar(20) unit "測量單位"
+        enum result "測試結果: PASS/FAIL/SKIP/ERROR"
         text error_message "錯誤訊息"
         timestamp test_time "測試時間"
         int execution_duration_ms "執行時長(毫秒)"
     }
 
     sfc_logs {
-        bigint id PK
-        int session_id FK "測試會話ID"
+        bigint id PK "主鍵"
+        int session_id FK "關聯測試會話 ID"
         varchar(50) operation "操作類型"
-        json request_data "請求資料"
-        json response_data "回應資料"
-        enum status "狀態(SUCCESS/FAILED/TIMEOUT)"
+        json request_data "SFC 請求資料"
+        json response_data "SFC 回應資料"
+        enum status "狀態: SUCCESS/FAILED/TIMEOUT"
         text error_message "錯誤訊息"
         timestamp created_at "建立時間"
     }
 
     configurations {
-        int id PK
-        varchar(100) config_key UK "設定鍵值"
-        json config_value "設定值"
-        varchar(50) category "類別"
-        text description "描述"
-        boolean is_system "系統設定"
+        int id PK "主鍵"
+        varchar(100) config_key UK "設定鍵值(唯一)"
+        json config_value "設定值(JSON)"
+        varchar(50) category "設定類別"
+        text description "描述說明"
+        boolean is_system "系統設定標記"
         timestamp created_at "建立時間"
         timestamp updated_at "更新時間"
     }
 
     modbus_logs {
-        bigint id PK
-        int register_address "暫存器位址"
-        enum operation "操作(READ/WRITE)"
-        varchar(255) value "值"
-        enum status "狀態(SUCCESS/FAILED)"
+        bigint id PK "主鍵"
+        int register_address "Modbus 暫存器位址"
+        enum operation "操作: READ/WRITE"
+        varchar(255) value "讀取/寫入值"
+        enum status "狀態: SUCCESS/FAILED"
         text error_message "錯誤訊息"
         timestamp created_at "建立時間"
     }
