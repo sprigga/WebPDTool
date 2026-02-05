@@ -1,7 +1,7 @@
 # 儀器服務實現狀態比對
 
-**文檔版本**: v1.0
-**更新日期**: 2026-02-04
+**文檔版本**: v1.2
+**更新日期**: 2026-02-05
 **專案**: WebPDTool - PDTool4 重構專案
 
 ---
@@ -11,10 +11,10 @@
 本文檔比對 PDTool4 lowsheen_lib 原始儀器驅動與 WebPDTool 後端服務的實現狀態。
 
 **統計資訊:**
-- ✅ **已實現**: 15 個儀器服務
-- ❌ **待實現**: 11 個儀器/模組
+- ✅ **已實現**: 20 個儀器服務 (+5 Phase 3)
+- ❌ **待實現**: 6 個儀器/模組 (-5 Phase 1)
 - 📋 **特殊模組**: 3 個通訊協定文檔
-- 📈 **完成度**: 57.7% (15/26)
+- 📈 **完成度**: 76.9% (20/26) [+19.2% from Phase 3]
 
 ---
 
@@ -35,12 +35,18 @@
 | 7 | `mdo34.py` | `MDO34_API_Analysis.md` | Tektronix MDO34 | 混合域示波器 | USB/LAN | ✅ 已實現 |
 | 8 | `model2303.py` | `2303_API_Analysis.md` | Keithley 2303 | 電源供應器 | GPIB/USB/LAN | ✅ 已實現 |
 | 9 | `model2306.py` | `2306_API_Analysis.md` | Keithley 2306 | 雙通道電池模擬器 | GPIB/USB | ✅ 已實現 |
-| 10 | `psw3072.py` | `PSW3072_API_Analysis.md` | GW Instek PSW3072 | 可程控切換式電源 | USB/LAN | ✅ 已實現 |
+| 10 | `psw3072.py` | `PSW3070_API_Analysis.md` | GW Instek PSW3072 | 可程控切換式電源 | USB/LAN | ✅ 已實現 |
 | 11 | `aps7050.py` | `APS7050_API_Analysis.md` | GW Instek APS-7050 | AC/DC 電源 + DMM | VISA/SCPI | ✅ Phase 2 |
 | 12 | `n5182a.py` | `Agilent_N5182A_API_Analysis.md` | Agilent N5182A MXG | 訊號產生器 | GPIB/VISA | ✅ Phase 2 |
 | 13 | `analog_discovery_2.py` | `AnalogDiscovery2_API_Analysis.md` | Digilent AD2 | USB 多功能儀器 | USB (WaveForms SDK) | ✅ Phase 2 |
 | 14 | `ftm_on.py` | `FTM_On_API_Analysis.md` | FTM Mode Control | 測試模式控制 | ADB/Subprocess | ✅ Phase 2 |
 | 15 | `base.py` | - | BaseInstrument | 抽象基類 | - | ✅ 已實現 |
+| 16 | `comport_command.py` | `ComPortCommand_API_Analysis.md` | 通用 COM Port | 通用串口介面 | Serial | ✅ Phase 1 |
+| 17 | `console_command.py` | `ConSoleCommand_API_Analysis.md` | Console Command | 控制台命令 | Console/Shell | ✅ Phase 1 |
+| 18 | `tcpip_command.py` | `TCPIPCommand_API_Analysis.md` | 通用 TCP/IP | 通用網路介面 | TCP/IP Socket | ✅ Phase 1 |
+| 19 | `wait_test.py` | `Wait_test_API_Analysis.md` | Wait/Delay Test | 測試延遲 | N/A | ✅ Phase 1 |
+| 20 | `cmw100.py` | `CMW100_API_Analysis.md` | R&S CMW100 | 無線通訊測試儀 | TCPIP/GPIB | ✅ Phase 3 (Driver + Measurements) |
+| 21 | `mt8872a.py` | `RF_Tool_API_Analysis.md` | Anritsu MT8872A | 射頻測試工具 | TCPIP | ✅ Phase 3 (Driver + Measurements) |
 
 ### 已實現功能特性
 
@@ -73,74 +79,65 @@
 | ~~1~~ | ~~`APS7050_API_Analysis.md`~~ | ~~GW Instek APS-7050~~ | ~~AC/DC 電源 + DMM~~ | ~~VISA/SCPI~~ | ~~AC/DC 電源 + 內建 DMM + 繼電器控制~~ | ~~🔴 高~~ ✅ |
 | ~~2~~ | ~~`Agilent_N5182A_API_Analysis.md`~~ | ~~Agilent N5182A MXG~~ | ~~訊號產生器~~ | ~~GPIB/VISA~~ | ~~CW/ARB 模式訊號產生~~ | ~~🟡 中~~ ✅ |
 | ~~3~~ | ~~`AnalogDiscovery2_API_Analysis.md`~~ | ~~Digilent AD2~~ | ~~USB 多功能儀器~~ | ~~USB (WaveForms SDK)~~ | ~~示波器/函數產生器/數位 I/O/阻抗分析~~ | ~~🟡 中~~ ✅ |
-| 4 | `CMW100_API_Analysis.md` | R&S CMW100 | 無線通訊測試儀 | TCPIP/GPIB | Bluetooth/WiFi/LTE 射頻測量 | 🟢 低 |
-| 5 | `ComPortCommand_API_Analysis.md` | 通用 COM Port | 通用串口介面 | Serial | 通用串口命令執行 | 🔴 高 |
-| 6 | `ConSoleCommand_API_Analysis.md` | Console Command | 控制台命令 | Console/Shell | 系統命令執行器 | 🟡 中 |
+| ~~4~~ | ~~`CMW100_API_Analysis.md`~~ | ~~R&S CMW100~~ | ~~無線通訊測試儀~~ | ~~TCPIP/GPIB~~ | ~~Bluetooth/WiFi 射頻測量~~ | ~~🟢 低~~ ✅ Phase 3 |
+| ~~5~~ | ~~`ComPortCommand_API_Analysis.md`~~ | ~~通用 COM Port~~ | ~~通用串口介面~~ | ~~Serial~~ | ~~通用串口命令執行~~ | ~~🔴 高~~ ✅ Phase 1 |
+| ~~6~~ | ~~`ConSoleCommand_API_Analysis.md`~~ | ~~Console Command~~ | ~~控制台命令~~ | ~~Console/Shell~~ | ~~系統命令執行器~~ | ~~🟡 中~~ ✅ Phase 1 |
 | ~~7~~ | ~~`FTM_On_API_Analysis.md`~~ | ~~FTM Mode Control~~ | ~~測試模式控制~~ | ~~DUT 特定~~ | ~~Factory Test Mode 啟動~~ | ~~🟡 中~~ ✅ |
 | 8 | `L6MPU_POSssh_cmd_API_Analysis.md` | L6 MPU Position | MPU 控制器 | SSH | MPU 位置控制 (SSH) | 🟢 低 |
 | 9 | `L6MPU_ssh_cmd_API_Analysis.md` | L6 MPU General | MPU 控制器 | SSH | MPU 一般控制 (SSH) | 🟢 低 |
 | 10 | `L6MPU_ssh_comport_API_Analysis.md` | L6 MPU COM | MPU 控制器 | SSH + Serial | MPU 串口控制 (混合) | 🟢 低 |
 | 11 | `PEAK_API_Analysis.md` | PEAK CAN | CAN 總線介面 | CAN Bus | CAN 總線通訊 | 🟢 低 |
-| 12 | `RF_Tool_API_Analysis.md` | RF Test Tool | 射頻測試工具 | 多種協定 | RF 測試工具集 | 🟢 低 |
-| 13 | `TCPIPCommand_API_Analysis.md` | 通用 TCP/IP | 通用網路介面 | TCP/IP Socket | 通用網路命令執行 | 🔴 高 |
-| 14 | `Wait_test_API_Analysis.md` | Wait/Delay Test | 測試延遲 | N/A | 測試步驟間延遲/等待 | 🟡 中 |
+| ~~12~~ | ~~`RF_Tool_API_Analysis.md`~~ | ~~Anritsu MT8872A~~ | ~~射頻測試工具~~ | ~~TCPIP~~ | ~~LTE TX/RX 測量~~ | ~~🟢 低~~ ✅ Phase 3 |
+| ~~13~~ | ~~`TCPIPCommand_API_Analysis.md`~~ | ~~通用 TCP/IP~~ | ~~通用網路介面~~ | ~~TCP/IP Socket~~ | ~~通用網路命令執行~~ | ~~🔴 高~~ ✅ Phase 1 |
+| ~~14~~ | ~~`Wait_test_API_Analysis.md`~~ | ~~Wait/Delay Test~~ | ~~測試延遲~~ | ~~N/A~~ | ~~測試步驟間延遲/等待~~ | ~~🟡 中~~ ✅ Phase 1 |
 | 15 | `smcv100b_API_Analysis.md` | SMC V100B | SMC 控制器 | 未知 | SMC 設備控制 | 🟢 低 |
 
 ### 優先級說明
 
-#### 🔴 高優先級 (2 個)
+#### 🔴 高優先級 (0 個) ✅ **全部已完成**
 **建議優先實現，影響範圍廣或使用頻率高**
 
-1. **ComPortCommand** - 通用串口介面
+~~1. **ComPortCommand** - 通用串口介面~~ ✅ Phase 1 完成
    - 可支援多種自定義串口設備
    - 是許多測試項目的基礎通訊模組
-   - 實現難度: 中等
 
-2. **TCPIPCommand** - 通用 TCP/IP 介面
+~~2. **TCPIPCommand** - 通用 TCP/IP 介面~~ ✅ Phase 1 完成
    - 支援網路設備的通用控制
    - 現代化儀器常用的通訊方式
-   - 實現難度: 中等
 
-~~3. **APS7050** - AC/DC 電源 + DMM~~ ✅ 已實現
+~~3. **APS7050** - AC/DC 電源 + DMM~~ ✅ Phase 2 完成
    - 結合電源、DMM 和繼電器三合一功能
-   - 功能豐富，適用於複雜測試場景
-   - 實現難度: 高 (功能複雜)
 
-#### 🟡 中優先級 (3 個)
+#### 🟡 中優先級 (0 個) ✅ **全部已完成**
 **常見測試場景需要的儀器或功能模組**
 
-~~4. **Agilent N5182A** - 訊號產生器~~ ✅ 已實現
+~~4. **Agilent N5182A** - 訊號產生器~~ ✅ Phase 2 完成
    - 射頻測試的核心設備
-   - CW 和 ARB 模式支援
-   - 實現難度: 中等
 
-~~5. **AnalogDiscovery2** - USB 多功能儀器~~ ✅ 已實現
+~~5. **AnalogDiscovery2** - USB 多功能儀器~~ ✅ Phase 2 完成
    - 成本低廉的桌面測試解決方案
-   - 多功能整合 (示波器/波形產生器/數位 I/O)
-   - 實現難度: 高 (需整合 WaveForms SDK)
 
-6. **ConSoleCommand** - 控制台命令
+~~6. **ConSoleCommand** - 控制台命令~~ ✅ Phase 1 完成
    - 執行系統級命令和腳本
-   - 提供測試流程的靈活性
-   - 實現難度: 低
 
-7. **Wait_test** - 測試延遲
+~~7. **Wait_test** - 測試延遲~~ ✅ Phase 1 完成
    - 測試步驟間的延遲控制
-   - 簡單但實用的功能
-   - 實現難度: 低
 
-~~8. **FTM_On** - FTM 模式控制~~ ✅ 已實現
+~~8. **FTM_On** - FTM 模式控制~~ ✅ Phase 2 完成
    - 啟動 DUT 的 Factory Test Mode
-   - 特定產品測試需要
-   - 實現難度: 中等 (依賴 DUT 規格)
 
-#### 🟢 低優先級 (8 個)
+#### 🟢 低優先級 (3 個)
 **特定產品線專用或較少使用的功能**
 
-9-15. **L6 MPU 系列** (3 個)、**PEAK CAN**、**RF_Tool**、**CMW100**、**smcv100b**
+9-11. **L6 MPU 系列** (3 個)、**PEAK CAN**、**smcv100b**
    - 特定產品線專用儀器
    - 使用場景有限
-   - 可依實際需求再實現
+
+~~12. **RF_Tool (MT8872A)** - LTE 射頻測試~~ ✅ Phase 3 完成
+   - LTE TX/RX 測量
+
+~~13. **CMW100** - 無線通訊測試儀~~ ✅ Phase 3 完成
+   - Bluetooth/WiFi 射頻測量
 
 ---
 
@@ -447,13 +444,13 @@ async def test_full_test_sequence():
 
 ## 📈 實現進度追蹤
 
-### 當前狀態 (2026-02-04)
+### 當前狀態 (2026-02-05)
 
 ```
-Progress: [███████████████░░░░░░░] 57.7%
+Progress: [██████████████████████] 76.9%
 
-已完成: 15/26
-待實現: 11/26
+已完成: 20/26
+待實現: 6/26 (僅剩低優先級儀器)
 ```
 
 ### 里程碑
@@ -462,9 +459,9 @@ Progress: [███████████████░░░░░░░] 5
 - [x] **M1** - 電源供應器類 (6/6) ✅ 已完成
 - [x] **M2** - 數據採集類 (3/3) ✅ 已完成
 - [x] **M3** - 量測儀器類 (2/2) ✅ 已完成
-- [ ] **M4** - 通用介面層 (0/4) 🔜 Phase 1
+- [x] **M4** - 通用介面層 (4/4) ✅ Phase 1 完成
 - [x] **M5** - 常用測試儀器 (4/4) ✅ Phase 2 完成
-- [ ] **M6** - 特殊應用儀器 (0/5) ⏳ Phase 3
+- [x] **M6** - 特殊應用儀器 (2/5) ✅ Phase 3 部分 (RF 儀器完成)
 
 ---
 
@@ -516,6 +513,7 @@ Progress: [███████████████░░░░░░░] 5
 |-----|------|------|---------|
 | v1.0 | 2026-02-04 | Claude Code | 初始版本，完整比對 PDTool4 與 WebPDTool 實現狀態 |
 | v1.1 | 2026-02-04 | Claude Code | Phase 2 完成: 新增 APS7050, N5182A, AD2, FTM_On 驅動 |
+| v1.2 | 2026-02-05 | Claude Code | Phase 1+3 完成: 新增 ComPort, Console, TCPIP, Wait, CMW100, MT8872A |
 
 ---
 
