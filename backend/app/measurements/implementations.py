@@ -142,66 +142,393 @@ class CommandTestMeasurement(BaseMeasurement):
 # Power Measurements
 # ============================================================================
 class PowerReadMeasurement(BaseMeasurement):
-    """Reads voltage/current from power instruments"""
+    """
+    Reads voltage/current from power supply/measurement instruments.
+
+    Parameters:
+        Instrument: Instrument name from config (e.g., 'DAQ973A_1', 'MODEL2303_1')
+        Channel: Channel number (e.g., '101', '1', '121' for DAQ973A current)
+        Item: What to measure ('voltage', 'volt', 'current', 'curr')
+
+    Supported Instruments:
+        - DAQ973A: Voltage (channels 101-120), Current (channels 121-122)
+        - DAQ6510: Voltage and Current measurements
+        - MODEL2303: Voltage and Current readback
+        - MODEL2306: Voltage and Current readback per channel
+        - IT6723C: Voltage and Current readback
+        - KEITHLEY2015: DMM measurements
+        - APS7050: Power supply readback
+        - PSW3072: Power supply readback
+        - A2260B: Power supply readback
+
+    Integration: Refactored from PDTool4 mock data to real instrument drivers
+    """
 
     async def execute(self) -> MeasurementResult:
         try:
-            instrument = get_param(self.test_params, "Instrument")
-            channel = get_param(self.test_params, "Channel")
-            item = get_param(self.test_params, "Item")
+            # Import required modules lazily to avoid circular imports
+            from app.services.instrument_connection import get_connection_pool
+            from app.services.instruments import get_driver_class
+            from app.core.instrument_config import get_instrument_settings
 
-            if not all([instrument, channel, item]):
+            # Get and validate parameters
+            instrument_name = get_param(self.test_params, "Instrument", "instrument")
+            channel = get_param(self.test_params, "Channel", "channel")
+            item = get_param(self.test_params, "Item", "item")
+
+            if not all([instrument_name, item]):
                 return self.create_result(
                     result="ERROR",
-                    error_message="Missing required parameters: Instrument, Channel, Item"
+                    error_message="Missing required parameters: Instrument, Item (Channel optional for some instruments)"
                 )
 
-            self.logger.info(f"Reading {item} from {instrument} channel {channel}")
-            await asyncio.sleep(0.3)
-
-            # Generate simulated value
-            if self.lower_limit and self.upper_limit:
-                center = (self.lower_limit + self.upper_limit) / 2
-                variance = (self.upper_limit - self.lower_limit) / 10
-                measured_value = center + Decimal(random.gauss(0, float(variance)))
+            # Normalize item name (voltage/volt/current/curr)
+            item_lower = str(item).lower()
+            if item_lower in ('voltage', 'volt', 'v'):
+                measure_type = 'voltage'
+            elif item_lower in ('current', 'curr', 'i', 'a'):
+                measure_type = 'current'
             else:
-                measured_value = Decimal(random.uniform(0, 100))
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Invalid Item parameter: {item} (must be 'voltage' or 'current')"
+                )
 
-            is_valid, error_msg = self.validate_result(measured_value)
-            return self.create_result(
-                result="PASS" if is_valid else "FAIL",
-                measured_value=measured_value,
-                error_message=error_msg if not is_valid else None
-            )
+            self.logger.info(f"Reading {measure_type} from {instrument_name} channel {channel}")
+
+            # Get instrument configuration
+            instrument_settings = get_instrument_settings()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument {instrument_name} not found in configuration"
+                )
+
+            # Get driver class
+            driver_class = get_driver_class(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver found for instrument type: {config.type}"
+                )
+
+            # Get connection and create driver
+            connection_pool = get_connection_pool()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+
+                # Initialize if needed
+                if not hasattr(driver, '_initialized'):
+                    await driver.initialize()
+                    driver._initialized = True
+
+                # Execute measurement based on instrument type and measure_type
+                measured_value = await self._measure_with_driver(
+                    driver, config.type, measure_type, channel
+                )
+
+                # Validate result
+                is_valid, error_msg = self.validate_result(measured_value)
+                return self.create_result(
+                    result="PASS" if is_valid else "FAIL",
+                    measured_value=measured_value,
+                    error_message=error_msg if not is_valid else None
+                )
 
         except Exception as e:
-            self.logger.error(f"Power read error: {e}")
+            self.logger.error(f"Power read error: {e}", exc_info=True)
             return self.create_result(result="ERROR", error_message=str(e))
+
+    async def _measure_with_driver(
+        self,
+        driver,
+        instrument_type: str,
+        measure_type: str,
+        channel: Optional[str]
+    ) -> Decimal:
+        """
+        Execute measurement based on instrument type.
+
+        Args:
+            driver: Instrument driver instance
+            instrument_type: Type of instrument
+            measure_type: 'voltage' or 'current'
+            channel: Channel number (if applicable)
+
+        Returns:
+            Measured value as Decimal
+        """
+        # DAQ973A / DAQ6510 - Multi-channel DMM
+        if instrument_type in ('DAQ973A', 'DAQ6510'):
+            if not channel:
+                raise ValueError(f"{instrument_type} requires Channel parameter")
+
+            channels = [str(channel)]  # Driver expects list of channels
+
+            if measure_type == 'voltage':
+                return await driver.measure_voltage(channels)
+            else:  # current
+                # Validate current channels for DAQ973A
+                if instrument_type == 'DAQ973A' and channel not in ['121', '122']:
+                    raise ValueError(
+                        f"DAQ973A current measurement requires channel 121 or 122, got {channel}"
+                    )
+                return await driver.measure_current(channels)
+
+        # MODEL2303 - Dual Channel Power Supply
+        elif instrument_type == 'MODEL2303':
+            if measure_type == 'voltage':
+                return await driver.measure_voltage()
+            else:  # current
+                return await driver.measure_current()
+
+        # MODEL2306 - Dual Channel Power Supply (channel-specific)
+        elif instrument_type == 'MODEL2306':
+            channel_str = str(channel) if channel else '1'
+            if channel_str not in ['1', '2']:
+                raise ValueError(f"MODEL2306 requires channel '1' or '2', got {channel_str}")
+
+            if measure_type == 'voltage':
+                return await driver.measure_voltage(channel_str)
+            else:  # current
+                return await driver.measure_current(channel_str)
+
+        # IT6723C - Single Channel High Power Supply
+        elif instrument_type == 'IT6723C':
+            if measure_type == 'voltage':
+                return await driver.measure_voltage()
+            else:  # current
+                return await driver.measure_current()
+
+        # KEITHLEY2015 - DMM
+        elif instrument_type == 'KEITHLEY2015':
+            if measure_type == 'voltage':
+                return await driver.measure_voltage()
+            else:  # current
+                return await driver.measure_current()
+
+        # APS7050 / PSW3072 / A2260B - Power Supplies with generic interface
+        elif instrument_type in ('APS7050', 'PSW3072', 'A2260B', '2260B'):
+            if measure_type == 'voltage':
+                return await driver.measure_voltage()
+            else:  # current
+                return await driver.measure_current()
+
+        # A34970A - Similar to DAQ973A
+        elif instrument_type == '34970A':
+            if not channel:
+                raise ValueError(f"{instrument_type} requires Channel parameter")
+
+            channels = [str(channel)]
+
+            if measure_type == 'voltage':
+                return await driver.measure_voltage(channels)
+            else:  # current
+                return await driver.measure_current(channels)
+
+        else:
+            raise ValueError(
+                f"Instrument type {instrument_type} not supported for power read measurement. "
+                f"Supported: DAQ973A, DAQ6510, MODEL2303, MODEL2306, IT6723C, KEITHLEY2015, "
+                f"APS7050, PSW3072, A2260B, 34970A"
+            )
 
 
 class PowerSetMeasurement(BaseMeasurement):
-    """Sets voltage/current on power supplies"""
+    """
+    Sets voltage/current on power supply instruments.
+
+    Parameters:
+        Instrument: Instrument name from config (e.g., 'MODEL2303_1', 'MODEL2306_1', 'IT6723C_1')
+        SetVolt/Voltage: Target voltage in volts
+        SetCurr/Current: Target current limit in amperes
+        Channel: Channel number (for multi-channel supplies like MODEL2306)
+
+    Supported Instruments:
+        - MODEL2303: Dual-channel power supply (0-20V, 0-3A)
+        - MODEL2306: Dual-channel battery simulator (channel 1 or 2)
+        - IT6723C: High-power programmable supply (up to 150V, 10A)
+        - APS7050: General purpose power supply
+        - PSW3072: Programmable power supply
+        - A2260B: High-power supply (0-60V, 0-10A)
+
+    Special Behavior:
+        - MODEL2306: If both SetVolt=0 AND SetCurr=0, turns OFF the output
+        - Otherwise: Sets voltage, current, and enables output
+        - Validates set values by reading back (with tolerance check)
+
+    Integration: Refactored from PDTool4 mock implementation to real drivers
+    """
 
     async def execute(self) -> MeasurementResult:
         try:
-            instrument = get_param(self.test_params, "Instrument")
-            voltage = get_param(self.test_params, "Voltage", "SetVolt")
-            current = get_param(self.test_params, "Current", "SetCurr")
+            # Import required modules lazily to avoid circular imports
+            from app.services.instrument_connection import get_connection_pool
+            from app.services.instruments import get_driver_class
+            from app.core.instrument_config import get_instrument_settings
 
-            if not instrument:
+            # Get and validate parameters
+            instrument_name = get_param(self.test_params, "Instrument", "instrument")
+            voltage = get_param(self.test_params, "SetVolt", "Voltage", "voltage", "set_volt")
+            current = get_param(self.test_params, "SetCurr", "Current", "current", "set_curr")
+            channel = get_param(self.test_params, "Channel", "channel")
+
+            if not instrument_name:
                 return self.create_result(
                     result="ERROR",
                     error_message="Missing required parameter: Instrument"
                 )
 
-            self.logger.info(f"Setting power on {instrument}: V={voltage}, I={current}")
-            await asyncio.sleep(0.2)
+            if voltage is None or current is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message="Missing required parameters: SetVolt/Voltage and SetCurr/Current"
+                )
 
-            return self.create_result(result="PASS", measured_value=Decimal("1.0"))
+            # Convert to float
+            try:
+                voltage_val = float(voltage)
+                current_val = float(current)
+            except (ValueError, TypeError) as e:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Invalid voltage or current value: {e}"
+                )
+
+            self.logger.info(
+                f"Setting power on {instrument_name}: V={voltage_val}V, I={current_val}A"
+                + (f", Channel={channel}" if channel else "")
+            )
+
+            # Get instrument configuration
+            instrument_settings = get_instrument_settings()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument {instrument_name} not found in configuration"
+                )
+
+            # Get driver class
+            driver_class = get_driver_class(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver found for instrument type: {config.type}"
+                )
+
+            # Get connection and create driver
+            connection_pool = get_connection_pool()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+
+                # Initialize if needed
+                if not hasattr(driver, '_initialized'):
+                    await driver.initialize()
+                    driver._initialized = True
+
+                # Execute power set based on instrument type
+                result_msg = await self._set_power_with_driver(
+                    driver, config.type, voltage_val, current_val, channel
+                )
+
+                # Check result message ('1' = success in PDTool4 convention)
+                if result_msg == '1':
+                    return self.create_result(
+                        result="PASS",
+                        measured_value=Decimal("1.0")
+                    )
+                else:
+                    # Driver returned error message
+                    return self.create_result(
+                        result="FAIL",
+                        measured_value=Decimal("0.0"),
+                        error_message=result_msg
+                    )
 
         except Exception as e:
-            self.logger.error(f"Power set error: {e}")
+            self.logger.error(f"Power set error: {e}", exc_info=True)
             return self.create_result(result="ERROR", error_message=str(e))
+
+    async def _set_power_with_driver(
+        self,
+        driver,
+        instrument_type: str,
+        voltage: float,
+        current: float,
+        channel: Optional[str]
+    ) -> str:
+        """
+        Execute power set command based on instrument type.
+
+        Args:
+            driver: Instrument driver instance
+            instrument_type: Type of instrument
+            voltage: Target voltage
+            current: Target current limit
+            channel: Channel number (if applicable)
+
+        Returns:
+            '1' on success, error message string on failure (PDTool4 convention)
+        """
+        # MODEL2303 - Dual Channel Power Supply
+        if instrument_type == 'MODEL2303':
+            # Use execute_command for PDTool4-compatible interface
+            result = await driver.execute_command({
+                'SetVolt': voltage,
+                'SetCurr': current
+            })
+            return result
+
+        # MODEL2306 - Dual Channel Battery Simulator
+        elif instrument_type == 'MODEL2306':
+            channel_str = str(channel) if channel else '1'
+            if channel_str not in ['1', '2']:
+                return f"MODEL2306 requires channel '1' or '2', got {channel_str}"
+
+            # Use execute_command for PDTool4-compatible interface
+            result = await driver.execute_command({
+                'Channel': channel_str,
+                'SetVolt': voltage,
+                'SetCurr': current
+            })
+            return result
+
+        # IT6723C - High Power Supply
+        elif instrument_type == 'IT6723C':
+            # Use execute_command for PDTool4-compatible interface
+            result = await driver.execute_command({
+                'SetVolt': voltage,
+                'SetCurr': current
+            })
+            return result
+
+        # APS7050 / PSW3072 / A2260B - Generic Power Supplies
+        elif instrument_type in ('APS7050', 'PSW3072', 'A2260B', '2260B'):
+            # These drivers should have set_voltage, set_current, set_output methods
+            try:
+                await driver.set_voltage(voltage)
+                await driver.set_current(current)
+                await driver.set_output(True)
+
+                # Verify by reading back
+                measured_volt = await driver.measure_voltage()
+                volt_tolerance = abs(voltage * 0.05)  # 5% tolerance
+                if abs(float(measured_volt) - voltage) > volt_tolerance:
+                    return f"{instrument_type} voltage set failed: set={voltage}V, measured={measured_volt}V"
+
+                self.logger.info(f"{instrument_type} power set successful: V={measured_volt}V")
+                return '1'
+
+            except Exception as e:
+                return f"{instrument_type} power set failed: {str(e)}"
+
+        else:
+            return (
+                f"Instrument type {instrument_type} not supported for power set measurement. "
+                f"Supported: MODEL2303, MODEL2306, IT6723C, APS7050, PSW3072, A2260B"
+            )
 
 
 # ============================================================================
