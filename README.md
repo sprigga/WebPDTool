@@ -107,7 +107,7 @@ WebPDTool 是一個 Web 化的產品測試系統，用於執行自動化測試�
     "primaryColor": "#f0f0f0"
   },
   "flowchart": {
-    "padding": 20,
+    "padding": 40,
     "nodeSpacing": 60,
     "rankSpacing": 80,
     "curve": "basis",
@@ -218,7 +218,7 @@ graph TD
     "primaryColor": "#f0f0f0"
   },
   "flowchart": {
-    "padding": 20,
+    "padding": 40,
     "nodeSpacing": 60,
     "rankSpacing": 80,
     "curve": "basis",
