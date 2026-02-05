@@ -98,9 +98,9 @@ WebPDTool 是一個 Web 化的產品測試系統，用於執行自動化測試�
 
 ```mermaid
 %%{init: {
-  "theme": "base",
+  "theme": "neutral",
   "themeVariables": {
-    "fontSize": "16px",
+    "fontSize": "14px",
     "fontFamily": "Arial, Helvetica, sans-serif",
     "primaryTextColor": "#333333",
     "lineColor": "#555555",
@@ -209,9 +209,9 @@ graph TD
 
 ```mermaid
 %%{init: {
-  "theme": "base",
+  "theme": "neutral",
   "themeVariables": {
-    "fontSize": "16px",
+    "fontSize": "14px",
     "fontFamily": "Arial, Helvetica, sans-serif",
     "primaryTextColor": "#333333",
     "lineColor": "#555555",
@@ -301,9 +301,9 @@ graph LR
 
 ```mermaid
 %%{init: {
-  "theme": "base",
+  "theme": "neutral",
   "themeVariables": {
-    "fontSize": "16px",
+    "fontSize": "14px",
     "fontFamily": "Arial, Helvetica, sans-serif",
     "primaryTextColor": "#333333",
     "lineColor": "#555555",
