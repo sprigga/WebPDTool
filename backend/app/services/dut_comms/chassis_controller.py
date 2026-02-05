@@ -61,57 +61,100 @@ class ChassisController:
 
             self._is_rotating = True
 
+            # TODO: OLD IMPLEMENTATION (Script-based):
             # Build command arguments
             # Format: python chassis_fixture_bat.py <device> <direction_code> <command_type>
-            cmd_args = [
-                "python3",
-                self._control_script,
-                self.device_path,
-                str(direction),
-                "1"  # Command type: 1 = rotation command
-            ]
+            # cmd_args = [
+            #     "python3",
+            #     self._control_script,
+            #     self.device_path,
+            #     str(direction),
+            #     "1"  # Command type: 1 = rotation command
+            # ]
+            #
+            # # Execute chassis control script asynchronously
+            # process = await asyncio.create_subprocess_exec(...)
+            #
+            # NEW IMPLEMENTATION: Direct serial communication
+            success = await self._send_rotation_command(direction, duration_ms)
 
-            # Execute chassis control script asynchronously
-            process = await asyncio.create_subprocess_exec(
-                *cmd_args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-
-            # Wait for process completion with timeout
-            timeout = (duration_ms / 1000.0) if duration_ms else 10.0
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=timeout
-                )
-
-                if process.returncode != 0:
-                    error_msg = stderr.decode().strip() if stderr else f"Exit code: {process.returncode}"
-                    self.logger.error(f"Chassis rotation failed: {error_msg}")
-                    return False
-
-                output = stdout.decode().strip()
-                if output:
-                    self.logger.debug(f"Chassis rotation output: {output}")
-
-                self.logger.info(f"Chassis rotation {direction_name} completed successfully")
-                return True
-
-            except asyncio.TimeoutError:
-                self.logger.error(f"Chassis rotation timeout after {timeout}s")
-                process.kill()
-                await process.wait()
+            if not success:
+                self.logger.error(f"Failed to execute chassis rotation: {direction_name}")
                 return False
 
-        except FileNotFoundError:
-            self.logger.error(f"Chassis control script not found: {self._control_script}")
-            return False
+            self.logger.info(f"Chassis rotation {direction_name} completed successfully")
+            return True
+
         except Exception as e:
             self.logger.error(f"Chassis rotation error: {e}", exc_info=True)
             return False
         finally:
             self._is_rotating = False
+
+    async def _send_rotation_command(self, direction: RotationDirection, duration_ms: Optional[int] = None) -> bool:
+        """
+        Send rotation command to chassis fixture via serial protocol.
+
+        Args:
+            direction: RotationDirection.CLOCKWISE or COUNTERCLOCKWISE
+            duration_ms: Optional rotation duration (not currently used by firmware)
+
+        Returns:
+            True if command executed successfully
+        """
+        try:
+            from .ltl_chassis_fixt_comms.chassis_transport import ChassisTransport
+            from .ltl_chassis_fixt_comms.chassis_msgs import (
+                RotateTurntable,
+                operation_enum,
+                status_enum
+            )
+
+            # Map direction to operation
+            # PDTool4 protocol: operation 1 = CCW (left), operation 2 = CW (right)
+            if direction == RotationDirection.CLOCKWISE:
+                operation = operation_enum.ROTATE_RIGHT.value  # 2
+                angle = 90  # Default rotation angle in degrees
+            else:  # COUNTERCLOCKWISE
+                operation = operation_enum.ROTATE_LEFT.value  # 1
+                angle = 90  # Default rotation angle in degrees
+
+            # If duration_ms provided, calculate angle (assuming ~1 deg/ms speed)
+            # This is a rough estimate - actual speed depends on hardware
+            if duration_ms:
+                angle = min(int(duration_ms / 10), 360)  # Cap at 360 degrees
+
+            self.logger.debug(f"Sending rotation command: operation={operation}, angle={angle}")
+
+            # Open connection and send command
+            async with ChassisTransport(self.device_path) as transport:
+                # Create rotation message
+                msg = RotateTurntable()
+                msg.operation = operation
+                msg.angle = angle
+
+                # Send command
+                await transport.send_msg(msg)
+
+                # Wait for response
+                header, response, footer = await transport.get_msg()
+
+                # Check status
+                if hasattr(response, 'status'):
+                    if response.status == status_enum.SUCCESS.value:
+                        self.logger.info(f"Chassis rotation command successful")
+                        return True
+                    else:
+                        self.logger.error(f"Chassis rotation failed with status: {response.status}")
+                        return False
+                else:
+                    # Unexpected response type
+                    self.logger.warning(f"Unexpected response type: {type(response)}")
+                    return False
+
+        except Exception as e:
+            self.logger.error(f"Failed to send rotation command: {e}", exc_info=True)
+            return False
 
     async def rotate_clockwise(self, duration_ms: Optional[int] = None) -> bool:
         """
