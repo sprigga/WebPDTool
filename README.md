@@ -29,21 +29,21 @@ WebPDTool 是一個 Web 化的產品測試系統，用於執行自動化測試�
 
 | 項目 | 內容 |
 |------|------|
-| **版本** | v0.8.1 |
-| **完成度** | ~85-90% (核心架構完成，測量服務已重構，儀器驅動 100% 完成) |
-| **最新更新** | 2026-02-06 - 測量服務架構重構 (66.6% 程式碼縮減)，25 種儀器驅動 100% 完成 |
+| **版本** | v0.9.0 |
+| **完成度** | ~88% (核心架構完成，測量服務已重構，26 種儀器驅動完成) |
+| **最新更新** | 2026-02-06 - 測量服務架構重構 (66.6% 程式碼縮減)，26 種儀器驅動完成 |
 | **狀態** | 核心功能完整，測量服務已優化，所有儀器驅動已實現，前端完善中 |
 
 ### ✨ 主要特色
 
 - ✅ **完整 PDTool4 相容性** - 支援所有 7 種 limit_type 和 3 種 value_type
 - ✅ **runAllTest 模式** - 遇到錯誤時繼續執行測試，與 PDTool4 完全一致
-- ✅ **DUT 通訊系統** - 繼電器控制、機架旋轉、二進位協定支援 (3,100+ 行新代碼)
-- ✅ **10+ 種測量類型** - PowerSet/Read, CommandTest, SFC, GetSN, OPJudge, Wait, Relay, ChassisRotation, RF_Measurement
-- ✅ **25 種儀器驅動** - 100% 完成！Keysight, Keithley, ITECH, GW Instek, R&S, Anritsu 等完整實作
-- ✅ **完整 API 層** - 8 個 API 模組，70+ 端點，模組化設計
-- ✅ **進階日誌系統** - Redis 串流、請求追蹤、JSON 格式支援
-- ✅ **現代化前端** - Vue 3 Composition API + Element Plus UI，專案管理完整實作
+- ✅ **DUT 通訊系統** - 繼電器控制、機架旋轉、二進位協定支援 (LS/VCU/LTL 通訊)
+- ✅ **19 種測量類型** - PowerSet/Read, CommandTest, SFC, GetSN, OPJudge, Wait, Relay, ChassisRotation, RF_Measurements, L6MPU, PEAK_CAN 等
+- ✅ **26 種儀器驅動** - 完成！Keysight, Keithley, ITECH, GW Instek, R&S, Anritsu, Tektronix 等完整實作
+- ✅ **完整 API 層** - 8 個 API 模組，模組化設計 (testplan/, results/ 子目錄)
+- ✅ **進階日誌系統** - Redis 串流、請求追蹤、JSON 格式支援 (logging_v2.py)
+- ✅ **現代化前端** - Vue 3 Composition API + Element Plus UI，專案管理完整實作 (4,231 行代碼)
 
 ---
 
@@ -132,26 +132,29 @@ graph TD
     subgraph BackendLayer["🚀 後端服務 Port: 9100"]
         FastAPINode[FastAPI 應用入口<br/>Python 3.11+ 非同步框架]
 
-        subgraph APILayer["API 路由層 - 8個模組, 70+ 端點"]
+        subgraph APILayer["API 路由層 - 模組化設計"]
             direction TB
             AuthAPINode[🔐 認證授權模組<br/>JWT Token 管理]
             ProjectsAPINode[📁 專案管理模組<br/>CRUD 操作]
             StationsAPINode[🏠 站別管理模組<br/>測試站配置]
-            TestPlansAPINode[📋 測試計劃模組<br/>測試項目管理]
+            TestPlanAPINode[📋 測試計劃模組<br/>queries/mutations/<br/>validation/sessions]
             TestsAPINode[▶️ 測試執行模組<br/>會話控制與狀態]
             MeasurementsAPINode[📊 測量執行模組<br/>儀器驅動協調]
-            ResultsAPINode[📈 測試結果模組<br/>資料查詢與匯出]
+            ResultsAPINode[📈 測試結果模組<br/>sessions/measurements/<br/>summary/export/cleanup/<br/>reports]
             DUTControlAPINode[🔧 DUT 控制模組<br/>繼電器/機架控制]
         end
 
-        subgraph ServicesLayer["業務邏輯層 - 4個核心服務"]
+        subgraph ServicesLayer["業務邏輯層 - 7+ 核心服務"]
             TestEngineNode[⚙️ 測試引擎<br/>─────────<br/>測試編排與調度<br/>非同步執行控制<br/>會話狀態管理<br/>runAllTest 模式]
-            InstrumentMgrNode[🔌 儀器管理器<br/>─────────<br/>Singleton 連線池<br/>儀器狀態追蹤<br/>25 種驅動支援]
+            InstrumentMgrNode[🔌 儀器管理器<br/>─────────<br/>Singleton 連線池<br/>儀器狀態追蹤<br/>26 種驅動支援]
             MeasurementSvcNode[📏 測量服務<br/>─────────<br/>測量任務協調<br/>PDTool4 相容驗證<br/>錯誤收集處理]
-            SFCSvcNode[🔗 SFC 服務<br/>─────────<br/>MES 系統整合<br/>製造資料上傳]
+            TestPlanSvcNode[📋 測試計劃服務<br/>─────────<br/>計劃載入與驗證<br/>CSV 解析處理]
+            ReportSvcNode[📄 報告服務<br/>─────────<br/>自動報表生成<br/>CSV 匯出功能]
+            InstrumentConnNode[🔗 儀器連線<br/>─────────<br/>連線池管理<br/>狀態追蹤]
+            InstrumentExecNode[⚡ 儀器執行<br/>─────────<br/>命令執行邏輯<br/>錯誤處理]
         end
 
-        subgraph MeasurementsLayer["測量抽象層 - 10+ 測量類型"]
+        subgraph MeasurementsLayer["測量抽象層 - 19 種測量類型"]
             BaseMeasureNode[📐 BaseMeasurement 基類<br/>──────────────<br/>prepare/execute/cleanup<br/>7 種 limit_type 驗證<br/>3 種 value_type 轉換]
         end
 
@@ -169,7 +172,7 @@ graph TD
     subgraph ExternalLayer["🌍 外部系統整合"]
         SFCNode[🏭 SFC 製造執行系統<br/>WebService 通訊]
         ModbusNode[📡 Modbus 設備通訊<br/>TCP/IP 協定]
-        InstrumentsNode[🔬 測試儀器<br/>────────<br/>Keysight/Keithley<br/>R&S/Anritsu<br/>25 種驅動支援]
+        InstrumentsNode[🔬 測試儀器<br/>────────<br/>Keysight/Keithley/R&S<br/>Anritsu/Tektronix<br/>26 種驅動支援]
     end
 
     %% 主要資料流向
@@ -760,85 +763,101 @@ WebPDTool/
 
 #### 服務層 (backend/app/services/)
 
+**核心服務** (7 個主要服務，~3,400 行)
 - **auth.py** - JWT Token 管理、密碼驗證
-- **test_engine.py** - 測試編排引擎 (TestEngine, 507 行)
+- **test_engine.py** - 測試編排引擎 (507 行)
   - 非同步測試執行 (asyncio)
   - 測試會話狀態管理 (`TestExecutionState`)
   - 測量任務調度
-  - 自動報表生成 (CSV 匯出)
   - runAllTest 模式支援
-- **instrument_manager.py** - 儀器管理器 (Singleton)
+- **instrument_manager.py** - 儀器管理器 (Singleton, 180 行)
   - 儀器連線池管理
   - 儀器狀態追蹤
   - 連線重置機制
-- **measurement_service.py** - 測量服務協調 (709 行)
+- **measurement_service.py** - 測量服務協調 (711 行)
   - **架構更新 (2026-02-06)**: 從雙路徑架構重構為單路徑架構
   - 所有測量執行現在委派給 implementations.py 類別
-  - 移除 1,401 行重複的 legacy 程式碼 (66.6% 縮減: 2,103 → 702 行)
+  - 移除 1,401 行重複的 legacy 程式碼 (66.6% 縮減)
   - execute_single_measurement() 現在專門使用 get_measurement_class()
-- **report_service.py** - 自動報表生成服務
+- **test_plan_service.py** - 測試計劃管理服務 (932 行)
+  - 測試計劃載入與驗證
+  - CSV 解析處理
+  - 計劃項目管理
+- **report_service.py** - 自動報表生成服務 (326 行)
+  - CSV 匯出功能
+  - 報告模板管理
+- **instrument_connection.py** - 儀器連線管理 (497 行)
+- **instrument_executor.py** - 儀器執行邏輯 (258 行)
 
 ---
 
-#### DUT 通訊系統 (backend/app/services/dut_comms/) ✨ **2026-01-30 新增 (~3,100 行)**
+#### DUT 通訊系統 (backend/app/services/dut_comms/) ✨ **完整實作**
 
 - **relay_controller.py** - 繼電器開關控制 (映射 PDTool4 的 MeasureSwitchON/OFF)
 - **chassis_controller.py** - 機架旋轉控制 (映射 PDTool4 的 MyThread_CW/CCW)
 - **ls_comms/** - LS 通訊協定實作
+  - `ls_mod.py` - Modbus 通訊
+  - `ls_msgs.py` - 訊息定義
 - **vcu_ether_comms/** - VCU 乙太網路通訊
-- **ltl_chassis_fixt_comms/** - 機架夾具二進位協定 (CRC16 校驗)
-- **common/struct_message.py** - 二進位訊息封包處理
+  - `vcu_ether_link.py` - Ether link 管理
+  - `vcu_common.py` - 通用工具
+  - `header.py` - 協議標頭
+- **ltl_chassis_fixt_comms/** - 機架夾具二進位協定
+  - `chassis_api.py` - 機架 API
+  - `chassis_msgs.py` - 訊息定義
+  - `chassis_transport.py` - 傳輸層
+  - `crc16_kermit.py` - CRC16 校驗
 
 ---
 
-#### 儀器驅動層 (backend/app/services/instruments/) ✨ **25 種儀器驅動 100% 完成**
+#### 儀器驅動層 (backend/app/services/instruments/) ✨ **26 種儀器驅動完成**
 
-**資料擷取器 (DAQ)**
-- **daq973a.py** - Keysight DAQ973A 多功能資料擷取器
-- **daq6510.py** - Keithley DAQ6510 資料擷取/記錄系統
-- **a34970a.py** - Agilent 34970A 資料擷取/切換單元
+**資料擷取器 (DAQ)** - 3 種
+- **daq973a.py** (345 行) - Tektronix DAQ973A 多功能資料擷取器
+- **daq6510.py** (311 行) - Keithley DAQ6510 資料擷取/記錄系統
+- **a34970a.py** (301 行) - Agilent 34970A 資料擷取/切換單元
 
-**電源供應器 (Power Supply)**
-- **model2303.py** - Keithley 2303 電源供應器
-- **model2306.py** - Keithley 2306 電源供應器
-- **it6723c.py** - ITECH IT6723C 電源供應器
-- **psw3072.py** - GW Instek PSW3072 電源供應器
-- **aps7050.py** - GW Instek APS-7050 AC/DC 電源 + DMM (Phase 2)
-- **a2260b.py** - Keithley 2260B 可程控直流電源
+**電源供應器 (Power Supply)** - 6 種
+- **model2303.py** (176 行) - Keithley 2303 電源供應器
+- **model2306.py** (198 行) - Keithley 2306 電源供應器
+- **it6723c.py** (157 行) - ITECH IT6723C 電源供應器
+- **aps7050.py** (202 行) - GW Instek APS-7050 AC/DC 電源 + DMM
+- **a2260b.py** (173 行) - Keysight A2260B 可程控直流電源
 
-**測量儀器**
-- **keithley2015.py** - Keithley 2015 數位電表
-- **mdo34.py** - Tektronix MDO34 混合域示波器
-- **n5182a.py** - Agilent N5182A MXG 訊號產生器 (Phase 2)
+**測量儀器** - 3 種
+- **keithley2015.py** (266 行) - Keithley 2015 數位電表
+- **mdo34.py** (234 行) - Tektronix MDO34 混合域示波器
+- **n5182a.py** (189 行) - Keysight N5182A MXG 訊號產生器
 
-**RF 測試儀器 (Phase 3)**
-- **cmw100.py** - R&S CMW100 無線通訊測試儀 (BLE/WiFi, RsInstrument SDK)
-- **mt8872a.py** - Anritsu MT8872A LTE 射頻測試工具 (PyVISA)
-- **smcv100b.py** - R&S SMCV100B 向量訊號產生器 (RsSmcv)
+**RF 測試儀器** - 3 種
+- **cmw100.py** (623 行) - R&S CMW100 無線通訊測試儀 (BLE/WiFi, RsInstrument SDK)
+- **mt8872a.py** (653 行) - Anritsu MT8872A LTE 射頻測試工具 (PyVISA)
+- **smcv100b.py** (516 行) - R&S SMCV100B 向量訊號產生器 (RsSmcv)
 
-**多功能與特殊儀器 (Phase 2)**
-- **analog_discovery_2.py** - Digilent AD2 USB 多功能儀器 (WaveForms SDK)
-- **ftm_on.py** - FTM 測試模式控制器
+**多功能與特殊儀器** - 2 種
+- **analog_discovery_2.py** (216 行) - Digilent AD2 USB 多功能儀器 (WaveForms SDK)
+- **ftm_on.py** (160 行) - FTM 測試模式控制器
 
-**通用通訊介面 (Phase 1)**
-- **comport_command.py** - 通用 COM Port 串口介面
-- **tcpip_command.py** - 通用 TCP/IP 網路介面
-- **console_command.py** - 控制台命令執行器
-- **wait_test.py** - 測試延遲/等待控制
+**通用通訊介面** - 4 種
+- **comport_command.py** (277 行) - 通用 COM Port 串口介面
+- **tcpip_command.py** (281 行) - 通用 TCP/IP 網路介面
+- **console_command.py** (279 行) - 控制台命令執行器
+- **wait_test.py** (236 行) - 測試延遲/等待控制
 
-**控制器與通訊 (Phase 3)**
-- **l6mpu_ssh.py** - L6MPU SSH 控制器
-- **l6mpu_ssh_comport.py** - L6MPU SSH + Serial 混合控制器
-- **l6mpu_pos_ssh.py** - L6MPU Position 位置控制器
-- **peak_can.py** - PEAK CAN 總線介面
+**控制器與通訊** - 4 種
+- **l6mpu_ssh.py** (344 行) - L6MPU SSH 控制器
+- **l6mpu_ssh_comport.py** (304 行) - L6MPU SSH + Serial 混合控制器
+- **l6mpu_pos_ssh.py** (315 行) - L6MPU Position 位置控制器
+- **peak_can.py** (419 行) - PEAK CAN 總線介面
 
 **基礎架構**
-- **base.py** - `BaseInstrumentDriver` 抽象基礎類別
+- **base.py** (148 行) - `BaseInstrumentDriver` 抽象基礎類別
   - `initialize()` - 儀器初始化
   - `reset()` - 儀器重置
   - async/await 完整支援
+- **dwf_constants.py** (35 行) - Digilent WaveForms 常數
 
-> **🎉 PDTool4 儀器驅動 100% 完成** - 所有 25 種儀器驅動已實現並整合
+> **🎉 PDTool4 儀器驅動完成** - 所有 26 種儀器驅動已實現並整合 (~7,600 行代碼)
 
 ---
 
@@ -853,17 +872,17 @@ WebPDTool/
   - runAllTest 模式錯誤處理
   - PDTool4 儀器錯誤檢測 ("No instrument found", "Error:")
 
-- **implementations.py**: 10+ 種測量實作 (509 行)
-  - **DummyMeasurement** - 測試用假測量
-  - **PowerSetMeasurement** - 電源供應器控制
-  - **PowerReadMeasurement** - 電壓/電流讀取
-  - **CommandTestMeasurement** - Shell 命令執行測試
-  - **SFCMeasurement** - SFC (MES) 整合測試
-  - **GetSNMeasurement** - 產品序號取得
-  - **OPJudgeMeasurement** - 操作員手動判定
-  - **WaitMeasurement** - 延遲等待
-  - **RelayMeasurement** - DUT 繼電器控制 ✨ **新增** (對應 PDTool4 MeasureSwitchON/OFF)
-  - **ChassisRotationMeasurement** - 機架旋轉控制 ✨ **新增** (對應 PDTool4 MyThread_CW/CCW)
+- **implementations.py**: 19 種測量實作 (1,743 行)
+  - **基礎測量**: DummyMeasurement, WaitMeasurement
+  - **電源測量**: PowerSetMeasurement, PowerReadMeasurement
+  - **命令測試**: CommandTestMeasurement, OtherMeasurement
+  - **SFC 整合**: SFCMeasurement
+  - **資料存取**: GetSNMeasurement
+  - **操作員判定**: OPJudgeMeasurement
+  - **DUT 控制**: RelayMeasurement, ChassisRotationMeasurement
+  - **RF 測量**: CMW100_BLE_Measurement, CMW100_WiFi_Measurement, RF_Tool_LTE_TX_Measurement, RF_Tool_LTE_RX_Measurement, SMCV100B_RF_Output_Measurement
+  - **L6MPU**: L6MPU_LTE_Check_Measurement, L6MPU_PLC_Test_Measurement
+  - **CAN 通訊**: PEAK_CAN_Message_Measurement
 
 - **registry.py**: MEASUREMENT_REGISTRY 測量類型註冊表
 
@@ -923,13 +942,12 @@ CSV Test Plan → 測量分派 → 執行測量 → 驗證結果 → 儲存資�
 
 ---
 
-### 前端架構 (~4,200 行 Vue 代碼)
+### 前端架構 (~4,231 行 Vue 代碼)
 
-#### 頁面組件 (frontend/src/views/)
+#### 頁面組件 (frontend/src/views/) - 總計 4,231 行
 
 **✅ 完整實作**
-- **Login.vue** (190 行) - 使用者登入介面，表單驗證
-- **TestMain.vue** (1,781 行) - 測試執行主控台 (完整 PDTool4 風格 UI)
+- **TestMain.vue** (1,805 行) - 測試執行主控台 (完整 PDTool4 風格 UI)
   - 專案/站別選擇器整合
   - SFC 配置對話框
   - runAllTest 模式切換
@@ -937,14 +955,19 @@ CSV Test Plan → 測量分派 → 執行測量 → 驗證結果 → 儲存資�
   - 進度追蹤與統計
   - 狀態徽章 (PASS/FAIL/SKIP/ERROR)
   - 循環計數器
-- **ProjectManage.vue** (704 行) - 專案與站別完整 CRUD 管理 ✨
+- **TestPlanManage.vue** (935 行) - 測試計劃管理
+  - CSV 上傳與解析
+  - 測試項目 CRUD
+  - 拖曳排序功能
+  - 批量操作
+- **ProjectManage.vue** (704 行) - 專案與站別完整 CRUD 管理
   - 專案表格 (排序/篩選)
   - 站別管理
   - 建立/編輯對話框
   - 刪除確認機制
   - 基於角色的權限控制 (僅 Admin)
-- **TestPlanManage.vue** (935 行) - 測試計劃管理
 - **TestExecution.vue** (565 行) - 測試執行監控
+- **Login.vue** (190 行) - 使用者登入介面，表單驗證
 
 **⚠️ 佔位符 (待完善)**
 - **TestHistory.vue** (16 行) - 測試歷史查詢 (僅佔位符)
@@ -1777,25 +1800,25 @@ docker-compose logs -f backend | grep ERROR
 
 ## 📈 專案狀態與待辦事項
 
-### 目前狀態 (v0.8.0 - 2026-02-05)
+### 目前狀態 (v0.9.0 - 2026-02-06)
 
 | 項目 | 狀態 | 完成度 | 說明 |
 |------|------|--------|------|
-| **版本** | v0.8.0 | - | 儀器驅動 100% 完成 |
-| **整體完成度** | 核心完整 | **85-90%** | 儀器驅動完成，前端完善中 |
+| **版本** | v0.9.0 | - | 測量服務重構完成，26 種儀器驅動完成 |
+| **整體完成度** | 核心完整 | **88%** | 儀器驅動完成，前端完善中 |
 | **核心架構** | ✅ 已完成 | 100% | FastAPI + Vue 3 + MySQL |
-| **API 層** | ✅ 已完成 | 95% | 8 個模組，70+ 端點 |
-| **測試引擎** | ✅ 已完成 | 98% | TestEngine + InstrumentManager |
-| **測量系統** | ✅ 已完成 | 95% | 10+ 種測量類型，完整 PDTool4 相容 |
-| **DUT 通訊** | ✅ 已完成 | 90% | 繼電器/機架控制，3K+ 行新代碼 |
-| **儀器驅動** | ✅ 已完成 | 100% | **25 種驅動全部實現** 🎉 |
-| **資料庫** | ✅ 已完成 | 100% | 9 個表格，完整 Schema |
-| **前端核心** | ✅ 已完成 | 85% | TestMain/ProjectManage 完整 |
+| **API 層** | ✅ 已完成 | 95% | 模組化設計 (testplan/, results/ 子目錄) |
+| **測試引擎** | ✅ 已完成 | 98% | TestEngine + InstrumentManager + 相關服務 |
+| **測量系統** | ✅ 已完成 | 95% | 19 種測量類型，完整 PDTool4 相容 |
+| **DUT 通訊** | ✅ 已完成 | 90% | 繼電器/機架控制，LS/VCU/LTL 通訊 |
+| **儀器驅動** | ✅ 已完成 | 100% | **26 種驅動全部實現** 🎉 |
+| **資料庫** | ✅ 已完成 | 100% | 7 個核心表格，完整 Schema |
+| **前端核心** | ✅ 已完成 | 90% | TestMain/ProjectManage/TestPlanManage 完整 (4,231 行) |
 | **前端管理** | ⚠️ 部分完成 | 40% | History/Config 為佔位符 |
-| **日誌系統** | ✅ 已完成 | 90% | Redis 串流、請求追蹤 |
+| **日誌系統** | ✅ 已完成 | 90% | logging_v2.py，請求追蹤 |
 | **容器化** | ✅ 已完成 | 100% | Docker Compose 完整配置 |
 | **SFC 整合** | ⚠️ 框架完成 | 30% | 需 WebService 客戶端 |
-| **測試覆蓋** | ⚠️ 基本完成 | 40% | 儀器驅動測試完整，需完整 API 測試 |
+| **測試覆蓋** | ⚠️ 基本完成 | 40% | 15 個測試檔案 (4,080 行) |
 | **生產就緒** | ⚠️ 接近完成 | 80% | 需前端完善與安全性強化 |
 
 ---
@@ -1816,28 +1839,31 @@ docker-compose logs -f backend | grep ERROR
 - ✅ MEASUREMENT_REGISTRY 動態註冊表
 - ✅ 測試會話完整生命週期管理
 
-#### 3. 25 種儀器驅動 100% 完成 🎉
+#### 3. 26 種儀器驅動完成 🎉
 
-**Phase 1 - 通用通訊介面 (4/4)**
-- ComPortCommand, TCPIPCommand, ConSoleCommand, Wait_test
+**資料擷取器 (3 種)** - 957 行
+- DAQ973A, DAQ6510, 34970A
 
-**Phase 2 - 常用測試儀器 (4/4)**
-- APS7050, N5182A, AnalogDiscovery2, FTM_On
+**電源供應器 (5 種)** - 906 行
+- 2303, 2306, IT6723C, APS7050, A2260B
 
-**Phase 3 - RF 測試儀器 (2/2)**
+**測量儀器 (3 種)** - 689 行
+- Keithley2015, MDO34, N5182A
+
+**RF 測試儀器 (3 種)** - 1,792 行
 - CMW100 (R&S) - RsInstrument SDK, BLE/WiFi 測量
 - MT8872A (Anritsu) - PyVISA, LTE TX/RX 測量
+- SMCV100B (R&S) - RsSmcv
 
-**Phase 3 - 低優先級儀器 (5/5)**
+**多功能與特殊儀器 (2 種)** - 376 行
+- AnalogDiscovery2, FTM_On
+
+**通用通訊介面 (4 種)** - 1,073 行
+- ComPortCommand, TCPIPCommand, ConSoleCommand, Wait_test
+
+**控制器與通訊 (4 種)** - 1,382 行
 - L6MPU_SSH, L6MPU_SSH_COMPORT, L6MPU_POS_SSH
 - PEAK_CAN (python-can)
-- SMCV100B (RsSmcv)
-
-**核心儀器 (10/10)**
-- 資料擷取: DAQ973A, DAQ6510, 34970A
-- 電源供應: 2303, 2306, IT6723C, PSW3072, 2260B, APS7050
-- 測量儀器: Keithley2015, MDO34, N5182A
-- 多功能: AnalogDiscovery2, FTM_On
 
 #### 4. 全端開發
 
@@ -1887,7 +1913,7 @@ docker-compose logs -f backend | grep ERROR
 
 ## 📝 更新日誌
 
-### v0.8.1 (最新) - 2026-02-06 - 測量服務架構重構 ✨
+### v0.9.0 (最新) - 2026-02-06 - 測量服務架構重構與儀器驅動完成 ✨
 
 #### ✅ 測量服務架構優化 (66.6% 程式碼縮減)
 
@@ -1900,7 +1926,7 @@ docker-compose logs -f backend | grep ERROR
 **技術細節**
 - `execute_single_measurement()` 現在專門使用 `get_measurement_class()`
 - Legacy subprocess helper (`_execute_instrument_command`) 僅保留向後相容性
-- 測量服務從 2,103 行精簡至 709 行
+- 測量服務從 2,103 行精簡至 711 行
 - 所有測量類型統一透過 `MEASUREMENT_REGISTRY` 分派
 
 **效益**
@@ -1909,48 +1935,41 @@ docker-compose logs -f backend | grep ERROR
 - 更容易維護和擴展
 - 減少 66.6% 的重複程式碼
 
+#### ✅ 儀器驅動完成 (26 種)
+
+**新增儀器**
+- 完成所有 Phase 1-3 儀器驅動實現
+- 資料擷取器、電源供應器、測量儀器
+- RF 測試儀器 (CMW100, MT8872A, SMCV100B)
+- 多功能儀器與通訊介面
+
+**測試覆蓋**
+- 15 個測試檔案，4,080 行測試代碼
+- 儀器驅動單元測試完整
+
 ---
 
-### v0.8.0 - 2026-02-05 - 儀器驅動完整實現 🎉
+### v0.8.0 - 2026-02-05 - DUT 通訊系統與進階功能
 
-#### ✅ Phase 3 儀器驅動完整實現 (100% 完成)
+#### ✅ DUT 通訊系統完整實作
 
-**RF 測試儀器**
-- **CMW100Driver** (Rohde & Schwarz CMW100)
-  - RsInstrument SDK 完整整合
-  - BLE TX Power 測量 (連接器、頻率、預期功率)
-  - WiFi TX Power & EVM 測量 (標準、頻道、頻寬)
-  - 模擬模式支援 (sim://cmw100)
-  - 單元測試套件 (tests/test_instruments/test_cmw100.py)
+- **繼電器控制系統** (relay_controller.py)
+  - 對應 PDTool4 的 MeasureSwitchON/MeasureSwitchOFF
+  - RelayMeasurement 測量類型整合
+- **機架旋轉系統** (chassis_controller.py)
+  - 對應 PDTool4 的 MyThread_CW/MyThread_CCW
+  - ChassisRotationMeasurement 測量類型整合
+- **通訊協定層實作**
+  - LS 通訊協定 (ls_comms/)
+  - VCU 乙太網路通訊 (vcu_ether_comms/)
+  - 機架夾具二進位協定 (ltl_chassis_fixt_comms/)
 
-- **MT8872ADriver** (Anritsu MT8872A)
-  - PyVISA SCPI 命令整合
-  - LTE TX Power 測量 (頻段、頻道、頻寬)
-  - LTE RX Sensitivity 測量
-  - Signal Generator 模式 (RX 測試)
-  - 波形支援: GSM, WCDMA, LTE, NR
-  - 單元測試套件 (tests/test_instruments/test_mt8872a.py)
+#### ✅ 進階日誌系統
 
-**低優先級儀器**
-- **L6MPUSSHDriver** - i.MX8MP SSH 控制器 (paramiko)
-- **L6MPUSSHComPortDriver** - L6MPU SSH + Serial 混合控制器
-- **L6MPUPOSSHDriver** - L6MPU 位置控制器
-- **PEAKCANDriver** - PEAK CAN 總線介面 (python-can)
-- **SMCV100BDriver** - R&S SMCV100B 向量訊號產生器 (RsSmcv)
-
-**通用通訊介面 (Phase 1)**
-- **ComPortCommand** - 通用串口介面
-- **TCPIPCommand** - 通用 TCP/IP 網路介面
-- **ConSoleCommand** - 控制台命令執行器
-- **Wait_test** - 測試延遲控制
-
-**測量整合**
-- RF 測量類更新使用真實儀器驅動
-- BLE_TxPowerMeasurement 使用 CMW100Driver
-- LTE_TxPowerMeasurement 使用 MT8872ADriver
-- 連線池管理與儀器初始化
-
-**依賴套件更新**
+- Redis 串流支援
+- 請求上下文追蹤 (request_id, user_id, session_id)
+- JSON 日誌格式
+- 背景日誌刷新器
 ```txt
 RsInstrument>=1.50.0  # CMW100/SMCV100B 專用
 pyvisa>=1.13.0        # MT8872A 通用 VISA
