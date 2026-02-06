@@ -1,0 +1,4 @@
+Item No,Item Name,Result,Measured Value,Min Limit,Max Limit,Error Message,Execution Time (ms),Test Time
+2,123_1,PASS,81.178855,,,,101,2026-02-06T10:13:18
+3,WAIT_FIX_5sec,PASS,1.000000,,,,2000,2026-02-06T10:13:20
+4,123_2,PASS,29.560352,,,,99,2026-02-06T10:13:21

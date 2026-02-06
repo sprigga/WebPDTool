@@ -145,6 +145,28 @@
           >
             <el-table-column prop="item_no" label="序號" width="70" align="center" />
             <el-table-column prop="item_name" label="測試項目" min-width="150" />
+            <!-- 新增: 項目鍵值欄位 - 顯示測試計劃中的唯一識別碼 -->
+            <el-table-column prop="item_key" label="項目鍵值" width="100" align="center" />
+            <!-- 新增: 限制類型欄位 - 顯示驗證邏輯 (lower/upper/both/equality/inequality/partial/none) -->
+            <el-table-column prop="limit_type" label="限制類型" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.limit_type" size="small" type="info">
+                  {{ row.limit_type }}
+                </el-tag>
+                <span v-else class="text-muted">-</span>
+              </template>
+            </el-table-column>
+            <!-- 新增: 限制值欄位 - 顯示上下限值的組合 -->
+            <el-table-column label="限制值" width="150" align="center">
+              <template #default="{ row }">
+                <span v-if="row.lower_limit !== null || row.upper_limit !== null">
+                  <span v-if="row.lower_limit !== null">{{ formatNumber(row.lower_limit) }}</span>
+                  <span v-if="row.lower_limit !== null && row.upper_limit !== null"> ~ </span>
+                  <span v-if="row.upper_limit !== null">{{ formatNumber(row.upper_limit) }}</span>
+                </span>
+                <span v-else class="text-muted">-</span>
+              </template>
+            </el-table-column>
             <el-table-column prop="execute_name" label="測試指令" width="120" />
             <el-table-column label="下限" width="90" align="right">
               <template #default="{ row }">
@@ -670,8 +692,10 @@ const loadTestPlanItems = async () => {
         executed: testPoint?.executed || false,
         passed: testPoint?.passed || null,
         value: testPoint?.value || null,
-        limit_type: testPoint?.limit_type || null,
-        value_type: testPoint?.value_type || null
+        // 修改: 優先使用後端返回的 limit_type 和 item_key，若無則使用測試點映射表
+        limit_type: item.limit_type || testPoint?.limit_type || null,
+        value_type: item.value_type || testPoint?.value_type || null,
+        item_key: item.item_key || null
       }
     })
     testStatus.value.total_items = items.length

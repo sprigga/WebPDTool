@@ -1,0 +1,4 @@
+Item No,Item Name,Result,Measured Value,Min Limit,Max Limit,Error Message,Execution Time (ms),Test Time
+2,123_1,PASS,123.000000,,,,10,2026-02-06T10:25:42
+3,WAIT_FIX_5sec,PASS,1.000000,,,,2000,2026-02-06T10:25:44
+4,123_2,FAIL,123.000000,,,Partial failed: '456' not in '123.0',10,2026-02-06T10:25:44

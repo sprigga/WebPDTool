@@ -1,0 +1,4 @@
+Item No,Item Name,Result,Measured Value,Min Limit,Max Limit,Error Message,Execution Time (ms),Test Time
+2,123_1,ERROR,,,,BaseMeasurement.__init__() got an unexpected keyword argument 'item_no',1,2026-02-06T09:56:47
+3,WAIT_FIX_5sec,ERROR,,,,BaseMeasurement.__init__() got an unexpected keyword argument 'item_no',,2026-02-06T09:56:47
+4,123_2,ERROR,,,,BaseMeasurement.__init__() got an unexpected keyword argument 'item_no',,2026-02-06T09:56:47

@@ -60,6 +60,117 @@ class DummyMeasurement(BaseMeasurement):
 
 
 # ============================================================================
+# Other Measurement - Custom Script Execution
+# ============================================================================
+class OtherMeasurement(BaseMeasurement):
+    """
+    Executes custom Python scripts (PDTool4 'Other' measurement type).
+
+    Maps switch_mode (case_type) to script files:
+    - test123 → scripts/test123.py
+    - 123_1 → scripts/123_1.py
+    - WAIT_FIX_5sec → scripts/WAIT_FIX_5sec.py
+    - etc.
+
+    Supports UseResult parameter for dependency injection.
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            # Get script name from switch_mode (case_type)
+            switch_mode = self.test_plan_item.get("switch_mode", "")
+
+            if not switch_mode:
+                return self.create_result(
+                    result="ERROR",
+                    error_message="Missing switch_mode (script name)"
+                )
+
+            # Get optional parameters
+            use_result = get_param(self.test_params, "use_result", "UseResult")
+            timeout = get_param(self.test_params, "timeout", "Timeout", default=5000)
+            wait_msec = get_param(self.test_params, "wait_msec", "WaitmSec") or self.test_plan_item.get("wait_msec", 0)
+
+            # Build script path
+            # 原有程式碼: 假設腳本在 src/lowsheen_lib/testUTF/ 目錄
+            # 修改: 腳本移到 backend/scripts/ 目錄，支援多種命名方式
+            script_name = switch_mode.replace(".", "_")  # test123 or 123_1 or WAIT_FIX_5sec
+            script_path = f"/app/scripts/{script_name}.py"
+
+            self.logger.info(f"Executing Other script: {script_path}")
+
+            # Wait if specified
+            if wait_msec and isinstance(wait_msec, (int, float)):
+                await asyncio.sleep(wait_msec / 1000.0)
+
+            # Build command arguments
+            args = []
+            if use_result:
+                # UseResult: 使用之前測試項目的結果作為參數
+                args.append(str(use_result))
+
+            # Execute script
+            timeout_seconds = timeout / 1000.0
+            cmd = ["python3", script_path] + args
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd="/app"
+            )
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                process.kill()
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Script timeout after {timeout_seconds}s"
+                )
+
+            # Check return code
+            if process.returncode != 0:
+                error_msg = stderr.decode().strip() if stderr else f"Script failed with code {process.returncode}"
+                return self.create_result(
+                    result="ERROR",
+                    error_message=error_msg
+                )
+
+            # Parse output
+            output = stdout.decode().strip()
+            self.logger.info(f"Script output: {output}")
+
+            # Try to convert to number, fallback to string
+            try:
+                measured_value = float(output)
+            except ValueError:
+                # String result (e.g., "Hello World!")
+                measured_value = StringType(output)
+
+            # Validate result
+            is_valid, error_msg = self.validate_result(measured_value)
+
+            return self.create_result(
+                result="PASS" if is_valid else "FAIL",
+                measured_value=measured_value,
+                error_message=error_msg if not is_valid else None
+            )
+
+        except FileNotFoundError:
+            return self.create_result(
+                result="ERROR",
+                error_message=f"Script not found: {script_path}"
+            )
+        except Exception as e:
+            self.logger.error(f"Other measurement error: {e}", exc_info=True)
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+# ============================================================================
 # Command Test Measurement
 # ============================================================================
 class CommandTestMeasurement(BaseMeasurement):
@@ -1534,7 +1645,7 @@ MEASUREMENT_REGISTRY = {
     "WAIT": WaitMeasurement,
     "RELAY": RelayMeasurement,
     "CHASSIS_ROTATION": ChassisRotationMeasurement,
-    "OTHER": DummyMeasurement,
+    "OTHER": OtherMeasurement,  # 修改: 使用 OtherMeasurement 執行自定義腳本，而非 DummyMeasurement 的隨機值
     "FINAL": DummyMeasurement,
     # RF_Tool (MT8872A) measurements
     "RF_TOOL_LTE_TX": RF_Tool_LTE_TX_Measurement,
@@ -1554,7 +1665,7 @@ MEASUREMENT_REGISTRY = {
     "wait": WaitMeasurement,
     "relay": RelayMeasurement,
     "chassis_rotation": ChassisRotationMeasurement,
-    "other": DummyMeasurement,
+    "other": OtherMeasurement,  # 修改: 使用 OtherMeasurement 執行自定義腳本
     # Case type mappings
     "console": CommandTestMeasurement,
     "comport": CommandTestMeasurement,
