@@ -293,28 +293,75 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="測試類型" prop="test_type">
-              <el-input v-model="editingItem.test_type" />
+              <el-select
+                v-model="editingItem.test_type"
+                placeholder="請選擇測試類型"
+                style="width: 100%"
+                filterable
+                clearable
+                @change="handleTestTypeChange"
+              >
+                <el-option
+                  v-for="type in testTypes"
+                  :key="type"
+                  :label="type"
+                  :value="type"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="執行名稱">
-              <el-input v-model="editingItem.execute_name" />
+            <el-form-item label="儀器模式">
+              <el-select
+                v-model="editingItem.switch_mode"
+                placeholder="請選擇儀器模式"
+                style="width: 100%"
+                filterable
+                clearable
+                :disabled="!editingItem.test_type"
+                @change="handleSwitchModeChange"
+              >
+                <el-option
+                  v-for="mode in switchModes"
+                  :key="mode"
+                  :label="mode"
+                  :value="mode"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
 
         <el-row :gutter="20">
           <el-col :span="12">
+            <el-form-item label="執行名稱">
+              <el-input v-model="editingItem.execute_name" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
             <el-form-item label="案例類型">
               <el-input v-model="editingItem.case_type" />
             </el-form-item>
           </el-col>
+        </el-row>
+
+        <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="序號" prop="sequence_order">
               <el-input-number v-model="editingItem.sequence_order" :min="1" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
+
+        <!-- 新增: 測試參數設定區塊 -->
+        <el-divider content-position="left">測試參數設定</el-divider>
+
+        <DynamicParamForm
+          v-model="editingItem.parameters"
+          :test-type="editingItem.test_type"
+          :switch-mode="editingItem.switch_mode"
+          @validation-change="handleParamValidation"
+        />
 
         <el-divider content-position="left">數值與限制</el-divider>
 
@@ -435,9 +482,21 @@ import {
   deleteTestPlanItem,
   bulkDeleteTestPlanItems
 } from '@/api/testplans'
+// 新增: 動態參數表單相關
+import DynamicParamForm from '@/components/DynamicParamForm.vue'
+import { useMeasurementParams } from '@/composables/useMeasurementParams'
 
 const projectStore = useProjectStore()
 // const currentStation = computed(() => projectStore.currentStation)  // 原有程式碼: 使用 store 中的當前站別
+
+// 新增: 初始化測量參數管理 composable
+const {
+  loadTemplates,
+  testTypes,
+  switchModes,
+  currentTestType,
+  currentSwitchMode
+} = useMeasurementParams()
 
 // 新增: 使用本地狀態管理選擇的專案和站別,不依賴 store 的 currentProject/currentStation
 const selectedProjectId = ref(null)
@@ -484,6 +543,8 @@ const editingItem = reactive({
   id: null,
   item_name: '',
   test_type: '',
+  switch_mode: '',  // 新增: 儀器模式欄位
+  parameters: {},   // 修改: 實際使用的參數物件（原為註解）
   lower_limit: null,
   upper_limit: null,
   unit: '',
@@ -505,6 +566,9 @@ const editingItem = reactive({
   // 新增: 測試計劃名稱欄位
   test_plan_name: ''
 })
+
+// 新增: 參數驗證狀態
+const paramValidation = ref(true)
 
 const editFormRules = {
   item_name: [{ required: true, message: '請輸入測試項目名稱', trigger: 'blur' }],
@@ -696,12 +760,34 @@ const handleSelectionChange = (selection) => {
   selectedItems.value = selection
 }
 
+// 新增: 處理測試類型變更
+const handleTestTypeChange = (testType) => {
+  currentTestType.value = testType
+  // 清空 switch_mode 和 parameters
+  editingItem.switch_mode = ''
+  editingItem.parameters = {}
+}
+
+// 新增: 處理儀器模式變更
+const handleSwitchModeChange = (switchMode) => {
+  currentSwitchMode.value = switchMode
+  // 清空 parameters，讓使用者重新輸入
+  editingItem.parameters = {}
+}
+
+// 新增: 處理參數驗證結果
+const handleParamValidation = (isValid) => {
+  paramValidation.value = isValid
+}
+
 // Handle add item
 const handleAddItem = () => {
   Object.assign(editingItem, {
     id: null,
     item_name: '',
     test_type: '',
+    switch_mode: '',        // 新增: 重置儀器模式
+    parameters: {},         // 修改: 空物件而非 undefined
     lower_limit: null,
     upper_limit: null,
     unit: '',
@@ -723,12 +809,25 @@ const handleAddItem = () => {
     // 新增: 重置測試計劃名稱
     test_plan_name: ''
   })
+  // 重置 composable 狀態
+  currentTestType.value = ''
+  currentSwitchMode.value = ''
   showEditDialog.value = true
 }
 
 // Handle edit item
 const handleEditItem = (row) => {
-  Object.assign(editingItem, { ...row })
+  Object.assign(editingItem, {
+    ...row,
+    // 確保 parameters 是物件
+    parameters: row.parameters || {},
+    switch_mode: row.switch_mode || ''
+  })
+
+  // 同步到 composable
+  currentTestType.value = row.test_type || ''
+  currentSwitchMode.value = row.switch_mode || ''
+
   showEditDialog.value = true
 }
 
@@ -739,11 +838,19 @@ const handleSaveItem = async () => {
   await editFormRef.value.validate(async (valid) => {
     if (!valid) return
 
+    // 新增: 檢查參數驗證（如果有選擇 switch_mode）
+    if (editingItem.switch_mode && !paramValidation.value) {
+      ElMessage.warning('請完整填寫測試參數')
+      return
+    }
+
     try {
       // 準備更新/新增資料 (包含所有欄位)
       const itemData = {
         item_name: editingItem.item_name,
         test_type: editingItem.test_type,
+        switch_mode: editingItem.switch_mode,  // 新增: 儀器模式
+        parameters: editingItem.parameters,     // 修改: 實際傳遞參數
         lower_limit: editingItem.lower_limit,
         upper_limit: editingItem.upper_limit,
         unit: editingItem.unit,
@@ -772,21 +879,11 @@ const handleSaveItem = async () => {
         ElMessage.success('更新成功')
       } else {
         // Create new item
-        // 修正: 使用選擇的專案和站別
-        // 原有程式碼:
-        // await createTestPlanItem({
-        //   project_id: projectStore.currentProject?.id || currentStation.value.project_id,
-        //   station_id: currentStation.value.id,
-        //   item_no: editingItem.sequence_order,
-        //   ...itemData,
-        //   parameters: {}
-        // })
         await createTestPlanItem({
           project_id: selectedProjectId.value,
           station_id: selectedStationId.value,
           item_no: editingItem.sequence_order,
-          ...itemData,
-          parameters: {}
+          ...itemData
         })
         ElMessage.success('新增成功')
       }
@@ -865,6 +962,13 @@ onMounted(async () => {
   // 原有程式碼: 從 localStorage 載入當前專案和站別
   // currentProject 和 currentStation 已在 store 初始化時自動載入，無需額外呼叫方法
   // 原程式碼: projectStore.loadFromStorage() - 此方法不存在，已移除
+
+  // 新增: 載入測量參數模板
+  try {
+    await loadTemplates()
+  } catch (error) {
+    console.error('Failed to load measurement templates:', error)
+  }
 
   // 修正: 載入所有專案列表
   if (projectStore.projects.length === 0) {

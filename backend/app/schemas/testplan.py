@@ -13,6 +13,7 @@ class TestPlanBase(BaseModel):
     item_no: int = Field(..., description="Test item sequence number")
     item_name: str = Field(..., description="Test item name")
     test_type: str = Field(..., description="Test type")
+    switch_mode: Optional[str] = Field(default=None, description="Instrument/switch mode (DAQ973A, MODEL2303, comport, etc.)")
     parameters: Optional[Dict[str, Any]] = Field(default=None, description="Test parameters JSON")
     lower_limit: Optional[float] = Field(default=None, description="Lower limit")
     upper_limit: Optional[float] = Field(default=None, description="Upper limit")
@@ -46,6 +47,7 @@ class TestPlanUpdate(BaseModel):
     """Test plan update"""
     item_name: Optional[str] = None
     test_type: Optional[str] = None
+    switch_mode: Optional[str] = None  # 新增: 儀器模式欄位
     parameters: Optional[Dict[str, Any]] = None
     lower_limit: Optional[float] = None
     upper_limit: Optional[float] = None

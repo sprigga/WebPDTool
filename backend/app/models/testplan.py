@@ -20,6 +20,7 @@ class TestPlan(Base):
     item_no = Column(Integer, nullable=False)
     item_name = Column(String(100), nullable=False)
     test_type = Column(String(50), nullable=False)
+    switch_mode = Column(String(50), nullable=True)  # 新增: 儀器模式欄位 (DAQ973A, MODEL2303, comport, etc.)
     parameters = Column(JSON, nullable=True)
     lower_limit = Column(DECIMAL(15, 6), nullable=True)
     upper_limit = Column(DECIMAL(15, 6), nullable=True)

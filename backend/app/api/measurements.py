@@ -242,23 +242,32 @@ async def get_session_measurement_results(
         )
 
 
+class ParamValidationRequest(BaseModel):
+    """Request model for parameter validation"""
+    test_type: str
+    switch_mode: Optional[str] = None
+    parameters: Dict[str, Any]
+
+
 @router.post("/validate-params")
 async def validate_measurement_params(
-    measurement_type: str,
-    switch_mode: str,
-    test_params: Dict[str, Any]
+    request: ParamValidationRequest
 ):
     """
-    Validate measurement parameters
+    Validate measurement parameters against template
 
     Based on PDTool4's parameter validation logic where each measurement
     type has required and optional parameters.
+
+    新增: Pydantic 請求模型，支援可選的 switch_mode
     """
     try:
-        validation_result = await measurement_service.validate_params(
-            measurement_type=measurement_type,
-            switch_mode=switch_mode,
-            test_params=test_params
+        from app.config.instruments import validate_params
+
+        validation_result = validate_params(
+            measurement_type=request.test_type,
+            switch_mode=request.switch_mode or "",
+            params=request.parameters
         )
 
         return {
@@ -295,16 +304,68 @@ async def get_available_instruments():
         )
 
 
-@router.get("/measurement-templates")
+@router.get("/templates")
 async def get_measurement_templates():
     """
-    Get measurement templates based on PDTool4's measurement module patterns
+    Get all measurement templates for dynamic form rendering
 
-    Returns standardized templates for different measurement types,
-    making it easier to configure test parameters.
+    Returns complete MEASUREMENT_TEMPLATES structure with test_types list
+    for frontend dynamic form component.
 
-    Original code: 87+ lines of hardcoded template dictionaries
-    Modified: Loaded from app.config.instruments module for easier maintenance
+    New: Simplified endpoint for frontend consumption
+    """
+    try:
+        return {
+            "templates": MEASUREMENT_TEMPLATES,
+            "test_types": list(MEASUREMENT_TEMPLATES.keys())
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get measurement templates: {str(e)}"
+        )
+
+
+@router.get("/templates/{test_type}")
+async def get_test_type_template(test_type: str):
+    """
+    Get template for specific test type
+
+    Args:
+        test_type: Test type name (PowerRead, PowerSet, etc.)
+
+    Returns:
+        All switch_mode templates for the specified test type
+
+    New: Performance optimization for fetching specific test type
+    """
+    try:
+        if test_type not in MEASUREMENT_TEMPLATES:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Test type '{test_type}' not found. Available types: {list(MEASUREMENT_TEMPLATES.keys())}"
+            )
+
+        return {
+            "test_type": test_type,
+            "switch_modes": MEASUREMENT_TEMPLATES[test_type]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get test type template: {str(e)}"
+        )
+
+
+@router.get("/measurement-templates")
+async def get_measurement_templates_legacy():
+    """
+    Get measurement templates (legacy endpoint)
+
+    原有程式碼: 返回原始 MEASUREMENT_TEMPLATES
+    保留: 向後相容，避免破壞現有 API 呼叫
     """
     try:
         return MEASUREMENT_TEMPLATES
