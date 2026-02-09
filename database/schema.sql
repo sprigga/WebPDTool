@@ -50,10 +50,14 @@ CREATE TABLE stations (
     INDEX idx_station_code (station_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Test Plans table
+-- Test Plans table (完整結構 - 包含所有 CSV 匯入欄位)
 CREATE TABLE test_plans (
     id INT PRIMARY KEY AUTO_INCREMENT,
+    -- 專案和工站關聯
+    project_id INT NOT NULL,
     station_id INT NOT NULL,
+    test_plan_name VARCHAR(100),
+    -- 核心測試欄位
     item_no INT NOT NULL,
     item_name VARCHAR(100) NOT NULL,
     test_type VARCHAR(50) NOT NULL,
@@ -63,10 +67,27 @@ CREATE TABLE test_plans (
     unit VARCHAR(20),
     enabled BOOLEAN DEFAULT TRUE,
     sequence_order INT NOT NULL,
+    -- CSV 匯入欄位 (對應 PDTool4 格式)
+    item_key VARCHAR(50) COMMENT 'ItemKey - 項目鍵值',
+    value_type VARCHAR(50) COMMENT 'ValueType - 數值類型 (string/integer/float)',
+    limit_type VARCHAR(50) COMMENT 'LimitType - 限制類型 (lower/upper/both/equality/inequality/partial/none)',
+    eq_limit VARCHAR(100) COMMENT 'EqLimit - 等於限制',
+    pass_or_fail VARCHAR(20) COMMENT 'PassOrFail - 通過或失敗',
+    measure_value VARCHAR(100) COMMENT 'measureValue - 測量值',
+    execute_name VARCHAR(100) COMMENT 'ExecuteName - 執行名稱',
+    case_type VARCHAR(50) COMMENT 'case - 案例類型',
+    command VARCHAR(500) COMMENT 'Command - 命令',
+    timeout INT COMMENT 'Timeout - 超時時間(毫秒)',
+    use_result VARCHAR(100) COMMENT 'UseResult - 使用結果',
+    wait_msec INT COMMENT 'WaitmSec - 等待毫秒',
+    -- 時間戳記
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- 外鍵和索引
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (station_id) REFERENCES stations(id) ON DELETE CASCADE,
-    INDEX idx_station_sequence (station_id, sequence_order)
+    INDEX idx_station_sequence (station_id, sequence_order),
+    INDEX idx_project_station (project_id, station_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Test Sessions table

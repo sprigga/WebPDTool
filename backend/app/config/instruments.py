@@ -3,7 +3,14 @@ Instrument and Measurement Configuration
 
 Based on PDTool4's instrument configuration patterns.
 Extracted from hardcoded dictionaries in measurements.py to improve maintainability.
+
+REFACTORING UPDATE (2026-02-09):
+- Added MEASUREMENT_TYPE_DESCRIPTIONS for test type metadata
+- Added helper functions for dynamic configuration access
+- Enables /types API to be generated dynamically from MEASUREMENT_TEMPLATES
 """
+
+from typing import Dict, List, Any, Optional
 
 # Available instruments by category
 AVAILABLE_INSTRUMENTS = {
@@ -121,3 +128,182 @@ MEASUREMENT_TEMPLATES = {
         }
     }
 }
+
+# Measurement type descriptions (used for API documentation and UI display)
+# 原有程式碼: 這些描述散落在 measurements.py 的硬編碼中
+# 修改: 集中管理測試類型的元數據
+MEASUREMENT_TYPE_DESCRIPTIONS = {
+    "PowerSet": {
+        "name": "PowerSet",
+        "description": "Power supply voltage/current setting",
+        "category": "power"
+    },
+    "PowerRead": {
+        "name": "PowerRead",
+        "description": "Voltage/current measurement reading",
+        "category": "power"
+    },
+    "CommandTest": {
+        "name": "CommandTest",
+        "description": "Serial/network command execution",
+        "category": "communication"
+    },
+    "SFCtest": {
+        "name": "SFCtest",
+        "description": "SFC integration testing",
+        "category": "integration"
+    },
+    "getSN": {
+        "name": "getSN",
+        "description": "Serial number acquisition",
+        "category": "identification"
+    },
+    "OPjudge": {
+        "name": "OPjudge",
+        "description": "Operator judgment/confirmation",
+        "category": "manual"
+    },
+    "Other": {
+        "name": "Other",
+        "description": "Custom measurement implementations",
+        "category": "custom"
+    }
+}
+
+
+# ============================================================================
+# Helper Functions for Dynamic Configuration Access
+# ============================================================================
+
+def get_measurement_types() -> List[Dict[str, Any]]:
+    """
+    Get all measurement types with their supported instruments.
+
+    動態從 MEASUREMENT_TEMPLATES 生成測試類型清單，
+    替代原本在 API 層的硬編碼實作。
+
+    Returns:
+        List of measurement type dictionaries with structure:
+        {
+            "name": str,
+            "description": str,
+            "category": str,
+            "supported_switches": List[str]
+        }
+    """
+    measurement_types = []
+
+    for test_type, instruments in MEASUREMENT_TEMPLATES.items():
+        # Get metadata from MEASUREMENT_TYPE_DESCRIPTIONS
+        metadata = MEASUREMENT_TYPE_DESCRIPTIONS.get(test_type, {
+            "name": test_type,
+            "description": f"{test_type} measurement",
+            "category": "unknown"
+        })
+
+        measurement_types.append({
+            "name": metadata["name"],
+            "description": metadata["description"],
+            "category": metadata.get("category", "unknown"),
+            "supported_switches": list(instruments.keys())
+        })
+
+    return measurement_types
+
+
+def get_template(measurement_type: str, switch_mode: str) -> Optional[Dict[str, Any]]:
+    """
+    Get measurement template for specific type and switch mode.
+
+    Args:
+        measurement_type: Test type (PowerSet, PowerRead, etc.)
+        switch_mode: Instrument/switch mode (DAQ973A, MODEL2303, etc.)
+
+    Returns:
+        Template dictionary with 'required', 'optional', 'example' keys,
+        or None if combination not found
+    """
+    return MEASUREMENT_TEMPLATES.get(measurement_type, {}).get(switch_mode)
+
+
+def validate_params(
+    measurement_type: str,
+    switch_mode: str,
+    params: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Validate measurement parameters against template.
+
+    Args:
+        measurement_type: Test type
+        switch_mode: Instrument mode
+        params: Parameters to validate
+
+    Returns:
+        Validation result dictionary:
+        {
+            "valid": bool,
+            "missing_params": List[str],
+            "invalid_params": List[str],
+            "suggestions": List[str]
+        }
+    """
+    template = get_template(measurement_type, switch_mode)
+
+    if not template:
+        return {
+            "valid": False,
+            "missing_params": [],
+            "invalid_params": [],
+            "suggestions": [
+                f"Unsupported combination: {measurement_type} + {switch_mode}",
+                f"Available switches for {measurement_type}: {list(MEASUREMENT_TEMPLATES.get(measurement_type, {}).keys())}"
+            ]
+        }
+
+    # Check required parameters
+    required = template.get("required", [])
+    missing = [param for param in required if param not in params or params[param] in (None, "")]
+
+    # Check for unknown parameters (not in required or optional)
+    optional = template.get("optional", [])
+    valid_params = set(required + optional)
+    invalid = [param for param in params.keys() if param not in valid_params]
+
+    # Generate suggestions
+    suggestions = []
+    if missing:
+        example = template.get("example", {})
+        for param in missing:
+            if param in example:
+                suggestions.append(f"Parameter '{param}' example: {example[param]}")
+
+    return {
+        "valid": len(missing) == 0,
+        "missing_params": missing,
+        "invalid_params": invalid,
+        "suggestions": suggestions
+    }
+
+
+def get_all_instruments() -> Dict[str, List[Dict[str, str]]]:
+    """
+    Get all available instruments grouped by category.
+
+    Returns:
+        AVAILABLE_INSTRUMENTS dictionary
+    """
+    return AVAILABLE_INSTRUMENTS
+
+
+def get_instruments_by_category(category: str) -> List[Dict[str, str]]:
+    """
+    Get instruments for a specific category.
+
+    Args:
+        category: Category name (power_supplies, multimeters, communication, rf_analyzers)
+
+    Returns:
+        List of instrument dictionaries
+    """
+    return AVAILABLE_INSTRUMENTS.get(category, [])

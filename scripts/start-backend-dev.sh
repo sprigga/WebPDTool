@@ -51,29 +51,48 @@ if [ ! -z "$VIRTUAL_ENV" ]; then
     unset VIRTUAL_ENV
 fi
 
-# 檢查虛擬環境所有者，如果屬於 root 則修復權限
-# 這解決了 Ctrl+C 中斷後或之前用 sudo 執行造成的權限問題
+# 預防性檢查：拒絕以 sudo/root 執行，避免虛擬環境權限問題
+if [ "$EUID" -eq 0 ]; then
+    echo -e "${RED}錯誤: 請不要以 root 身份執行此腳本${NC}"
+    echo -e "${YELLOW}這會導致虛擬環境權限問題。請以普通用戶身份執行：${NC}"
+    echo -e "${YELLOW}  ./scripts/start-backend-dev.sh${NC}"
+    exit 1
+fi
+
+# 預防性檢查：拒絕以 sudo/root 執行，避免虛擬環境權限問題
+if [ "$EUID" -eq 0 ]; then
+    echo -e "${RED}錯誤: 請不要以 root 身份執行此腳本${NC}"
+    echo -e "${YELLOW}這會導致虛擬環境權限問題。請以普通用戶身份執行：${NC}"
+    echo -e "${YELLOW}  ./scripts/start-backend-dev.sh${NC}"
+    exit 1
+fi
+
+# 檢查虛擬環境權限，採用實用性策略
+# 策略：先測試實際可寫性，失敗則嘗試 sudo chown 修復，最後無法修復時明確提示
 VENV_PATH="./.venv"
 if [ -d "$VENV_PATH" ]; then
-    VENV_OWNER=$(stat -c "%U" "$VENV_PATH" 2>/dev/null || echo "unknown")
-    CURRENT_USER=$(whoami)
-
-    if [ "$VENV_OWNER" != "$CURRENT_USER" ]; then
-        echo -e "${YELLOW}警告: 虛擬環境所有者為 ${VENV_OWNER}，當前用戶為 ${CURRENT_USER}${NC}"
-        echo -e "${YELLOW}這會導致 uv sync 權限錯誤${NC}"
-        echo ""
-        echo -e "${GREEN}正在嘗試自動修復權限...${NC}"
-        echo -e "${YELLOW}請輸入 sudo 密碼以修復權限${NC}"
+    # 測試虛擬環境是否可寫（創建測試檔案）
+    TEST_FILE="$VENV_PATH/.write_test_$$"
+    if touch "$TEST_FILE" 2>/dev/null; then
+        rm -f "$TEST_FILE"
+        # 可寫，檢查所有者是否匹配（僅警告，不強制修復）
+        VENV_OWNER=$(stat -c "%U" "$VENV_PATH" 2>/dev/null || stat -f "%Su" "$VENV_PATH" 2>/dev/null || echo "unknown")
+        if [ "$VENV_OWNER" != "$(whoami)" ]; then
+            echo -e "${YELLOW}注意: 虛擬環境所有者為 ${VENV_OWNER}（可寫，但不建議）${NC}"
+        fi
+    else
+        # 不可寫，嘗試修復
+        echo -e "${YELLOW}偵測到虛擬環境無法寫入${NC}"
+        echo -e "${GREEN}正在嘗試修復權限...${NC}"
 
         # 嘗試使用 sudo 修復權限
-        if sudo chown -R "${CURRENT_USER}:${CURRENT_USER}" "$VENV_PATH" 2>/dev/null; then
+        if sudo chown -R "$(whoami):$(whoami)" "$VENV_PATH" 2>/dev/null; then
             echo -e "${GREEN}✓ 權限修復成功${NC}"
         else
-            echo -e "${RED}✗ 無法自動修復權限${NC}"
+            echo -e "${RED}錯誤: 無法自動修復虛擬環境權限${NC}"
             echo -e "${YELLOW}請手動執行以下命令後重試:${NC}"
-            echo -e "  ${YELLOW}sudo chown -R ${CURRENT_USER}: ${VENV_PATH}${NC}"
-            echo -e "  ${YELLOW}或刪除虛擬環境讓腳本重建:${NC}"
-            echo -e "  ${YELLOW}sudo rm -rf ${VENV_PATH}${NC}"
+            echo -e "  ${YELLOW}sudo chown -R $(whoami): $(whoami) ${VENV_PATH}${NC}"
+            echo -e "  ${YELLOW}或刪除重建: sudo rm -rf ${VENV_PATH}${NC}"
             exit 1
         fi
     fi

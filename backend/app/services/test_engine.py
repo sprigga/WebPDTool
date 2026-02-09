@@ -218,15 +218,18 @@ class TestEngine:
             }
 
             # 原有程式碼: 只使用 test_type 來決定測量類別
-            # 修改: 優先使用 case_type (如果存在)，因為 case_type='wait' 應該優先於 test_type='Other'
-            # 優先級: case_type > test_type
+            # 修改: 對於特殊 case_type (如 'wait')，優先使用 case_type 來選擇測量類別
+            # 對於其他 case_type (如 'test123')，使用 test_type，case_type 僅作為參數
             case_type = test_plan_item.case_type
             test_type = test_plan_item.test_type
 
             # 決定使用的測試命令 (test_command)
-            # 如果 case_type 存在且不是 None，優先使用 case_type
-            # 否則使用 test_type
-            if case_type and case_type.strip():
+            # 特殊 case_type 列表（這些 case_type 對應獨立的測量類型）
+            special_case_types = {'wait', 'relay', 'chassis_rotation', 'console', 'comport', 'tcpip'}
+
+            # 如果 case_type 是特殊類型，使用 case_type
+            # 否則使用 test_type，case_type 僅作為腳本名稱或參數
+            if case_type and case_type.strip() and case_type.lower() in special_case_types:
                 test_command = case_type
             else:
                 test_command = test_type

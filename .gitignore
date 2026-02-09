@@ -238,3 +238,6 @@ htmlcov/
 
 # Git worktrees
 .worktrees/
+
+# Test reports generated during execution
+backend/reports/

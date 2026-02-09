@@ -13,7 +13,11 @@ from app.dependencies import get_current_active_user
 from app.services.measurement_service import measurement_service
 from app.models.test_session import TestSession as TestSessionModel
 from app.schemas.measurement import MeasurementResponse
-from app.config.instruments import AVAILABLE_INSTRUMENTS, MEASUREMENT_TEMPLATES
+from app.config.instruments import (
+    AVAILABLE_INSTRUMENTS,
+    MEASUREMENT_TEMPLATES,
+    get_measurement_types as get_measurement_types_config
+)
 
 router = APIRouter()
 
@@ -141,49 +145,26 @@ async def execute_batch_measurements(
 async def get_measurement_types():
     """
     Get available measurement types
-    
+
     Returns the measurement types supported by the system,
     based on PDTool4's measurement module implementations.
+
+    原有程式碼: 40+ 行硬編碼的測試類型和儀器清單
+    修改: 從 app.config.instruments.get_measurement_types() 動態生成
+    優點:
+    - 單一配置來源，避免不一致
+    - 新增儀器時只需修改 MEASUREMENT_TEMPLATES
+    - 自動保持 API 與實作同步
     """
-    return {
-        "measurement_types": [
-            {
-                "name": "PowerSet",
-                "description": "Power supply voltage/current setting",
-                "supported_switches": ["DAQ973A", "MODEL2303", "IT6723C", "PSW3072", "2260B", "APS7050"]
-            },
-            {
-                "name": "PowerRead", 
-                "description": "Voltage/current measurement reading",
-                "supported_switches": ["DAQ973A", "34970A", "2015", "6510"]
-            },
-            {
-                "name": "CommandTest",
-                "description": "Serial/network command execution",
-                "supported_switches": ["comport", "tcpip", "console", "android_adb"]
-            },
-            {
-                "name": "SFCtest",
-                "description": "SFC integration testing",
-                "supported_switches": ["webStep1_2", "URLStep1_2", "skip"]
-            },
-            {
-                "name": "getSN",
-                "description": "Serial number acquisition",
-                "supported_switches": ["SN", "IMEI", "MAC"]
-            },
-            {
-                "name": "OPjudge",
-                "description": "Operator judgment/confirmation",
-                "supported_switches": ["YorN", "confirm"]
-            },
-            {
-                "name": "Other",
-                "description": "Custom measurement implementations",
-                "supported_switches": ["custom"]
-            }
-        ]
-    }
+    try:
+        # 從配置檔動態生成測試類型清單
+        measurement_types = get_measurement_types_config()
+        return {"measurement_types": measurement_types}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get measurement types: {str(e)}"
+        )
 
 
 @router.get("/instruments", response_model=List[InstrumentStatus])

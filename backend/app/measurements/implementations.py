@@ -6,12 +6,14 @@ from decimal import Decimal
 from typing import Dict, Any, Optional
 import asyncio
 import random
+import os  # 新增: 用於檢查檔案存在性
 
 from app.measurements.base import (
     BaseMeasurement,
     MeasurementResult,
     StringType
 )
+from app.config import settings
 
 
 # ============================================================================
@@ -77,13 +79,18 @@ class OtherMeasurement(BaseMeasurement):
 
     async def execute(self) -> MeasurementResult:
         try:
-            # Get script name from switch_mode (case_type)
-            switch_mode = self.test_plan_item.get("switch_mode", "")
+            # 修正: 從 case_type 欄位取得腳本名稱，而不是 switch_mode
+            # 原有程式碼: switch_mode = self.test_plan_item.get("switch_mode", "")
+            switch_mode = (
+                self.test_plan_item.get("case_type", "") or
+                self.test_plan_item.get("switch_mode", "") or
+                self.test_plan_item.get("item_name", "")  # Fallback to item_name
+            ).strip()
 
             if not switch_mode:
                 return self.create_result(
                     result="ERROR",
-                    error_message="Missing switch_mode (script name)"
+                    error_message="Missing case_type or switch_mode (script name)"
                 )
 
             # Get optional parameters
@@ -93,11 +100,38 @@ class OtherMeasurement(BaseMeasurement):
 
             # Build script path
             # 原有程式碼: 假設腳本在 src/lowsheen_lib/testUTF/ 目錄
-            # 修改: 腳本移到 backend/scripts/ 目錄，支援多種命名方式
+            # 第一次修改: 腳本移到 backend/scripts/ 目錄，使用硬編碼 /app/scripts/ 路徑
+            # 第二次修改: 使用環境感知的路徑解析，支援本地和容器環境
+            # 路徑解析邏輯:
+            #   - 相對路徑 (如 "scripts"): 從 backend 目錄計算
+            #   - 絕對路徑 (如 "/app/scripts"): 直接使用
+            #   - __file__ 位置: backend/app/measurements/implementations.py
+            #   - backend 目錄需向上三層: implementations.py → measurements → app → backend
             script_name = switch_mode.replace(".", "_")  # test123 or 123_1 or WAIT_FIX_5sec
-            script_path = f"/app/scripts/{script_name}.py"
+
+            # 從配置檔取得腳本目錄，支援相對路徑和絕對路徑
+            scripts_dir = settings.SCRIPTS_DIR
+
+            # 如果是相對路徑，轉換為絕對路徑（相對於 backend 目錄）
+            if not os.path.isabs(scripts_dir):
+                # __file__ = backend/app/measurements/implementations.py
+                # 需要回到 backend 目錄（向上三層：implementations.py → measurements → app → backend）
+                backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                scripts_dir = os.path.join(backend_dir, scripts_dir)
+
+            script_path = os.path.join(scripts_dir, f"{script_name}.py")
 
             self.logger.info(f"Executing Other script: {script_path}")
+            self.logger.info(f"Scripts directory: {scripts_dir}")
+
+            # 新增: 檢查腳本檔案是否存在
+            if not os.path.exists(script_path):
+                error_msg = f"Script not found: {script_path} (scripts_dir: {scripts_dir})"
+                self.logger.error(error_msg)
+                return self.create_result(
+                    result="ERROR",
+                    error_message=error_msg
+                )
 
             # Wait if specified
             if wait_msec and isinstance(wait_msec, (int, float)):
@@ -113,11 +147,14 @@ class OtherMeasurement(BaseMeasurement):
             timeout_seconds = timeout / 1000.0
             cmd = ["python3", script_path] + args
 
+            # 使用腳本目錄作為工作目錄
+            cwd = scripts_dir
+
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd="/app"
+                cwd=cwd
             )
 
             try:
@@ -149,7 +186,8 @@ class OtherMeasurement(BaseMeasurement):
                 measured_value = float(output)
             except ValueError:
                 # String result (e.g., "Hello World!")
-                measured_value = StringType(output)
+                # 修正: 使用 StringType.cast() 而非 StringType()
+                measured_value = StringType.cast(output)
 
             # Validate result
             is_valid, error_msg = self.validate_result(measured_value)

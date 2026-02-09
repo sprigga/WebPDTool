@@ -24,6 +24,7 @@ from app.measurements.implementations import get_measurement_class
 from app.models.test_session import TestSession as TestSessionModel
 from app.models.test_result import TestResult as TestResultModel
 from app.services.instrument_manager import instrument_manager
+from app.config.instruments import validate_params as validate_params_config
 
 logger = logging.getLogger(__name__)
 
@@ -398,7 +399,31 @@ class MeasurementService:
     ) -> Dict[str, Any]:
         """
         Validate measurement parameters based on PDTool4 requirements
+
+        原有程式碼: 100+ 行硬編碼的驗證規則字典
+        修改: 優先使用 app.config.instruments.validate_params() 進行驗證
+        保留: 舊版驗證邏輯作為後備 (支援尚未遷移到 MEASUREMENT_TEMPLATES 的測試類型)
         """
+        # 嘗試使用配置文件的驗證邏輯
+        config_validation = validate_params_config(measurement_type, switch_mode, test_params)
+
+        # 如果配置文件中找到對應的模板，直接返回驗證結果
+        # 檢查是否為「不支援的組合」錯誤
+        is_unsupported = (
+            config_validation.get("suggestions") and
+            len(config_validation["suggestions"]) > 0 and
+            config_validation["suggestions"][0].startswith("Unsupported combination")
+        )
+
+        # 如果驗證通過，或者是有效的失敗（有模板但參數不完整），直接返回配置驗證結果
+        if config_validation["valid"] or (not is_unsupported and not config_validation["valid"]):
+            return config_validation
+
+        # 如果是「不支援的組合」，回退到舊版驗證邏輯
+        # 這允許尚未遷移到 MEASUREMENT_TEMPLATES 的測試類型仍然可以驗證
+
+        # 後備: 使用舊版硬編碼驗證規則 (支援尚未遷移的測試類型)
+        # TODO: 將以下所有規則遷移到 MEASUREMENT_TEMPLATES 後可移除此段
         validation_rules = {
             "PowerSet": {
                 "DAQ973A": ["Instrument", "Channel", "Item"],
@@ -600,11 +625,15 @@ class MeasurementService:
                 # EqLimit doesn't require additional parameters beyond itself
                 pass
 
+        # 返回後備驗證結果
+        # 注意: 此結果僅在配置文件沒有對應模板時使用
         return {
             "valid": len(missing_params) == 0,
             "missing_params": missing_params,
             "invalid_params": [],
-            "suggestions": [],
+            "suggestions": [] if len(missing_params) == 0 else [
+                f"Legacy validation used. Consider migrating '{measurement_type}/{switch_mode}' to MEASUREMENT_TEMPLATES"
+            ],
         }
 
     async def get_instrument_status(self) -> List[Dict[str, Any]]:

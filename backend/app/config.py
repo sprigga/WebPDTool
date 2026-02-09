@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_LOG_TTL: int = 3600  # 1 hour
 
+    # ✅ Added: Scripts Directory Configuration
+    # 原有程式碼: implementations.py 使用硬編碼路徑 /app/scripts/
+    # 修改: 從環境變數讀取，支援本地和容器環境
+    # 容器環境: /app/scripts (Docker 內部路徑)
+    # 本地環境: ./scripts 或絕對路徑
+    SCRIPTS_DIR: str = "./scripts"
+
     # Model config for Pydantic v2
     model_config = {"env_file": ".env", "case_sensitive": True, "extra": "ignore"}
 
