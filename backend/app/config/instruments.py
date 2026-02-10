@@ -157,12 +157,13 @@ MEASUREMENT_TEMPLATES = {
     },
     "Other": {
         "script": {
+            # 修正: 移除 use_result, timeout, wait_msec 參數，這些是資料表直接欄位，不應放在 parameters JSON 中
+            # 原有程式碼: optional: ["use_result", "UseResult", "timeout", "Timeout", "wait_msec", "WaitmSec"]
+            # 說明: 這些欄位在 TestPlan 模型中是獨立欄位 (testplan.py lines 41-43)，
+            #       並且在編輯表單的"執行設定"區塊中顯示 (TestPlanManage.vue lines 433-455)
             "required": [],
-            "optional": ["use_result", "UseResult", "timeout", "Timeout", "wait_msec", "WaitmSec"],
-            "example": {
-                "timeout": "5000",
-                "wait_msec": "0"
-            }
+            "optional": [],
+            "example": {}
         }
     },
     "Wait": {

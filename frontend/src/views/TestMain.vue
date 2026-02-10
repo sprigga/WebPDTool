@@ -1016,12 +1016,23 @@ const executeSingleItem = async (item, index) => {
       if (!['item_no', 'item_name', 'execute_name', 'lower_limit', 'upper_limit',
             'unit', 'status', 'measured_value', 'id', 'project_id', 'station_id',
             'test_plan_name', 'item_key', 'sequence_order', 'enabled', 'pass_or_fail',
-            'measure_value', 'created_at', 'updated_at'].includes(key)) {
+            'measure_value', 'created_at', 'updated_at', 'parameters'].includes(key)) {
         if (item[key] && item[key] !== '') {
           testParams[key] = item[key]
         }
       }
     })
+
+    // 修正: 合併 parameters 欄位到 testParams（優先級最高）
+    // parameters 欄位包含從動態參數表單設定的值，應覆蓋資料庫欄位的值
+    if (item.parameters && typeof item.parameters === 'object') {
+      Object.entries(item.parameters).forEach(([key, value]) => {
+        // 只合併非空值
+        if (value !== null && value !== undefined && value !== '') {
+          testParams[key] = value
+        }
+      })
+    }
 
     // Handle UseResult dependency (參考 oneCSV_atlas_2.py:146-155)
     if (testParams.UseResult && testResults.value[testParams.UseResult]) {

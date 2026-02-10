@@ -93,10 +93,12 @@ class OtherMeasurement(BaseMeasurement):
                     error_message="Missing case_type or switch_mode (script name)"
                 )
 
-            # Get optional parameters
-            use_result = get_param(self.test_params, "use_result", "UseResult")
-            timeout = get_param(self.test_params, "timeout", "Timeout", default=5000)
-            wait_msec = get_param(self.test_params, "wait_msec", "WaitmSec") or self.test_plan_item.get("wait_msec", 0)
+            # 修正: 優先使用資料表直接欄位 (test_plan_item)，而非 parameters JSON
+            # 原有程式碼: 僅從 test_params (parameters JSON) 取值
+            # 說明: use_result, timeout, wait_msec 是 TestPlan 模型的直接欄位，應優先使用
+            use_result = self.test_plan_item.get("use_result") or get_param(self.test_params, "use_result", "UseResult")
+            timeout = self.test_plan_item.get("timeout") or get_param(self.test_params, "timeout", "Timeout", default=5000)
+            wait_msec = self.test_plan_item.get("wait_msec") or get_param(self.test_params, "wait_msec", "WaitmSec", default=0)
 
             # Build script path
             # 原有程式碼: 假設腳本在 src/lowsheen_lib/testUTF/ 目錄
@@ -762,10 +764,21 @@ class WaitMeasurement(BaseMeasurement):
                 self.test_plan_item.get("wait_msec", 0)
             )
 
+            # 修正: 將字串型別的數值轉換為數字
+            # 原有程式碼: 直接檢查型別，如果是字串 "1000" 會失敗
+            # 修改: 先嘗試轉換為數字，再進行驗證
+            try:
+                if isinstance(wait_msec, str):
+                    wait_msec = int(wait_msec)
+                elif not isinstance(wait_msec, (int, float)):
+                    wait_msec = 0
+            except (ValueError, TypeError):
+                wait_msec = 0
+
             if not isinstance(wait_msec, (int, float)) or wait_msec <= 0:
                 return self.create_result(
                     result="ERROR",
-                    error_message=f"wait mode requires wait_msec > 0, got: {wait_msec}"
+                    error_message=f"wait mode requires wait_msec > 0, got: {wait_msec} (type: {type(wait_msec).__name__})"
                 )
 
             wait_seconds = wait_msec / 1000
