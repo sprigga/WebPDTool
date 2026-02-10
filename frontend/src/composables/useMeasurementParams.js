@@ -28,10 +28,21 @@ export function useMeasurementParams() {
 
   // 計算屬性：當前選擇的參數模板
   const currentTemplate = computed(() => {
-    if (!currentTestType.value || !currentSwitchMode.value) {
+    if (!currentTestType.value) {
       return null
     }
-    return templates.value[currentTestType.value]?.[currentSwitchMode.value] || null
+
+    // 如果沒有選擇 switch_mode，但測試類型只有一個 switch mode，自動使用它
+    let switchMode = currentSwitchMode.value
+    if (!switchMode && switchModes.value.length === 1) {
+      switchMode = switchModes.value[0]
+    }
+
+    if (!switchMode) {
+      return null
+    }
+
+    return templates.value[currentTestType.value]?.[switchMode] || null
   })
 
   // 計算屬性：必填參數列表

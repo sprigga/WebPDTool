@@ -2,6 +2,14 @@
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 from typing import List, Union
+from pathlib import Path
+
+# 取得此檔案所在目錄 (app/)，然後向上找到 backend 目錄的 .env 檔案
+# config.py 在 backend/app/config.py，所以需要 parent.parent 來到 backend/
+# Path(__file__) = /path/to/backend/app/config.py
+# .parent = /path/to/backend/app
+# .parent.parent = /path/to/backend
+ENV_FILE_PATH = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -66,7 +74,8 @@ class Settings(BaseSettings):
     SCRIPTS_DIR: str = "./scripts"
 
     # Model config for Pydantic v2
-    model_config = {"env_file": ".env", "case_sensitive": True, "extra": "ignore"}
+    # 修改: 使用絕對路徑確保無論從哪個目錄啟動都能正確讀取 .env
+    model_config = {"env_file": str(ENV_FILE_PATH), "case_sensitive": True, "extra": "ignore"}
 
 
 # Global settings instance

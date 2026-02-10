@@ -107,26 +107,43 @@ const props = defineProps({
   switchMode: {
     type: String,
     default: ''
+  },
+  // 新增: 從父組件接收 templates，避免重複創建 composable 實例
+  templates: {
+    type: Object,
+    default: () => ({})
   }
 })
 
 const emit = defineEmits(['update:modelValue', 'validation-change'])
 
+// 原有程式碼: 創建新的 composable 實例導致模板數據不同步
+// const {
+//   currentTestType,
+//   currentSwitchMode,
+//   requiredParams,
+//   optionalParams,
+//   exampleParams,
+//   inferParamType,
+//   getParamOptions,
+//   formatParamLabel
+// } = useMeasurementParams()
+
+// 修正: 只使用工具函數，模板數據從 props 接收
 const {
-  currentTestType,
-  currentSwitchMode,
-  requiredParams,
-  optionalParams,
-  exampleParams,
   inferParamType,
   getParamOptions,
   formatParamLabel
 } = useMeasurementParams()
 
+// 新增: 本地狀態管理
+const currentTestType = ref(props.testType)
+const currentSwitchMode = ref(props.switchMode)
+
 const validationErrors = ref([])
 const localParams = ref({ ...props.modelValue })
 
-// 同步 props 到 composable
+// 同步 props 到本地狀態
 watch(() => props.testType, (val) => {
   currentTestType.value = val
 }, { immediate: true })
@@ -139,6 +156,35 @@ watch(() => props.switchMode, (val) => {
 watch(() => props.modelValue, (val) => {
   localParams.value = { ...val }
 }, { deep: true })
+
+// 新增: 計算當前模板（從 props.templates 取得）
+const currentTemplate = computed(() => {
+  if (!currentTestType.value || !props.templates || Object.keys(props.templates).length === 0) {
+    return null
+  }
+
+  const switchMode = currentSwitchMode.value
+  if (!switchMode) {
+    return null
+  }
+
+  return props.templates[currentTestType.value]?.[switchMode] || null
+})
+
+// 新增: 計算必填參數列表
+const requiredParams = computed(() => {
+  return currentTemplate.value?.required || []
+})
+
+// 新增: 計算可選參數列表
+const optionalParams = computed(() => {
+  return currentTemplate.value?.optional || []
+})
+
+// 新增: 計算範例參數值
+const exampleParams = computed(() => {
+  return currentTemplate.value?.example || {}
+})
 
 // 計算所有參數（含類型資訊）
 const allParams = computed(() => {

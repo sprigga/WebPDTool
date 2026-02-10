@@ -33,6 +33,7 @@
       </template>
 
       <!-- Project and Station Selection -->
+      <!-- 原有程式碼: 手動實作的專案站別選擇器
       <el-card class="filter-card" shadow="never">
         <el-row :gutter="20">
           <el-col :span="12">
@@ -75,6 +76,14 @@
             </el-form-item>
           </el-col>
         </el-row>
+      </el-card>
+      -->
+      <!-- 修正: 使用可重用的 ProjectStationSelector 元件 -->
+      <el-card class="filter-card" shadow="never">
+        <ProjectStationSelector
+          @project-selected="handleProjectSelected"
+          @station-selected="handleStationSelected"
+        />
       </el-card>
 
       <!-- Station Info -->
@@ -356,10 +365,12 @@
         <!-- 新增: 測試參數設定區塊 -->
         <el-divider content-position="left">測試參數設定</el-divider>
 
+        <!-- 修正: 傳遞 composable 實例避免模板數據不同步 -->
         <DynamicParamForm
           v-model="editingItem.parameters"
           :test-type="editingItem.test_type"
           :switch-mode="editingItem.switch_mode"
+          :templates="templates"
           @validation-change="handleParamValidation"
         />
 
@@ -484,6 +495,8 @@ import {
 } from '@/api/testplans'
 // 新增: 動態參數表單相關
 import DynamicParamForm from '@/components/DynamicParamForm.vue'
+// 修正: 引入 ProjectStationSelector 元件
+import ProjectStationSelector from '@/components/ProjectStationSelector.vue'
 import { useMeasurementParams } from '@/composables/useMeasurementParams'
 
 const projectStore = useProjectStore()
@@ -495,7 +508,8 @@ const {
   testTypes,
   switchModes,
   currentTestType,
-  currentSwitchMode
+  currentSwitchMode,
+  templates  // 新增: 導出 templates 給子組件使用
 } = useMeasurementParams()
 
 // 新增: 使用本地狀態管理選擇的專案和站別,不依賴 store 的 currentProject/currentStation
@@ -580,28 +594,42 @@ const uploadRef = ref(null)
 const editFormRef = ref(null)
 const testPlanTable = ref(null)
 
+// 原有程式碼: 手動處理專案站別選擇
 // 新增: 處理專案選擇變更
-const handleProjectSelect = async (projectId) => {
-  // 清空站別選擇
+// const handleProjectSelect = async (projectId) => {
+//   // 清空站別選擇
+//   selectedStationId.value = null
+//
+//   // 載入該專案的站別列表
+//   if (projectId) {
+//     try {
+//       await projectStore.fetchProjectStations(projectId)
+//     } catch (error) {
+//       console.error('Failed to load stations:', error)
+//       ElMessage.error('載入站別列表失敗')
+//     }
+//   }
+//
+//   // 清空測試計劃列表
+//   testPlanItems.value = []
+// }
+//
+// // 新增: 處理站別選擇變更
+// const handleStationSelect = async (stationId) => {
+//   // 載入測試計劃
+//   await loadTestPlan()
+// }
+
+// 修正: 使用 ProjectStationSelector 元件的事件處理器
+const handleProjectSelected = (project) => {
+  selectedProjectId.value = project.id
   selectedStationId.value = null
-
-  // 載入該專案的站別列表
-  if (projectId) {
-    try {
-      await projectStore.fetchProjectStations(projectId)
-    } catch (error) {
-      console.error('Failed to load stations:', error)
-      ElMessage.error('載入站別列表失敗')
-    }
-  }
-
-  // 清空測試計劃列表
   testPlanItems.value = []
 }
 
-// 新增: 處理站別選擇變更
-const handleStationSelect = async (stationId) => {
-  // 載入測試計劃
+const handleStationSelected = async (station) => {
+  selectedStationId.value = station.id
+  selectedProjectId.value = station.project_id
   await loadTestPlan()
 }
 
@@ -766,6 +794,12 @@ const handleTestTypeChange = (testType) => {
   // 清空 switch_mode 和 parameters
   editingItem.switch_mode = ''
   editingItem.parameters = {}
+
+  // 如果測試類型只有一個 switch mode，自動選擇它
+  if (switchModes.value.length === 1) {
+    editingItem.switch_mode = switchModes.value[0]
+    currentSwitchMode.value = switchModes.value[0]
+  }
 }
 
 // 新增: 處理儀器模式變更
@@ -970,32 +1004,17 @@ onMounted(async () => {
     console.error('Failed to load measurement templates:', error)
   }
 
-  // 修正: 載入所有專案列表
-  if (projectStore.projects.length === 0) {
-    try {
-      await projectStore.fetchProjects()
-    } catch (error) {
-      console.error('Failed to load projects:', error)
-    }
-  }
-
-  // 修正: 如果有 store 中有當前專案,自動選擇並載入站別列表
+  // 修正: ProjectStationSelector 元件會自動處理專案和站別的載入
+  // 這裡只需要同步本地狀態
   if (projectStore.currentProject) {
-    try {
-      selectedProjectId.value = projectStore.currentProject.id
-      await projectStore.fetchProjectStations(projectStore.currentProject.id)
-
-      // 如果有 store 中有當前站別,自動選擇
-      if (projectStore.currentStation) {
-        selectedStationId.value = projectStore.currentStation.id
-      }
-    } catch (error) {
-      console.error('Failed to load stations:', error)
-    }
+    selectedProjectId.value = projectStore.currentProject.id
   }
 
-  // 載入測試計劃(如果有選擇專案和站別)
-  loadTestPlan()
+  if (projectStore.currentStation) {
+    selectedStationId.value = projectStore.currentStation.id
+    // 載入測試計劃(如果有選擇專案和站別)
+    await loadTestPlan()
+  }
 })
 </script>
 

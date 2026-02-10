@@ -15,15 +15,15 @@ To access settings from the config.py file, we load it directly using __import__
 # ✅ Fix: Import settings from the sibling config.py file (not this config/ package)
 # Use __import__ to load app.config.py as a module and extract settings
 import sys
-import os
+from pathlib import Path
 
-# Add the app directory to the path if not already there
-app_dir = os.path.dirname(os.path.dirname(__file__))
-if app_dir not in sys.path:
-    sys.path.insert(0, app_dir)
+# 使用 pathlib 計算 config.py 的路徑，與 config.py 中的 .env 路徑計算方式一致
+# __file__ = /path/to/backend/app/config/__init__.py
+# .parent = /path/to/backend/app/config
+# .parent.parent = /path/to/backend/app
+# / "config.py" = /path/to/backend/app/config.py
+config_file_path = Path(__file__).resolve().parent.parent / "config.py"
 
-# Load the config.py module file directly
-config_file_path = os.path.join(os.path.dirname(__file__), '..', 'config.py')
 # Import the module from the file path
 import importlib.util
 spec = importlib.util.spec_from_file_location("_app_config_module", config_file_path)

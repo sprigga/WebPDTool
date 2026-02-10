@@ -126,6 +126,63 @@ MEASUREMENT_TEMPLATES = {
                 "Timeout": "5"
             }
         }
+    },
+    "SFCtest": {
+        "default": {
+            "required": ["Mode"],
+            "optional": [],
+            "example": {
+                "Mode": "webStep1_2"
+            }
+        }
+    },
+    "getSN": {
+        "default": {
+            "required": ["Type"],
+            "optional": ["SerialNumber"],
+            "example": {
+                "Type": "SN"
+            }
+        }
+    },
+    "OPjudge": {
+        "default": {
+            "required": ["Type"],
+            "optional": ["Expected", "Result"],
+            "example": {
+                "Type": "YorN",
+                "Expected": "PASS"
+            }
+        }
+    },
+    "Other": {
+        "script": {
+            "required": [],
+            "optional": ["use_result", "UseResult", "timeout", "Timeout", "wait_msec", "WaitmSec"],
+            "example": {
+                "timeout": "5000",
+                "wait_msec": "0"
+            }
+        }
+    },
+    "Wait": {
+        "default": {
+            "required": ["wait_msec"],
+            "optional": ["WaitmSec"],
+            "example": {
+                "wait_msec": "1000"
+            }
+        }
+    },
+    "Relay": {
+        "default": {
+            "required": ["RelayName", "Action"],
+            "optional": [],
+            "example": {
+                "RelayName": "RELAY_1",
+                "Action": "ON"
+            }
+        }
     }
 }
 
