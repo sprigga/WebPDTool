@@ -18,6 +18,7 @@ from app.config.instruments import (
     MEASUREMENT_TEMPLATES,
     get_measurement_types as get_measurement_types_config
 )
+from app.measurements.base import LIMIT_TYPE_MAP, VALUE_TYPE_MAP
 
 router = APIRouter()
 
@@ -373,6 +374,43 @@ async def get_measurement_templates_legacy():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get measurement templates: {str(e)}"
+        )
+
+
+@router.get("/validation-types")
+async def get_validation_types():
+    """
+    Get available value types and limit types for test plan validation
+
+    Returns the validation types supported by the system,
+    based on PDTool4's measurement validation logic in app/measurements/base.py
+
+    This ensures frontend dropdown options stay synchronized with backend validation logic.
+
+    Returns:
+        Dictionary with value_types and limit_types arrays
+
+    新增: 從 base.py 的 LIMIT_TYPE_MAP 和 VALUE_TYPE_MAP 導出選項
+    優點:
+    - 單一配置來源，避免前後端不一致
+    - 新增類型時只需修改 base.py 的 MAP
+    - 自動保持 API 與驗證邏輯同步
+    """
+    try:
+        # 從 LIMIT_TYPE_MAP 提取鍵值作為選項
+        limit_types = list(LIMIT_TYPE_MAP.keys())
+
+        # 從 VALUE_TYPE_MAP 提取鍵值作為選項
+        value_types = list(VALUE_TYPE_MAP.keys())
+
+        return {
+            "limit_types": limit_types,
+            "value_types": value_types
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get validation types: {str(e)}"
         )
 
 

@@ -379,12 +379,38 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="數值類型">
-              <el-input v-model="editingItem.value_type" />
+              <el-select
+                v-model="editingItem.value_type"
+                placeholder="請選擇數值類型"
+                style="width: 100%"
+                filterable
+                clearable
+              >
+                <el-option
+                  v-for="type in valueTypes"
+                  :key="type"
+                  :label="type"
+                  :value="type"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="限制類型">
-              <el-input v-model="editingItem.limit_type" />
+              <el-select
+                v-model="editingItem.limit_type"
+                placeholder="請選擇限制類型"
+                style="width: 100%"
+                filterable
+                clearable
+              >
+                <el-option
+                  v-for="type in limitTypes"
+                  :key="type"
+                  :label="type"
+                  :value="type"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
@@ -498,6 +524,8 @@ import DynamicParamForm from '@/components/DynamicParamForm.vue'
 // 修正: 引入 ProjectStationSelector 元件
 import ProjectStationSelector from '@/components/ProjectStationSelector.vue'
 import { useMeasurementParams } from '@/composables/useMeasurementParams'
+// 新增: 獲取驗證類型選項
+import { getValidationTypes } from '@/api/measurements'
 
 const projectStore = useProjectStore()
 // const currentStation = computed(() => projectStore.currentStation)  // 原有程式碼: 使用 store 中的當前站別
@@ -580,6 +608,10 @@ const editingItem = reactive({
   // 新增: 測試計劃名稱欄位
   test_plan_name: ''
 })
+
+// 新增: 數值類型和限制類型選項 - 從 API 動態獲取
+const valueTypes = ref([])
+const limitTypes = ref([])
 
 // 新增: 參數驗證狀態
 const paramValidation = ref(true)
@@ -1002,6 +1034,18 @@ onMounted(async () => {
     await loadTemplates()
   } catch (error) {
     console.error('Failed to load measurement templates:', error)
+  }
+
+  // 新增: 載入驗證類型選項 (數值類型和限制類型)
+  try {
+    const validationTypes = await getValidationTypes()
+    valueTypes.value = validationTypes.value_types
+    limitTypes.value = validationTypes.limit_types
+  } catch (error) {
+    console.error('Failed to load validation types:', error)
+    // 使用預設值作為後備
+    valueTypes.value = ['string', 'integer', 'float']
+    limitTypes.value = ['lower', 'upper', 'both', 'equality', 'inequality', 'partial', 'none']
   }
 
   // 修正: ProjectStationSelector 元件會自動處理專案和站別的載入

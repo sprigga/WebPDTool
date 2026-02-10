@@ -51,3 +51,11 @@ export const getAvailableInstruments = () => {
 export const getInstrumentStatus = () => {
   return apiClient.get('/api/measurements/instruments')
 }
+
+/**
+ * Get validation types (value types and limit types)
+ * @returns {Promise<{limit_types: string[], value_types: string[]}>} Validation types
+ */
+export const getValidationTypes = () => {
+  return apiClient.get('/api/measurements/validation-types')
+}
