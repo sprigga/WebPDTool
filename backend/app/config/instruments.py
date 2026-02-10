@@ -156,14 +156,49 @@ MEASUREMENT_TEMPLATES = {
         }
     },
     "Other": {
+        # 修正方案 A: 加入特殊測試類型作為 switch_mode 選項
+        # 這些選項原本散落在 case_type 欄位,現在統一到 switch_mode
         "script": {
-            # 修正: 移除 use_result, timeout, wait_msec 參數，這些是資料表直接欄位，不應放在 parameters JSON 中
-            # 原有程式碼: optional: ["use_result", "UseResult", "timeout", "Timeout", "wait_msec", "WaitmSec"]
-            # 說明: 這些欄位在 TestPlan 模型中是獨立欄位 (testplan.py lines 41-43)，
-            #       並且在編輯表單的"執行設定"區塊中顯示 (TestPlanManage.vue lines 433-455)
+            # 自訂腳本模式 (預設)
             "required": [],
             "optional": [],
             "example": {}
+        },
+        "wait": {
+            # 等待測試類型
+            "required": [],
+            "optional": ["wait_msec", "WaitmSec"],
+            "example": {"wait_msec": "1000"}
+        },
+        "relay": {
+            # 繼電器控制
+            "required": ["RelayName", "Action"],
+            "optional": [],
+            "example": {"RelayName": "RELAY_1", "Action": "ON"}
+        },
+        "chassis_rotation": {
+            # 底盤旋轉控制
+            "required": ["Action"],
+            "optional": ["Angle", "Speed"],
+            "example": {"Action": "ROTATE", "Angle": "90"}
+        },
+        "console": {
+            # 控制台命令執行
+            "required": ["Command"],
+            "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
+            "example": {"Command": "echo test", "Timeout": "5"}
+        },
+        "comport": {
+            # 串口通訊 (作為 Other 的一種模式)
+            "required": ["Port", "Baud", "Command"],
+            "optional": ["keyWord", "spiltCount", "splitLength"],
+            "example": {"Port": "COM4", "Baud": "9600", "Command": "AT+VERSION"}
+        },
+        "tcpip": {
+            # TCP/IP 通訊 (作為 Other 的一種模式)
+            "required": ["Host", "Port", "Command"],
+            "optional": ["keyWord", "Timeout"],
+            "example": {"Host": "192.168.1.100", "Port": "5025", "Command": "*IDN?"}
         }
     },
     "Wait": {
@@ -225,6 +260,16 @@ MEASUREMENT_TYPE_DESCRIPTIONS = {
         "name": "Other",
         "description": "Custom measurement implementations",
         "category": "custom"
+    },
+    "Wait": {
+        "name": "Wait",
+        "description": "Wait/delay operation",
+        "category": "utility"
+    },
+    "Relay": {
+        "name": "Relay",
+        "description": "Relay control operation",
+        "category": "utility"
     }
 }
 

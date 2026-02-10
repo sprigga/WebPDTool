@@ -254,25 +254,48 @@ async def create_test_result(
 
     # Original: db_result = TestResultModel(**result_data.dict())
     # Modified: Explicit field mapping to avoid bypassing Pydantic validation
-    # Create test result with explicit field mapping
-    db_result = TestResultModel(
-        session_id=result_data.session_id,
-        test_plan_id=result_data.test_plan_id,
-        item_no=result_data.item_no,
-        item_name=result_data.item_name,
-        measured_value=result_data.measured_value,
-        lower_limit=result_data.lower_limit,
-        upper_limit=result_data.upper_limit,
-        unit=result_data.unit,
-        result=result_data.result,
-        error_message=result_data.error_message,
-        execution_duration_ms=result_data.execution_duration_ms
-    )
-    db.add(db_result)
-    db.commit()
-    db.refresh(db_result)
+    # 修正: 添加錯誤處理和日誌，幫助診斷 500 錯誤
+    try:
+        # 修正: 確保 measured_value 正確處理空字串和 NULL
+        # 空字串轉換為 NULL，避免資料庫類型錯誤
+        measured_value_str = None
+        if result_data.measured_value is not None:
+            value_str = str(result_data.measured_value).strip()
+            # 空字串或 "None" 視為 NULL
+            if value_str and value_str.lower() != 'none':
+                measured_value_str = value_str
 
-    return db_result
+        # Create test result with explicit field mapping
+        db_result = TestResultModel(
+            session_id=result_data.session_id,
+            test_plan_id=result_data.test_plan_id,
+            item_no=result_data.item_no,
+            item_name=result_data.item_name,
+            measured_value=measured_value_str,
+            lower_limit=result_data.lower_limit,
+            upper_limit=result_data.upper_limit,
+            unit=result_data.unit,
+            result=result_data.result,
+            error_message=result_data.error_message,
+            execution_duration_ms=result_data.execution_duration_ms
+        )
+        db.add(db_result)
+        db.commit()
+        db.refresh(db_result)
+
+        return db_result
+    except Exception as e:
+        db.rollback()
+        # 記錄詳細錯誤訊息
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to create test result: {e}")
+        logger.error(f"Result data: session_id={result_data.session_id}, test_plan_id={result_data.test_plan_id}, "
+                    f"item_no={result_data.item_no}, measured_value={result_data.measured_value}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create test result: {str(e)}"
+        )
 
 
 @router.post("/sessions/{session_id}/results/batch", response_model=dict)

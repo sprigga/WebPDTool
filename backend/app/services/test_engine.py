@@ -217,20 +217,20 @@ class TestEngine:
                 "use_result": test_plan_item.use_result,
             }
 
-            # 原有程式碼: 只使用 test_type 來決定測量類別
-            # 修改: 對於特殊 case_type (如 'wait')，優先使用 case_type 來選擇測量類別
-            # 對於其他 case_type (如 'test123')，使用 test_type，case_type 僅作為參數
-            case_type = test_plan_item.case_type
+            # 原有程式碼: 使用 case_type 來決定特殊測試類型
+            # 修正方案 A: 統一使用 switch_mode 替代 case_type,簡化邏輯
+            # switch_mode 現在可以是儀器模式 (DAQ973A) 或特殊測試類型 (wait, relay, console 等)
+            switch_mode = test_plan_item.switch_mode or test_plan_item.case_type  # 向後相容 case_type
             test_type = test_plan_item.test_type
 
             # 決定使用的測試命令 (test_command)
-            # 特殊 case_type 列表（這些 case_type 對應獨立的測量類型）
-            special_case_types = {'wait', 'relay', 'chassis_rotation', 'console', 'comport', 'tcpip'}
+            # 特殊 switch_mode 列表（這些 switch_mode 對應獨立的測量類型或特殊功能）
+            special_switch_modes = {'wait', 'relay', 'chassis_rotation', 'console', 'comport', 'tcpip'}
 
-            # 如果 case_type 是特殊類型，使用 case_type
-            # 否則使用 test_type，case_type 僅作為腳本名稱或參數
-            if case_type and case_type.strip() and case_type.lower() in special_case_types:
-                test_command = case_type
+            # 如果 switch_mode 是特殊類型，優先使用 switch_mode 作為測試命令
+            # 否則使用 test_type，switch_mode 僅作為儀器選擇或腳本名稱
+            if switch_mode and switch_mode.strip() and switch_mode.lower() in special_switch_modes:
+                test_command = switch_mode
             else:
                 test_command = test_type
 
@@ -243,9 +243,10 @@ class TestEngine:
                 "upper_limit": test_plan_item.upper_limit,
                 "unit": test_plan_item.unit,
                 "test_type": test_type,  # 保留原始 test_type
-                "test_command": test_command,  # 實際使用的測試命令 (優先使用 case_type)
+                "test_command": test_command,  # 實際使用的測試命令 (優先使用 switch_mode)
                 "command": test_plan_item.command,  # 原始指令字串
-                "case_type": case_type,  # 原有程式碼: 新增 case_type 欄位
+                "switch_mode": switch_mode,  # 修正方案 A: 使用 switch_mode 替代 case_type
+                "case_type": test_plan_item.case_type,  # 保留 case_type 以支援向後相容
                 "parameters": parameters,  # BaseMeasurement 預期使用 "parameters" 鍵
                 "test_params": parameters,  # 同時保留 "test_params" 鍵 (已整合完整參數)
                 "value_type": test_plan_item.value_type,

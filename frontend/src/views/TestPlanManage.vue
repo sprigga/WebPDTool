@@ -114,7 +114,9 @@
 
         <el-table-column prop="test_type" label="測試類型" width="120" />
 
-        <el-table-column prop="execute_name" label="執行名稱" width="120" />
+        <!-- 原有程式碼: 顯示 execute_name 欄位 -->
+        <!-- 修正: 隱藏 execute_name 欄位 (僅用於 CSV 匯入儲存,不影響後端業務邏輯) -->
+        <!-- <el-table-column prop="execute_name" label="執行名稱" width="120" /> -->
 
         <el-table-column prop="case_type" label="案例類型" width="100" />
 
@@ -341,18 +343,10 @@
           </el-col>
         </el-row>
 
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="執行名稱">
-              <el-input v-model="editingItem.execute_name" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="案例類型">
-              <el-input v-model="editingItem.case_type" />
-            </el-form-item>
-          </el-col>
-        </el-row>
+        <!-- 原有程式碼: 顯示執行名稱和案例類型欄位 -->
+        <!-- 修正方案 A: 移除 execute_name 和 case_type,統一使用 switch_mode (儀器模式) -->
+        <!-- case_type 功能已合併到 switch_mode,避免欄位重複和邏輯混亂 -->
+        <!-- 資料庫保留 case_type 欄位以支援 CSV 匯入向後相容 -->
 
         <el-row :gutter="20">
           <el-col :span="12">
@@ -510,7 +504,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useProjectStore } from '@/stores/project'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload, Plus, Delete } from '@element-plus/icons-vue'
+import { Upload, Plus, Delete, QuestionFilled } from '@element-plus/icons-vue'  // 新增: QuestionFilled icon 用於提示
 import {
   getStationTestPlan,
   uploadTestPlanCSV,

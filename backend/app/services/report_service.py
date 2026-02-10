@@ -69,7 +69,19 @@ class ReportService:
         """
         date_str = test_date.strftime("%Y%m%d")
         report_dir = self.base_report_dir / project_name / station_name / date_str
-        report_dir.mkdir(parents=True, exist_ok=True)
+
+        # 修正: 添加權限錯誤處理，避免因目錄權限問題導致測試失敗
+        try:
+            report_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError as e:
+            # 如果遇到權限錯誤，使用備用目錄
+            self.logger.warning(f"Permission denied creating {report_dir}, using fallback directory")
+            # 使用臨時目錄或用戶主目錄下的 reports
+            fallback_dir = Path.home() / "webpdtool_reports" / project_name / station_name / date_str
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.info(f"Using fallback report directory: {fallback_dir}")
+            return fallback_dir
+
         return report_dir
 
     def _generate_filename(

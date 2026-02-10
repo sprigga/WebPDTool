@@ -167,7 +167,9 @@
                 <span v-else class="text-muted">-</span>
               </template>
             </el-table-column>
-            <el-table-column prop="execute_name" label="測試指令" width="120" />
+            <!-- 原有程式碼: 顯示 execute_name 作為測試指令 -->
+            <!-- 說明: execute_name 在測試執行時被轉換為 measurement_type,保留顯示以便使用者了解測試類型 -->
+            <el-table-column prop="execute_name" label="測試指令" width="120" show-overflow-tooltip />
             <el-table-column label="下限" width="90" align="right">
               <template #default="{ row }">
                 {{ formatNumber(row.lower_limit) }}
@@ -860,8 +862,13 @@ const executeMeasurements = async () => {
           testStatus.value.fail_items = failCount
 
           // Store result for dependency usage (UseResult機制)
+          // 原有程式碼: 只用 item_no 作為 key
+          // 修正: 同時用 item_no 和 item_name 作為 key，因為 use_result 欄位可能使用任一種
+          // 例如: use_result="123_1" (item_name) 或 use_result="2" (item_no)
           if (result.measured_value !== null) {
-            testResults.value[item.item_no] = String(result.measured_value)
+            const measuredValueStr = String(result.measured_value)
+            testResults.value[item.item_no] = measuredValueStr        // 用序號作為 key
+            testResults.value[item.item_name] = measuredValueStr      // 用名稱作為 key
           }
 
           addStatusMessage(`項目 ${item.item_no}: ${item.item_name} - ${result.result}`,
@@ -1001,9 +1008,9 @@ const executeSingleItem = async (item, index) => {
     // Parse test parameters from CSV columns
     const testParams = {}
 
-    // 原有程式碼: const caseMode = item.case || item.switch_mode
-    // 修改: 優先使用 case_type (後端欄位名稱)，向後相容 case 和 switch_mode
-    const caseMode = item.case_type || item.case || item.switch_mode || item.item_name // Switch/case mode
+    // 原有程式碼: 優先使用 case_type
+    // 修正方案 A: 優先使用 switch_mode,向後相容 case_type
+    const switchMode = item.switch_mode || item.case_type || item.case || item.item_name
 
     // Extract parameters based on ExecuteName
     const executeName = item.execute_name // ExecuteName 是測量類型 (measurement_type)
@@ -1023,6 +1030,15 @@ const executeSingleItem = async (item, index) => {
       }
     })
 
+    // 新增: 日誌輸出 item 欄位和 testParams 內容
+    console.log('[DEBUG] ============================================')
+    console.log('[DEBUG] 項目:', item.item_name)
+    console.log('[DEBUG] item 欄位:', Object.keys(item))
+    console.log('[DEBUG] item.use_result:', item.use_result)
+    console.log('[DEBUG] item.UseResult:', item.UseResult)
+    console.log('[DEBUG] item.parameters:', item.parameters)
+    console.log('[DEBUG] 建構後的 testParams:', testParams)
+
     // 修正: 合併 parameters 欄位到 testParams（優先級最高）
     // parameters 欄位包含從動態參數表單設定的值，應覆蓋資料庫欄位的值
     if (item.parameters && typeof item.parameters === 'object') {
@@ -1032,15 +1048,79 @@ const executeSingleItem = async (item, index) => {
           testParams[key] = value
         }
       })
+      console.log('[DEBUG] 合併 parameters 後的 testParams:', testParams)
     }
+    console.log('[DEBUG] testParams.use_result:', testParams.use_result)
+    console.log('[DEBUG] testParams.UseResult:', testParams.UseResult)
 
     // Handle UseResult dependency (參考 oneCSV_atlas_2.py:146-155)
-    if (testParams.UseResult && testResults.value[testParams.UseResult]) {
-      const useResultValue = testResults.value[testParams.UseResult]
-      if (testParams.Command) {
-        testParams.Command = testParams.Command + ' ' + useResultValue
+    // 原有程式碼: 只檢查大寫的 UseResult，但資料庫欄位是小寫的 use_result
+    // 修正: 同時檢查大小寫，並將 use_result 的值替換為實際的測量結果
+    // 這樣後端就會收到實際的測量值 (例如 "123") 而不是項目名稱 (例如 "123_1")
+
+    // 新增: 詳細日誌追蹤 use_result 處理
+    console.log('[DEBUG] ============================================')
+    console.log('[DEBUG] UseResult 處理開始')
+    console.log('[DEBUG] 項目:', item.item_name)
+    console.log('[DEBUG] testParams.use_result (原始):', testParams.use_result)
+    console.log('[DEBUG] testParams.UseResult (原始):', testParams.UseResult)
+    console.log('[DEBUG] testResults.value:', testResults.value)
+    console.log('[DEBUG] testResults keys:', Object.keys(testResults.value))
+
+    // 處理小寫 use_result (資料庫欄位名稱)
+    if (testParams.use_result) {
+      console.log('[DEBUG] 找到小寫 use_result:', testParams.use_result)
+      const useResultValue = testResults.value[testParams.use_result]
+      console.log('[DEBUG] 從 testResults 查找:', testParams.use_result, '→', useResultValue)
+      if (useResultValue !== undefined) {
+        // 修正: 標準化數值格式，去除 ".0" 後綴以匹配腳本期望
+        // 例如: "123.0" → "123", "456.0" → "456"
+        let normalizedValue = useResultValue
+        if (typeof useResultValue === 'string' && /^\d+\.0$/.test(useResultValue)) {
+          normalizedValue = useResultValue.replace(/\.0$/, '')
+          console.log('[DEBUG] 標準化數值:', useResultValue, '→', normalizedValue)
+        }
+
+        // 將 use_result 的值替換為實際的測量結果
+        testParams.use_result = normalizedValue
+        console.log('[DEBUG] 替換後 use_result:', testParams.use_result)
+
+        // 如果有 Command 欄位，也附加結果值 (PDTool4 兼容)
+        if (testParams.Command) {
+          testParams.Command = testParams.Command + ' ' + normalizedValue
+        }
+      } else {
+        console.log('[DEBUG] ⚠️ 未找到對應的測試結果:', testParams.use_result)
       }
     }
+
+    // 處理大寫 UseResult (向後兼容舊的命名)
+    if (testParams.UseResult) {
+      console.log('[DEBUG] 找到大寫 UseResult:', testParams.UseResult)
+      const useResultValue = testResults.value[testParams.UseResult]
+      console.log('[DEBUG] 從 testResults 查找:', testParams.UseResult, '→', useResultValue)
+      if (useResultValue !== undefined) {
+        // 修正: 標準化數值格式，去除 ".0" 後綴
+        let normalizedValue = useResultValue
+        if (typeof useResultValue === 'string' && /^\d+\.0$/.test(useResultValue)) {
+          normalizedValue = useResultValue.replace(/\.0$/, '')
+          console.log('[DEBUG] 標準化數值:', useResultValue, '→', normalizedValue)
+        }
+
+        testParams.UseResult = normalizedValue
+        console.log('[DEBUG] 替換後 UseResult:', testParams.UseResult)
+
+        if (testParams.Command) {
+          testParams.Command = testParams.Command + ' ' + normalizedValue
+        }
+      } else {
+        console.log('[DEBUG] ⚠️ 未找到對應的測試結果:', testParams.UseResult)
+      }
+    }
+
+    console.log('[DEBUG] 最終 testParams.use_result:', testParams.use_result)
+    console.log('[DEBUG] 最終 testParams.UseResult:', testParams.UseResult)
+    console.log('[DEBUG] ============================================')
 
     // Track used instruments
     if (testParams.Instrument) {
@@ -1054,24 +1134,25 @@ const executeSingleItem = async (item, index) => {
       testParams.command = item.command
     }
 
-    // 修正: 正確區分 measurement_type 和 switch_mode 的角色
-    // - measurement_type: 從 execute_name 獲取 (測量類型: PowerSet, PowerRead, CommandTest, Other, wait 等)
-    // - switch_mode: 從 case_type 獲取 (儀器/腳本名稱: DAQ973A, 123_1, WAIT_FIX_5sec, comport 等)
-    let measurementType = executeName || 'Other'  // 預設為 'Other' 表示自定義腳本
-    let switchMode = caseMode || item.item_name || 'default'  // 預設使用 item_name 作為腳本名稱
+    // 修正方案 A: 正確區分 measurement_type 和 switch_mode 的角色
+    // - measurement_type: 從 execute_name 或 test_type 獲取 (測量類型: PowerSet, PowerRead, CommandTest, Other, Wait 等)
+    // - switch_mode: 從 switch_mode 欄位獲取 (儀器/腳本/特殊類型: DAQ973A, wait, relay, console, comport, test123 等)
+    let measurementType = executeName || item.test_type || 'Other'  // 預設為 'Other' 表示自定義腳本
+    let finalSwitchMode = switchMode || item.item_name || 'script'  // 預設使用 'script' 作為通用腳本模式
 
-    // 特殊處理: 如果 case_type='wait' 或 'Wait'，這是等待測試類型
-    // 需要將 measurement_type 和 switch_mode 都設為 'wait'
-    if (item.case_type && (item.case_type.toLowerCase() === 'wait')) {
-      measurementType = 'wait'
-      switchMode = 'wait'
+    // 特殊處理: 如果 switch_mode 是特殊測試類型 (wait, relay 等)
+    // 將 measurement_type 設為 'Other' (這些特殊類型都屬於 Other 測量類別)
+    const specialTypes = ['wait', 'relay', 'chassis_rotation', 'console', 'comport', 'tcpip']
+    if (switchMode && specialTypes.includes(switchMode.toLowerCase())) {
+      measurementType = 'Other'  // 使用 Other 測量類別處理特殊類型
+      finalSwitchMode = switchMode.toLowerCase()
     }
 
     // Execute measurement via API
     const measurementData = {
       measurement_type: measurementType,
       test_point_id: String(item.item_no),
-      switch_mode: switchMode,
+      switch_mode: finalSwitchMode,  // 修正方案 A: 使用處理後的 switch_mode
       test_params: testParams,
       run_all_test: runAllTests.value
     }
@@ -1107,12 +1188,18 @@ const executeSingleItem = async (item, index) => {
     // 在每個測項執行完畢後，立即保存結果到 test_results 表
     if (currentSession.value && item.id) {
       try {
+        // 修正: 將 measured_value 轉換為字串，避免類型不匹配導致後端 500 錯誤
+        // 資料庫 measured_value 欄位是 String(100)，但 response.measured_value 可能是數字類型
+        const measuredValueStr = response.measured_value !== null && response.measured_value !== undefined
+          ? String(response.measured_value)
+          : null
+
         await createTestResult(currentSession.value.id, {
           session_id: currentSession.value.id,
           test_plan_id: item.id,
           item_no: item.item_no,
           item_name: item.item_name,
-          measured_value: response.measured_value,
+          measured_value: measuredValueStr,
           lower_limit: item.lower_limit,
           upper_limit: item.upper_limit,
           unit: item.unit,

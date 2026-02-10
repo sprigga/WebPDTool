@@ -79,85 +79,141 @@ class OtherMeasurement(BaseMeasurement):
 
     async def execute(self) -> MeasurementResult:
         try:
-            # 修正: 從 case_type 欄位取得腳本名稱，而不是 switch_mode
-            # 原有程式碼: switch_mode = self.test_plan_item.get("switch_mode", "")
+            # 修正方案 A: 優先使用 switch_mode 欄位取得腳本名稱
+            # 原有程式碼: 優先使用 case_type
+            # 新實作: switch_mode -> case_type -> item_name (向後相容)
             switch_mode = (
-                self.test_plan_item.get("case_type", "") or
                 self.test_plan_item.get("switch_mode", "") or
+                self.test_plan_item.get("case_type", "") or
                 self.test_plan_item.get("item_name", "")  # Fallback to item_name
             ).strip()
 
             if not switch_mode:
                 return self.create_result(
                     result="ERROR",
-                    error_message="Missing case_type or switch_mode (script name)"
+                    error_message="Missing switch_mode or case_type (script name)"
                 )
 
-            # 修正: 優先使用資料表直接欄位 (test_plan_item)，而非 parameters JSON
-            # 原有程式碼: 僅從 test_params (parameters JSON) 取值
-            # 說明: use_result, timeout, wait_msec 是 TestPlan 模型的直接欄位，應優先使用
-            use_result = self.test_plan_item.get("use_result") or get_param(self.test_params, "use_result", "UseResult")
-            timeout = self.test_plan_item.get("timeout") or get_param(self.test_params, "timeout", "Timeout", default=5000)
-            wait_msec = self.test_plan_item.get("wait_msec") or get_param(self.test_params, "wait_msec", "WaitmSec", default=0)
+            # 修正: 優先使用 test_params (前端已經替換 use_result 為實際測量值)
+            # 原有程式碼: 優先使用 test_plan_item (資料庫值)，這會導致前端替換的值被忽略
+            # 說明:
+            #   - test_params.use_result: 前端已將 "123_1" 替換為 "123.0" (實際測量值)
+            #   - test_plan_item.use_result: 資料庫原始值 "123_1" (測項名稱)
+            #   - 應該優先使用 test_params 的值，因為那是已經處理過的實際測量值
 
-            # Build script path
-            # 原有程式碼: 假設腳本在 src/lowsheen_lib/testUTF/ 目錄
-            # 第一次修改: 腳本移到 backend/scripts/ 目錄，使用硬編碼 /app/scripts/ 路徑
-            # 第二次修改: 使用環境感知的路徑解析，支援本地和容器環境
-            # 路徑解析邏輯:
-            #   - 相對路徑 (如 "scripts"): 從 backend 目錄計算
-            #   - 絕對路徑 (如 "/app/scripts"): 直接使用
-            #   - __file__ 位置: backend/app/measurements/implementations.py
-            #   - backend 目錄需向上三層: implementations.py → measurements → app → backend
-            script_name = switch_mode.replace(".", "_")  # test123 or 123_1 or WAIT_FIX_5sec
+            # 新增: 詳細日誌追蹤 use_result 的來源和值
+            self.logger.info(f"[DEBUG] test_plan_item keys: {list(self.test_plan_item.keys())}")
+            self.logger.info(f"[DEBUG] test_params keys: {list(self.test_params.keys()) if self.test_params else 'None'}")
+            self.logger.info(f"[DEBUG] use_result from test_plan_item (原始值): {self.test_plan_item.get('use_result')}")
+            self.logger.info(f"[DEBUG] use_result from test_params (前端替換值): {get_param(self.test_params, 'use_result', 'UseResult')}")
 
-            # 從配置檔取得腳本目錄，支援相對路徑和絕對路徑
-            scripts_dir = settings.SCRIPTS_DIR
+            # 修正: 優先使用 test_params (前端替換後的值)，只有當 test_params 沒有時才使用 test_plan_item
+            use_result = get_param(self.test_params, "use_result", "UseResult") or self.test_plan_item.get("use_result")
+            timeout = get_param(self.test_params, "timeout", "Timeout") or self.test_plan_item.get("timeout", 5000)
+            wait_msec = get_param(self.test_params, "wait_msec", "WaitmSec") or self.test_plan_item.get("wait_msec", 0)
 
-            # 如果是相對路徑，轉換為絕對路徑（相對於 backend 目錄）
-            if not os.path.isabs(scripts_dir):
-                # __file__ = backend/app/measurements/implementations.py
-                # 需要回到 backend 目錄（向上三層：implementations.py → measurements → app → backend）
-                backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                scripts_dir = os.path.join(backend_dir, scripts_dir)
+            self.logger.info(f"[DEBUG] Final use_result value: {use_result}")
+            self.logger.info(f"[DEBUG] timeout: {timeout}, wait_msec: {wait_msec}")
 
-            script_path = os.path.join(scripts_dir, f"{script_name}.py")
+            # 新增: 當 switch_mode 為 "script" 時，從 command 欄位讀取腳本路徑或命令
+            # 這是通用腳本執行模式，允許在「命令」欄位中指定完整的腳本路徑或命令
+            if switch_mode.lower() == "script":
+                # 從 command 欄位讀取
+                command = self.test_plan_item.get("command", "").strip()
+                if not command:
+                    return self.create_result(
+                        result="ERROR",
+                        error_message="switch_mode='script' requires 'command' field to specify script path or command"
+                    )
 
-            self.logger.info(f"Executing Other script: {script_path}")
-            self.logger.info(f"Scripts directory: {scripts_dir}")
+                self.logger.info(f"Executing command from 'command' field: {command}")
 
-            # 新增: 檢查腳本檔案是否存在
-            if not os.path.exists(script_path):
-                error_msg = f"Script not found: {script_path} (scripts_dir: {scripts_dir})"
-                self.logger.error(error_msg)
-                return self.create_result(
-                    result="ERROR",
-                    error_message=error_msg
+                # Wait if specified
+                if wait_msec and isinstance(wait_msec, (int, float)):
+                    await asyncio.sleep(wait_msec / 1000.0)
+
+                # Build command arguments
+                args = []
+                if use_result:
+                    # UseResult: 使用之前測試項目的結果作為參數
+                    args.append(str(use_result))
+
+                # Execute command (使用 shell 模式執行 command 欄位中的內容)
+                timeout_seconds = timeout / 1000.0
+                full_command = command
+                if args:
+                    full_command = f"{command} {' '.join(args)}"
+
+                process = await asyncio.create_subprocess_shell(
+                    full_command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # backend/app
                 )
+            else:
+                # 原有邏輯: 從 switch_mode 構建腳本路徑
+                # Build script path
+                # 原有程式碼: 假設腳本在 src/lowsheen_lib/testUTF/ 目錄
+                # 第一次修改: 腳本移到 backend/scripts/ 目錄，使用硬編碼 /app/scripts/ 路徑
+                # 第二次修改: 使用環境感知的路徑解析，支援本地和容器環境
+                # 路徑解析邏輯:
+                #   - 相對路徑 (如 "scripts"): 從 backend 目錄計算
+                #   - 絕對路徑 (如 "/app/scripts"): 直接使用
+                #   - __file__ 位置: backend/app/measurements/implementations.py
+                #   - backend 目錄需向上三層: implementations.py → measurements → app → backend
+                script_name = switch_mode.replace(".", "_")  # test123 or 123_1 or WAIT_FIX_5sec
 
-            # Wait if specified
-            if wait_msec and isinstance(wait_msec, (int, float)):
-                await asyncio.sleep(wait_msec / 1000.0)
+                # 從配置檔取得腳本目錄，支援相對路徑和絕對路徑
+                scripts_dir = settings.SCRIPTS_DIR
 
-            # Build command arguments
-            args = []
-            if use_result:
-                # UseResult: 使用之前測試項目的結果作為參數
-                args.append(str(use_result))
+                # 如果是相對路徑，轉換為絕對路徑（相對於 backend 目錄）
+                if not os.path.isabs(scripts_dir):
+                    # __file__ = backend/app/measurements/implementations.py
+                    # 需要回到 backend 目錄（向上三層：implementations.py → measurements → app → backend）
+                    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                    scripts_dir = os.path.join(backend_dir, scripts_dir)
 
-            # Execute script
-            timeout_seconds = timeout / 1000.0
-            cmd = ["python3", script_path] + args
+                script_path = os.path.join(scripts_dir, f"{script_name}.py")
 
-            # 使用腳本目錄作為工作目錄
-            cwd = scripts_dir
+                self.logger.info(f"Executing Other script: {script_path}")
+                self.logger.info(f"Scripts directory: {scripts_dir}")
 
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd
-            )
+                # 新增: 檢查腳本檔案是否存在
+                if not os.path.exists(script_path):
+                    error_msg = f"Script not found: {script_path} (scripts_dir: {scripts_dir})"
+                    self.logger.error(error_msg)
+                    return self.create_result(
+                        result="ERROR",
+                        error_message=error_msg
+                    )
+
+                # Wait if specified
+                if wait_msec and isinstance(wait_msec, (int, float)):
+                    await asyncio.sleep(wait_msec / 1000.0)
+
+                # Build command arguments
+                args = []
+                if use_result:
+                    # UseResult: 使用之前測試項目的結果作為參數
+                    args.append(str(use_result))
+
+                # Execute script
+                timeout_seconds = timeout / 1000.0
+                cmd = ["python3", script_path] + args
+
+                # 新增: 日誌顯示實際執行的命令
+                self.logger.info(f"[DEBUG] Executing command: {' '.join(cmd)}")
+                self.logger.info(f"[DEBUG] use_result parameter: {use_result} (type: {type(use_result).__name__})")
+
+                # 使用腳本目錄作為工作目錄
+                cwd = scripts_dir
+
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd
+                )
 
             try:
                 stdout, stderr = await asyncio.wait_for(
@@ -184,12 +240,22 @@ class OtherMeasurement(BaseMeasurement):
             self.logger.info(f"Script output: {output}")
 
             # Try to convert to number, fallback to string
+            # 修正: 對於整數類型的輸出，保持整數格式而非浮點數
+            # 例如: "123" → 123 (整數) 而非 123.0 (浮點數)
             try:
-                measured_value = float(output)
+                # 先嘗試解析為整數
+                if output.isdigit() or (output.startswith('-') and output[1:].isdigit()):
+                    measured_value = int(output)
+                    self.logger.info(f"[DEBUG] Parsed as integer: {measured_value}")
+                else:
+                    # 嘗試解析為浮點數
+                    measured_value = float(output)
+                    self.logger.info(f"[DEBUG] Parsed as float: {measured_value}")
             except ValueError:
                 # String result (e.g., "Hello World!")
                 # 修正: 使用 StringType.cast() 而非 StringType()
                 measured_value = StringType.cast(output)
+                self.logger.info(f"[DEBUG] Parsed as string: {measured_value}")
 
             # Validate result
             is_valid, error_msg = self.validate_result(measured_value)
