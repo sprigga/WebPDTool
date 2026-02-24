@@ -8,7 +8,7 @@ from app.measurements.base import (
 )
 from app.measurements.implementations import (
     DummyMeasurement,
-    CommandTestMeasurement,
+    # CommandTestMeasurement,  # 已棄用，由 ComPortMeasurement/ConSoleMeasurement/TCPIPMeasurement 取代
     PowerReadMeasurement,
     PowerSetMeasurement,
     get_measurement_class,
@@ -19,7 +19,7 @@ __all__ = [
     "BaseMeasurement",
     "MeasurementResult",
     "DummyMeasurement",
-    "CommandTestMeasurement",
+    # "CommandTestMeasurement",  # 已棄用
     "PowerReadMeasurement",
     "PowerSetMeasurement",
     "get_measurement_class",

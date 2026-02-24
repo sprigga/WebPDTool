@@ -295,80 +295,83 @@ class OtherMeasurement(BaseMeasurement):
 # ============================================================================
 # Command Test Measurement
 # ============================================================================
-class CommandTestMeasurement(BaseMeasurement):
-    """Executes external commands/scripts"""
-
-    async def execute(self) -> MeasurementResult:
-        try:
-            # Get parameters with fallback options
-            command = get_param(self.test_params, "command") or self.test_plan_item.get("command", "")
-            timeout = get_param(self.test_params, "timeout", default=5000)
-            wait_msec = get_param(self.test_params, "wait_msec", "WaitmSec") or self.test_plan_item.get("wait_msec", 0)
-
-            if not command:
-                return self.create_result(
-                    result="ERROR",
-                    error_message="Missing command parameter"
-                )
-
-            self.logger.info(f"Executing command: {command}")
-
-            # Wait if specified
-            if wait_msec and isinstance(wait_msec, (int, float)):
-                await asyncio.sleep(wait_msec / 1000.0)
-
-            # Execute command
-            timeout_seconds = timeout / 1000.0
-            process = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd="/app"
-            )
-
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=timeout_seconds
-                )
-            except asyncio.TimeoutError:
-                process.kill()
-                await process.wait()
-                return self.create_result(
-                    result="ERROR",
-                    error_message=f"Command timeout after {timeout}ms"
-                )
-
-            output = stdout.decode().strip()
-            error_output = stderr.decode().strip()
-
-            if process.returncode != 0:
-                error_msg = error_output or f"Command failed with exit code {process.returncode}"
-                self.logger.error(f"Command failed: {error_msg}")
-                return self.create_result(result="ERROR", error_message=error_msg)
-
-            # Convert output based on value_type
-            measured_value = output
-            if self.value_type is not StringType:
-                try:
-                    measured_value = Decimal(output) if output else None
-                except (ValueError, TypeError):
-                    measured_value = None
-
-            # Ensure measured_value is compatible with create_result
-            if isinstance(measured_value, str):
-                measured_value = None
-
-            is_valid, error_msg = self.validate_result(measured_value)
-            return self.create_result(
-                result="PASS" if is_valid else "FAIL",
-                measured_value=measured_value,
-                error_message=error_msg if not is_valid else None
-            )
-
-        except Exception as e:
-            self.logger.error(f"Command test error: {e}", exc_info=True)
-            return self.create_result(result="ERROR", error_message=str(e))
+# 已棄用: CommandTestMeasurement 直接用 subprocess 執行 lowsheen_lib script
+# 已由 ComPortMeasurement / ConSoleMeasurement / TCPIPMeasurement 取代
+# 保留此 class 作為歷史參考，不再使用
+# class CommandTestMeasurement(BaseMeasurement):
+#     """Executes external commands/scripts"""
+#
+#     async def execute(self) -> MeasurementResult:
+#         try:
+#             # Get parameters with fallback options
+#             command = get_param(self.test_params, "command") or self.test_plan_item.get("command", "")
+#             timeout = get_param(self.test_params, "timeout", default=5000)
+#             wait_msec = get_param(self.test_params, "wait_msec", "WaitmSec") or self.test_plan_item.get("wait_msec", 0)
+#
+#             if not command:
+#                 return self.create_result(
+#                     result="ERROR",
+#                     error_message="Missing command parameter"
+#                 )
+#
+#             self.logger.info(f"Executing command: {command}")
+#
+#             # Wait if specified
+#             if wait_msec and isinstance(wait_msec, (int, float)):
+#                 await asyncio.sleep(wait_msec / 1000.0)
+#
+#             # Execute command
+#             timeout_seconds = timeout / 1000.0
+#             process = await asyncio.create_subprocess_shell(
+#                 command,
+#                 stdout=asyncio.subprocess.PIPE,
+#                 stderr=asyncio.subprocess.PIPE,
+#                 cwd="/app"
+#             )
+#
+#             try:
+#                 stdout, stderr = await asyncio.wait_for(
+#                     process.communicate(),
+#                     timeout=timeout_seconds
+#                 )
+#             except asyncio.TimeoutError:
+#                 process.kill()
+#                 await process.wait()
+#                 return self.create_result(
+#                     result="ERROR",
+#                     error_message=f"Command timeout after {timeout}ms"
+#                 )
+#
+#             output = stdout.decode().strip()
+#             error_output = stderr.decode().strip()
+#
+#             if process.returncode != 0:
+#                 error_msg = error_output or f"Command failed with exit code {process.returncode}"
+#                 self.logger.error(f"Command failed: {error_msg}")
+#                 return self.create_result(result="ERROR", error_message=error_msg)
+#
+#             # Convert output based on value_type
+#             measured_value = output
+#             if self.value_type is not StringType:
+#                 try:
+#                     measured_value = Decimal(output) if output else None
+#                 except (ValueError, TypeError):
+#                     measured_value = None
+#
+#             # Ensure measured_value is compatible with create_result
+#             if isinstance(measured_value, str):
+#                 measured_value = None
+#
+#             is_valid, error_msg = self.validate_result(measured_value)
+#             return self.create_result(
+#                 result="PASS" if is_valid else "FAIL",
+#                 measured_value=measured_value,
+#                 error_message=error_msg if not is_valid else None
+#             )
+#
+#         except Exception as e:
+#             self.logger.error(f"Command test error: {e}", exc_info=True)
+#             return self.create_result(result="ERROR", error_message=str(e))
 
 
 
@@ -2024,7 +2027,8 @@ class PEAK_CAN_Message_Measurement(BaseMeasurement):
 # ============================================================================
 MEASUREMENT_REGISTRY = {
     "DUMMY": DummyMeasurement,
-    "COMMAND_TEST": CommandTestMeasurement,
+    # "COMMAND_TEST": CommandTestMeasurement,  # 已棄用
+    "COMMAND_TEST": ConSoleMeasurement,  # fallback: generic command → console execution
     "POWER_READ": PowerReadMeasurement,
     "POWER_SET": PowerSetMeasurement,
     "SFC_TEST": SFCMeasurement,
@@ -2049,15 +2053,19 @@ MEASUREMENT_REGISTRY = {
     # PEAK CAN measurements
     "PEAK_CAN": PEAK_CAN_Message_Measurement,
     # Lowercase variants
-    "command": CommandTestMeasurement,
+    # "command": CommandTestMeasurement,  # 已棄用
+    "command": ConSoleMeasurement,
     "wait": WaitMeasurement,
     "relay": RelayMeasurement,
     "chassis_rotation": ChassisRotationMeasurement,
     "other": OtherMeasurement,  # 修改: 使用 OtherMeasurement 執行自定義腳本
     # Case type mappings
-    "console": CommandTestMeasurement,
-    "comport": CommandTestMeasurement,
-    "tcpip": CommandTestMeasurement,
+    # "console": CommandTestMeasurement,  # 已棄用
+    "console": ConSoleMeasurement,
+    # "comport": CommandTestMeasurement,  # 已棄用
+    "comport": ComPortMeasurement,
+    # "tcpip": CommandTestMeasurement,  # 已棄用
+    "tcpip": TCPIPMeasurement,
     "URL": SFCMeasurement,
     "webStep1_2": SFCMeasurement,
 }
