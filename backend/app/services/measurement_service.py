@@ -105,8 +105,12 @@ class MeasurementService:
             # Create measurement instance
             # Note: Implementations expect test_plan_item dict with combined params
             # FIXED: Include item_no and item_name in test_plan_item dict per BaseMeasurement.__init__ signature
+            # 修正: BaseMeasurement.__init__ 從 test_plan_item["parameters"] 取得 self.test_params,
+            #       ComPortMeasurement/ConSoleMeasurement/TCPIPMeasurement 均透過 self.test_params 讀取參數,
+            #       因此需同時將 test_params 放入 "parameters" 鍵，讓 self.test_params 正確取得值.
             test_plan_item = {
                 **test_params,
+                "parameters": test_params,  # 原有程式碼未設定此欄位，導致 self.test_params = {}
                 "switch_mode": switch_mode,
                 "measurement_type": measurement_type,
                 "item_no": 0,

@@ -20,6 +20,7 @@ dependencies = [
     "pyserial>=3.5",
     "pyserial-asyncio>=0.6",
     "redis>=5.0.0",  # ✅ Added: Redis for real-time log streaming (optional)
+    "paramiko>=4.0.0",
 ]
 
 [project.optional-dependencies]

@@ -28,6 +28,10 @@ from app.services.instruments.l6mpu_ssh_comport import L6MPUSSHComPortDriver
 from app.services.instruments.l6mpu_pos_ssh import L6MPUPOSSHDriver
 from app.services.instruments.peak_can import PEAKCANDriver
 from app.services.instruments.smcv100b import SMCV100BDriver
+# 新增: Command-type drivers (migrated from lowsheen_lib)
+from app.services.instruments.console_command import ConSoleCommandDriver
+from app.services.instruments.comport_command import ComPortCommandDriver
+from app.services.instruments.tcpip_command import TCPIPCommandDriver
 
 __all__ = [
     "BaseInstrumentDriver",
@@ -86,6 +90,10 @@ INSTRUMENT_DRIVERS = {
     "PEAK_CAN": PEAKCANDriver,
     "PCAN": PEAKCANDriver,  # Alternative naming
     "SMCV100B": SMCV100BDriver,
+    # 新增: Command-type drivers (migrated from lowsheen_lib)
+    "console": ConSoleCommandDriver,
+    "comport": ComPortCommandDriver,
+    "tcpip": TCPIPCommandDriver,
     # Add more as they are migrated
 }
 

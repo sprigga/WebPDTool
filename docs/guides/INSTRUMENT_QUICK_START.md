@@ -275,8 +275,8 @@ async def safe_measurement():
 
 ## 🎯 下一步
 
-1. **閱讀完整文檔**: [INSTRUMENT_MIGRATION.md](./INSTRUMENT_MIGRATION.md)
-2. **查看範例配置**: [instruments.example.json](./instruments.example.json)
+1. **閱讀完整文檔**: [INSTRUMENT_MIGRATION.md](../lowsheen_lib/INSTRUMENT_MIGRATION.md)
+2. **查看範例配置**: [backend/instruments.example.json](../../backend/instruments.example.json)
 3. **開發新驅動器**: 參考 `app/services/instruments/daq973a.py`
 4. **整合到測試**: 修改 `measurement_service.py`
 
@@ -284,9 +284,9 @@ async def safe_measurement():
 
 ## 📞 支援
 
-- **詳細指南**: [INSTRUMENT_MIGRATION.md](./INSTRUMENT_MIGRATION.md)
-- **完整報告**: [MIGRATION_SUMMARY.md](./MIGRATION_SUMMARY.md)
-- **測試腳本**: [scripts/test_instrument_drivers.py](./scripts/test_instrument_drivers.py)
+- **詳細指南**: [INSTRUMENT_MIGRATION.md](../lowsheen_lib/INSTRUMENT_MIGRATION.md)
+- **完整報告**: [MIGRATION_SUMMARY.md](../lowsheen_lib/MIGRATION_SUMMARY.md)
+- **測試腳本**: [backend/scripts/test_instrument_drivers.py](../../backend/scripts/test_instrument_drivers.py)
 
 ---
 

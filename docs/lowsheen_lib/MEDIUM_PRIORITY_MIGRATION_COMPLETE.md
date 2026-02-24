@@ -463,16 +463,17 @@ if not is_simulation:
 - [INSTRUMENT_MIGRATION.md](./INSTRUMENT_MIGRATION.md) - 完整遷移指南
 - [MIGRATION_SUMMARY.md](./MIGRATION_SUMMARY.md) - 專案總結
 - [HIGH_PRIORITY_MIGRATION_COMPLETE.md](./HIGH_PRIORITY_MIGRATION_COMPLETE.md) - 高優先級報告
+- [INSTRUMENT_QUICK_START.md](../guides/INSTRUMENT_QUICK_START.md) - 5 分鐘快速開始
 
 ### 測試腳本
 
-- `scripts/test_instrument_drivers.py` - 初始驅動器測試
-- `scripts/test_high_priority_instruments.py` - 高優先級驅動器測試
-- `scripts/test_medium_priority_instruments.py` - 中優先級驅動器測試
+- [../../backend/scripts/test_instrument_drivers.py](../../backend/scripts/test_instrument_drivers.py) - 初始驅動器測試
+- [../../backend/scripts/test_high_priority_instruments.py](../../backend/scripts/test_high_priority_instruments.py) - 高優先級驅動器測試
+- [../../backend/scripts/test_medium_priority_instruments.py](../../backend/scripts/test_medium_priority_instruments.py) - 中優先級驅動器測試
 
 ### 配置檔案
 
-- `instruments.example.json` - 配置範例
+- [../../backend/instruments.example.json](../../backend/instruments.example.json) - 配置範例
 - `instruments.json` - 實際配置
 
 ---

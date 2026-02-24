@@ -217,6 +217,41 @@ This directory contains comprehensive API analysis documentation for instrument 
 
 ---
 
+## Instrument Driver Migration Documentation
+
+This directory also contains documentation for the instrument driver migration project from PDTool4 to WebPDTool Backend:
+
+### [Instrument Migration Guide](INSTRUMENT_MIGRATION.md)
+Complete migration guide for transitioning from PDTool4's subprocess-based instrument scripts to WebPDTool's modern async driver architecture.
+
+**Topics Covered:**
+- Architecture comparison (PDTool4 vs WebPDTool)
+- Migration strategy (Legacy Mode vs Modern Drivers)
+- Configuration system (JSON-based)
+- Driver development guide
+- Connection types support (VISA, Serial, TCP/IP, GPIB)
+- Testing and validation
+
+### [Migration Summary](MIGRATION_SUMMARY.md)
+Overall project summary for the instrument driver migration.
+
+**Completion Status:**
+- ✅ Core architecture (4 components)
+- ✅ High-priority drivers (4 instruments: 34970A, MODEL2306, IT6723C, 2260B)
+- ✅ Medium-priority drivers (4 instruments: DAQ6510, PSW3072, KEITHLEY2015, MDO34)
+- ✅ Total: 10/19 instruments (53% complete)
+
+### [High-Priority Migration Report](HIGH_PRIORITY_MIGRATION_COMPLETE.md)
+Detailed report on the completion of high-priority instrument drivers.
+
+### [Medium-Priority Migration Report](MEDIUM_PRIORITY_MIGRATION_COMPLETE.md)
+Detailed report on the completion of medium-priority instrument drivers.
+
+### [Instrument Quick Start](../guides/INSTRUMENT_QUICK_START.md)
+5-minute quick start guide for using the modern instrument drivers.
+
+---
+
 ## Common Patterns
 
 ### Command-Line Interface

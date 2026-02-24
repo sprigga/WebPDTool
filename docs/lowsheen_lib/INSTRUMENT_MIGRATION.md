@@ -397,8 +397,9 @@ script_path = "./src/lowsheen_lib/DAQ973A_test.py"
 
 ## 參考資料
 
-- [儀器配置範例](./instruments.example.json)
-- [測試腳本](./scripts/test_instrument_drivers.py)
-- [DAQ973A 驅動器](./app/services/instruments/daq973a.py)
-- [MODEL2303 驅動器](./app/services/instruments/model2303.py)
+- [儀器配置範例](../../backend/instruments.example.json)
+- [測試腳本](../../backend/scripts/test_instrument_drivers.py)
+- [DAQ973A 驅動器](../../backend/app/services/instruments/daq973a.py)
+- [MODEL2303 驅動器](../../backend/app/services/instruments/model2303.py)
 - [PyVISA 文檔](https://pyvisa.readthedocs.io/)
+- [快速入門](../guides/INSTRUMENT_QUICK_START.md)

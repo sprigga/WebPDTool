@@ -167,9 +167,9 @@ class SMCV100BDriver(BaseInstrumentDriver):
                 }
             else:
                 # SCPI fallback
-                    await self.write_command(f"SOURce:FREQuency {frequency} Hz\n")
-                    await self.write_command(f"SOURce:POWer {power} dBm\n")
-                    await self.write_command("OUTPut:STATe ON\n")
+                await self.write_command(f"SOURce:FREQuency {frequency} Hz\n")
+                await self.write_command(f"SOURce:POWer {power} dBm\n")
+                await self.write_command("OUTPut:STATe ON\n")
 
                 return {
                     'status': 'OK',

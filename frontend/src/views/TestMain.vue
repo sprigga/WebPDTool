@@ -1142,9 +1142,16 @@ const executeSingleItem = async (item, index) => {
 
     // 特殊處理: 如果 switch_mode 是特殊測試類型 (wait, relay 等)
     // 將 measurement_type 設為 'Other' (這些特殊類型都屬於 Other 測量類別)
+    // 修正: 新的直接測試類型 (console/comport/tcpip 作為 test_type) 不套用此覆寫,
+    //       只有在 test_type 是 'Other'/'CommandTest' 等舊類型下 switch_mode 才需轉換
     const specialTypes = ['wait', 'relay', 'chassis_rotation', 'console', 'comport', 'tcpip']
-    if (switchMode && specialTypes.includes(switchMode.toLowerCase())) {
-      measurementType = 'Other'  // 使用 Other 測量類別處理特殊類型
+    // 新的直接 Measurement class 類型 — 這些 test_type 直接對應 registry，不需要透過 Other 轉發
+    const directMeasurementTypes = ['console', 'comport', 'tcpip']
+    if (switchMode && specialTypes.includes(switchMode.toLowerCase()) &&
+        !directMeasurementTypes.includes(item.test_type?.toLowerCase())) {
+      // 原有程式碼: measurementType = 'Other'
+      // 修正: 僅在 test_type 不是直接 Measurement class 時才覆寫
+      measurementType = 'Other'  // 使用 Other 測量類別處理特殊類型 (legacy: switch_mode 作為腳本名)
       finalSwitchMode = switchMode.toLowerCase()
     }
 
@@ -1188,11 +1195,16 @@ const executeSingleItem = async (item, index) => {
     // 在每個測項執行完畢後，立即保存結果到 test_results 表
     if (currentSession.value && item.id) {
       try {
-        // 修正: 將 measured_value 轉換為字串，避免類型不匹配導致後端 500 錯誤
-        // 資料庫 measured_value 欄位是 String(100)，但 response.measured_value 可能是數字類型
-        const measuredValueStr = response.measured_value !== null && response.measured_value !== undefined
-          ? String(response.measured_value)
-          : null
+        // 修正: DB measured_value 欄位為 decimal(15,6)，只能存數值
+        // value_type='string' 的量測回應（如 'hello'）無法存入 decimal 欄位，需傳 null
+        // 原有程式碼: 直接轉為字串傳入，導致 MySQL DataError (Incorrect decimal value)
+        const rawValue = response.measured_value
+        let measuredValueStr = null
+        if (rawValue !== null && rawValue !== undefined) {
+          const asNum = Number(rawValue)
+          // 只有能轉為有效數字的值才傳入 DB；純字串（如 'hello'）傳 null
+          measuredValueStr = (!isNaN(asNum) && rawValue !== '') ? String(rawValue) : null
+        }
 
         await createTestResult(currentSession.value.id, {
           session_id: currentSession.value.id,

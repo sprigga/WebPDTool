@@ -41,6 +41,12 @@
 | [FIXES_APPLIED.md](./FIXES_APPLIED.md) | Log of all applied fixes |
 | [MEDIUM_FIXES_SUMMARY.md](./MEDIUM_FIXES_SUMMARY.md) | Medium priority fixes summary |
 
+### Architecture Analysis
+| Document | Description |
+|----------|-------------|
+| [ENV_CONFIGURATION_ANALYSIS_2026_02_11.md](./ENV_CONFIGURATION_ANALYSIS_2026_02_11.md) | Environment configuration analysis (.env files) |
+| [LOWSHEEN_LIB_DEPRECATION_ANALYSIS_2026_02_23.md](./LOWSHEEN_LIB_DEPRECATION_ANALYSIS_2026_02_23.md) | `backend/src/lowsheen_lib/` deprecation status — file-by-file classification, active callers, remediation plan |
+
 ---
 
 ## Overview

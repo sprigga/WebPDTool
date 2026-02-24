@@ -219,6 +219,52 @@ MEASUREMENT_TEMPLATES = {
                 "Action": "ON"
             }
         }
+    },
+    # 新增: ComPortMeasurement — 對應 lowsheen_lib/ComPortCommand.py 遷移後的 class
+    # Registry key: "comport"
+    "comport": {
+        "comport": {
+            "required": ["Instrument", "Command"],
+            "optional": ["Timeout", "ReslineCount", "ComportWait", "SettlingTime"],
+            "example": {
+                "Instrument": "comport_1",
+                "Command": "AT+VERSION\\n",
+                "Timeout": "3.0",
+                "ReslineCount": "1",
+                "ComportWait": "0",
+                "SettlingTime": "0.5"
+            }
+        }
+    },
+    # 新增: ConSoleMeasurement — 對應 lowsheen_lib/ConSoleCommand.py 遷移後的 class
+    # Registry keys: "console", "command", "COMMAND_TEST"
+    "console": {
+        "console": {
+            "required": ["Instrument", "Command"],
+            "optional": ["Timeout", "Shell", "WorkingDir"],
+            "example": {
+                "Instrument": "console_1",
+                "Command": "echo hello",
+                "Timeout": "5.0",
+                "Shell": "False",
+                "WorkingDir": ""
+            }
+        }
+    },
+    # 新增: TCPIPMeasurement — 對應 lowsheen_lib/TCPIPCommand.py 遷移後的 class
+    # Registry key: "tcpip"
+    "tcpip": {
+        "tcpip": {
+            "required": ["Instrument", "Command"],
+            "optional": ["Timeout", "UseCRC32", "BufferSize"],
+            "example": {
+                "Instrument": "tcpip_1",
+                "Command": "31;01;f0;00;00",
+                "Timeout": "5.0",
+                "UseCRC32": "True",
+                "BufferSize": "1024"
+            }
+        }
     }
 }
 
@@ -270,6 +316,22 @@ MEASUREMENT_TYPE_DESCRIPTIONS = {
         "name": "Relay",
         "description": "Relay control operation",
         "category": "utility"
+    },
+    # 新增: 對應遷移後的三個 Measurement class
+    "comport": {
+        "name": "comport",
+        "description": "Serial port command (ComPortMeasurement)",
+        "category": "communication"
+    },
+    "console": {
+        "name": "console",
+        "description": "OS command/subprocess (ConSoleMeasurement)",
+        "category": "communication"
+    },
+    "tcpip": {
+        "name": "tcpip",
+        "description": "TCP/IP socket command (TCPIPMeasurement)",
+        "category": "communication"
     }
 }
 

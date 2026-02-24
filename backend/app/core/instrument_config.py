@@ -189,6 +189,35 @@ class InstrumentSettings(BaseSettings):
                 enabled=False,
                 description="Development simulation instrument"
             ),
+            # 新增: 虛擬 command-type 儀器 — 對應 ConSoleMeasurement/ComPortMeasurement/TCPIPMeasurement
+            # 這些儀器不需要實體連線，type 欄位用於 get_driver_class() 查找對應 Driver
+            # 注意: connection.type 使用 "LOCAL" (非 VISA/SERIAL/TCPIP_SOCKET)
+            #       → create_connection() 的 else 分支回傳 SimulationInstrumentConnection
+            #       → Driver.initialize() 為 no-op，不需要實體連線
+            "console_1": InstrumentConfig(
+                id="console_1",
+                type="console",
+                name="Console Command (default)",
+                connection=InstrumentAddress(type="LOCAL", address="local://console"),
+                enabled=True,
+                description="Virtual instrument for OS subprocess command execution"
+            ),
+            "comport_1": InstrumentConfig(
+                id="comport_1",
+                type="comport",
+                name="COM Port Command (default)",
+                connection=InstrumentAddress(type="LOCAL", address="local://comport"),
+                enabled=True,
+                description="Virtual instrument for serial port command execution"
+            ),
+            "tcpip_1": InstrumentConfig(
+                id="tcpip_1",
+                type="tcpip",
+                name="TCP/IP Command (default)",
+                connection=InstrumentAddress(type="LOCAL", address="local://tcpip"),
+                enabled=True,
+                description="Virtual instrument for TCP/IP socket command execution"
+            ),
         }
 
     def get_instrument(self, instrument_id: str) -> Optional[InstrumentConfig]:

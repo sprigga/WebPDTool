@@ -437,20 +437,19 @@ class ComPortMeasurement(BaseMeasurement):
             self.logger.info(f"ComPort response: {repr(response)}")
             response_str = str(response) if response is not None else ""
 
-            # 修改: 依 value_type 決定 measured_value，與 CommandTestMeasurement 一致
-            # 原有程式碼 (BUG): measured_value=None (總是 None，丟失實際回應值)
-            measured_value = response_str
-            if self.value_type is not StringType:
+            # 修改: 依 value_type 決定 measured_value
+            # 原有程式碼 (BUG): 將字串 measured_value 設為 None，導致 value_type='string' 時
+            #                    measured_value 丟失，UI 無法顯示回應值
+            # 修正: value_type='string' 時直接使用 response_str 作為 measured_value
+            if self.value_type is StringType:
+                measured_value = response_str  # 字串類型直接回傳原始字串
+            else:
                 try:
                     measured_value = Decimal(response_str) if response_str else None
                 except (ValueError, TypeError):
                     measured_value = None
 
-            # Ensure measured_value is compatible with create_result (no str)
-            if isinstance(measured_value, str):
-                measured_value = None
-
-            is_valid, error_msg = self.validate_result(measured_value if measured_value is not None else response_str)
+            is_valid, error_msg = self.validate_result(response_str)
             return self.create_result(
                 result="PASS" if is_valid else "FAIL",
                 measured_value=measured_value,
@@ -523,19 +522,17 @@ class ConSoleMeasurement(BaseMeasurement):
             self.logger.info(f"Console response: {repr(response)}")
             response_str = str(response) if response is not None else ""
 
-            # 依 value_type 決定 measured_value，與 ComPortMeasurement 一致
-            measured_value = response_str
-            if self.value_type is not StringType:
+            # 修正: value_type='string' 時直接使用 response_str 作為 measured_value
+            # 原有程式碼 (BUG): 將字串 measured_value 設為 None，丟失回應值
+            if self.value_type is StringType:
+                measured_value = response_str
+            else:
                 try:
                     measured_value = Decimal(response_str) if response_str else None
                 except (ValueError, TypeError):
                     measured_value = None
 
-            # Ensure measured_value is compatible with create_result (no str)
-            if isinstance(measured_value, str):
-                measured_value = None
-
-            is_valid, error_msg = self.validate_result(measured_value if measured_value is not None else response_str)
+            is_valid, error_msg = self.validate_result(response_str)
             return self.create_result(
                 result="PASS" if is_valid else "FAIL",
                 measured_value=measured_value,
@@ -607,19 +604,17 @@ class TCPIPMeasurement(BaseMeasurement):
             self.logger.info(f"TCPIP response: {repr(response)}")
             response_str = str(response) if response is not None else ""
 
-            # 依 value_type 決定 measured_value，與 ConSoleMeasurement 一致
-            measured_value = response_str
-            if self.value_type is not StringType:
+            # 修正: value_type='string' 時直接使用 response_str 作為 measured_value
+            # 原有程式碼 (BUG): 將字串 measured_value 設為 None，丟失回應值
+            if self.value_type is StringType:
+                measured_value = response_str
+            else:
                 try:
                     measured_value = Decimal(response_str) if response_str else None
                 except (ValueError, TypeError):
                     measured_value = None
 
-            # Ensure measured_value is compatible with create_result (no str)
-            if isinstance(measured_value, str):
-                measured_value = None
-
-            is_valid, error_msg = self.validate_result(measured_value if measured_value is not None else response_str)
+            is_valid, error_msg = self.validate_result(response_str)
             return self.create_result(
                 result="PASS" if is_valid else "FAIL",
                 measured_value=measured_value,

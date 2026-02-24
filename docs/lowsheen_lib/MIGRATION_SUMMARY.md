@@ -369,9 +369,10 @@ pyserial        # Serial 支援
 ### 文檔資源
 
 1. [遷移指南](./INSTRUMENT_MIGRATION.md) - 詳細步驟
-2. [配置範例](./instruments.example.json) - 參考配置
-3. [測試腳本](./scripts/test_instrument_drivers.py) - 驗證工具
-4. [PyVISA 文檔](https://pyvisa.readthedocs.io/) - 官方參考
+2. [配置範例](../../backend/instruments.example.json) - 參考配置
+3. [測試腳本](../../backend/scripts/test_instrument_drivers.py) - 驗證工具
+4. [快速入門](../guides/INSTRUMENT_QUICK_START.md) - 5 分鐘快速開始
+5. [PyVISA 文檔](https://pyvisa.readthedocs.io/) - 官方參考
 
 ### 聯絡方式
 

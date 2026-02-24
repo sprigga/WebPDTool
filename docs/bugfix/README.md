@@ -44,6 +44,7 @@ docs/bugfix/
 | Issue #5 | 測量初始化簽章錯誤 | ✅ 已修正 | - | [ISSUE5_measurement_init_signature.md](./ISSUE5_measurement_init_signature.md) |
 | Issue #6 | Other 測量類型返回隨機值而非執行腳本 | ✅ 已修正 | - | [ISSUE6_other_measurement_random_values.md](./ISSUE6_other_measurement_random_values.md) |
 | Issue #8 | wait_msec 參數未正確傳遞到後端 | ✅ 已修正 | 2026-02-10 | [ISSUE8_wait_msec_parameter_not_passed.md](./ISSUE8_wait_msec_parameter_not_passed.md) |
+| Issue #9 | console/comport/tcpip 測量執行鏈多重錯誤 | ✅ 已修正 | 2026-02-24 | [ISSUE9_console_comport_tcpip_measurement_chain.md](./ISSUE9_console_comport_tcpip_measurement_chain.md) |
 
 ### 🟢 一般問題（Medium）
 
@@ -74,6 +75,15 @@ docs/bugfix/
 | - | 無效參數錯誤 | ✅ 已修正 | - | [BUGFIX_INVALID_PARAMETERS.md](./BUGFIX_INVALID_PARAMETERS.md) |
 
 ## 最近修正的問題
+
+### 2026-02-24
+- **Issue #9**: console/comport/tcpip 測量類型執行鏈多重修正
+  - 修正 `executeSingleItem()` specialTypes 覆寫問題（→ OtherMeasurement）
+  - 修正 smcv100b.py 預存在縮排 SyntaxError
+  - 修正 `measurement_service.py` 未設定 `"parameters"` key 導致 `self.test_params = {}`
+  - 新增 console_1/comport_1/tcpip_1 虛擬儀器至 `_load_default_config()`（type="LOCAL"）
+  - 修正三個 Measurement 類別的字串型 `measured_value` 丟棄 bug
+  - 修正前端非數值 `measured_value` 觸發 DB DECIMAL 欄位 500 錯誤
 
 ### 2026-02-10
 - **Issue #8**: wait_msec 參數未正確傳遞到後端
@@ -196,12 +206,12 @@ docs/bugfix/
 
 ## 統計資訊
 
-- **總問題數**: 14+
-- **已修正問題**: 14+
+- **總問題數**: 15+
+- **已修正問題**: 15+
 - **進行中問題**: 0
 - **未解決問題**: 0
 
-最後更新: 2026-02-10
+最後更新: 2026-02-24
 
 ## 聯絡資訊
 
