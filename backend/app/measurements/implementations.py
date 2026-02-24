@@ -392,18 +392,16 @@ class ComPortMeasurement(BaseMeasurement):
 
     async def execute(self) -> MeasurementResult:
         try:
-            # 修改: 使用 lazy imports 於 execute() 內部，與 PowerReadMeasurement 一致
-            # 若 module-level 變數已被 unittest.mock.patch 替換，則優先使用 (支援單元測試)
-            # 否則進行 lazy import (避免循環 import 及 optional dependency 問題)
-            # 原有程式碼: 使用 module-level 的 get_connection_pool, get_driver_class, get_instrument_settings
-            import app.measurements.implementations as _self_module
-            _get_connection_pool = _self_module.get_connection_pool
-            _get_driver_class = _self_module.get_driver_class
-            _get_instrument_settings = _self_module.get_instrument_settings
-            if _get_connection_pool is None:
-                from app.services.instrument_connection import get_connection_pool as _get_connection_pool
-                from app.services.instruments import get_driver_class as _get_driver_class
-                from app.core.instrument_config import get_instrument_settings as _get_instrument_settings
+            # 修改: 讀取 module-level 變數 (可被 unittest.mock.patch 替換)；若仍為 None 則 lazy import
+            # 原有程式碼 (已簡化): 移除不必要的 _self_module 間接引用
+            import app.measurements.implementations as _m
+            _gcp = _m.get_connection_pool
+            _gdc = _m.get_driver_class
+            _gis = _m.get_instrument_settings
+            if _gcp is None:
+                from app.services.instrument_connection import get_connection_pool as _gcp
+                from app.services.instruments import get_driver_class as _gdc
+                from app.core.instrument_config import get_instrument_settings as _gis
 
             instrument_name = get_param(self.test_params, "Instrument", "instrument")
             if not instrument_name:
@@ -412,7 +410,7 @@ class ComPortMeasurement(BaseMeasurement):
                     error_message="Missing required parameter: Instrument"
                 )
 
-            instrument_settings = _get_instrument_settings()
+            instrument_settings = _gis()
             config = instrument_settings.get_instrument(instrument_name)
             if config is None:
                 return self.create_result(
@@ -420,29 +418,39 @@ class ComPortMeasurement(BaseMeasurement):
                     error_message=f"Instrument '{instrument_name}' not configured"
                 )
 
-            driver_class = _get_driver_class(config.type)
+            driver_class = _gdc(config.type)
             if driver_class is None:
                 return self.create_result(
                     result="ERROR",
                     error_message=f"No driver for instrument type '{config.type}'"
                 )
 
-            connection_pool = _get_connection_pool()
+            connection_pool = _gcp()
             async with connection_pool.get_connection(instrument_name) as conn:
                 driver = driver_class(conn)
                 await driver.initialize()
                 response = await driver.send_command(self.test_params)
 
             self.logger.info(f"ComPort response: {repr(response)}")
-            # 修改: 使用字串 response_str 進行 validate_result，但 create_result 傳入 None
-            # 原有程式碼: measured_value = str(response) ... create_result(measured_value=measured_value)
-            # BUG: create_result 接受 Optional[Decimal]，不應傳入 str
             response_str = str(response) if response is not None else ""
 
-            is_valid, error_msg = self.validate_result(response_str)
+            # 修改: 依 value_type 決定 measured_value，與 CommandTestMeasurement 一致
+            # 原有程式碼 (BUG): measured_value=None (總是 None，丟失實際回應值)
+            measured_value = response_str
+            if self.value_type is not StringType:
+                try:
+                    measured_value = Decimal(response_str) if response_str else None
+                except (ValueError, TypeError):
+                    measured_value = None
+
+            # Ensure measured_value is compatible with create_result (no str)
+            if isinstance(measured_value, str):
+                measured_value = None
+
+            is_valid, error_msg = self.validate_result(measured_value if measured_value is not None else response_str)
             return self.create_result(
                 result="PASS" if is_valid else "FAIL",
-                measured_value=None,
+                measured_value=measured_value,
                 error_message=error_msg if not is_valid else None
             )
 
