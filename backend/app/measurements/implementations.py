@@ -459,6 +459,90 @@ class ComPortMeasurement(BaseMeasurement):
             return self.create_result(result="ERROR", error_message=str(e))
 
 # ============================================================================
+
+# ============================================================================
+# ConSole Measurement — replaces lowsheen_lib/ConSoleCommand.py
+# ============================================================================
+class ConSoleMeasurement(BaseMeasurement):
+    """
+    Executes a system command via ConSoleCommandDriver and returns stdout.
+
+    Required test_params:
+        - Instrument (str): key in instrument_settings (type must be 'console')
+        - Command (str): command string to execute
+
+    Optional test_params:
+        - Timeout (float): execution timeout in seconds (default: 5.0)
+        - Shell (bool): use shell execution (default: False)
+        - WorkingDir (str): working directory
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            # 修改: 讀取 module-level 變數 (可被 unittest.mock.patch 替換)；若仍為 None 則 lazy import
+            import app.measurements.implementations as _m
+            _gcp = _m.get_connection_pool
+            _gdc = _m.get_driver_class
+            _gis = _m.get_instrument_settings
+            if _gcp is None:
+                from app.services.instrument_connection import get_connection_pool as _gcp
+                from app.services.instruments import get_driver_class as _gdc
+                from app.core.instrument_config import get_instrument_settings as _gis
+
+            instrument_name = get_param(self.test_params, "Instrument", "instrument")
+            if not instrument_name:
+                return self.create_result(
+                    result="ERROR",
+                    error_message="Missing required parameter: Instrument"
+                )
+
+            instrument_settings = _gis()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument '{instrument_name}' not configured"
+                )
+
+            driver_class = _gdc(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver for instrument type '{config.type}'"
+                )
+
+            connection_pool = _gcp()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+                await driver.initialize()
+                response = await driver.send_command(self.test_params)
+
+            self.logger.info(f"Console response: {repr(response)}")
+            response_str = str(response) if response is not None else ""
+
+            # 依 value_type 決定 measured_value，與 ComPortMeasurement 一致
+            measured_value = response_str
+            if self.value_type is not StringType:
+                try:
+                    measured_value = Decimal(response_str) if response_str else None
+                except (ValueError, TypeError):
+                    measured_value = None
+
+            # Ensure measured_value is compatible with create_result (no str)
+            if isinstance(measured_value, str):
+                measured_value = None
+
+            is_valid, error_msg = self.validate_result(measured_value if measured_value is not None else response_str)
+            return self.create_result(
+                result="PASS" if is_valid else "FAIL",
+                measured_value=measured_value,
+                error_message=error_msg if not is_valid else None
+            )
+
+        except Exception as e:
+            self.logger.error(f"Console measurement error: {e}", exc_info=True)
+            return self.create_result(result="ERROR", error_message=str(e))
+
 # Power Measurements
 # ============================================================================
 class PowerReadMeasurement(BaseMeasurement):
