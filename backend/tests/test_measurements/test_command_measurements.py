@@ -224,3 +224,31 @@ class TestTCPIPMeasurement:
             result = await measurement.execute()
 
         assert result.result == "ERROR"
+
+
+from app.measurements.implementations import (
+    MEASUREMENT_REGISTRY,
+    ComPortMeasurement,
+    ConSoleMeasurement,
+    TCPIPMeasurement,
+)
+
+
+class TestCommandMeasurementRegistry:
+    """Verify registry maps command test types to the correct new classes"""
+
+    def test_comport_registry_maps_to_comport_measurement(self):
+        assert MEASUREMENT_REGISTRY.get("comport") is ComPortMeasurement
+
+    def test_console_registry_maps_to_console_measurement(self):
+        assert MEASUREMENT_REGISTRY.get("console") is ConSoleMeasurement
+
+    def test_tcpip_registry_maps_to_tcpip_measurement(self):
+        assert MEASUREMENT_REGISTRY.get("tcpip") is TCPIPMeasurement
+
+    def test_command_test_registry_maps_to_console_measurement(self):
+        """COMMAND_TEST key falls back to ConSoleMeasurement (generic command execution)"""
+        assert MEASUREMENT_REGISTRY.get("COMMAND_TEST") is ConSoleMeasurement
+
+    def test_command_lowercase_registry_maps_to_console_measurement(self):
+        assert MEASUREMENT_REGISTRY.get("command") is ConSoleMeasurement
