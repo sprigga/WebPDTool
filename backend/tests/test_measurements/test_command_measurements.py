@@ -156,3 +156,71 @@ class TestConSoleMeasurement:
             result = await measurement.execute()
 
         assert result.result == "ERROR"
+
+
+from app.measurements.implementations import TCPIPMeasurement
+
+
+class TestTCPIPMeasurement:
+    @pytest.mark.asyncio
+    async def test_execute_returns_pass_on_hex_response(self):
+        """TCPIPMeasurement calls driver.send_command and returns PASS with hex response"""
+        test_plan_item = make_test_plan_item(
+            {"Instrument": "TCPIP_1", "Command": "192.168.1.3 12345 31;01;f0;00;00", "Timeout": "5"},
+        )
+        measurement = TCPIPMeasurement(test_plan_item, config={})
+
+        mock_driver = AsyncMock()
+        mock_driver.send_command = AsyncMock(return_value="31 03 f0 00 00")
+        mock_driver.initialize = AsyncMock()
+
+        mock_config = MagicMock()
+        mock_config.type = "tcpip"
+
+        with patch("app.measurements.implementations.get_instrument_settings") as mock_settings, \
+             patch("app.measurements.implementations.get_driver_class") as mock_get_driver, \
+             patch("app.measurements.implementations.get_connection_pool") as mock_pool:
+
+            mock_settings.return_value.get_instrument.return_value = mock_config
+            mock_get_driver.return_value = lambda conn: mock_driver
+
+            mock_conn_ctx = MagicMock()
+            mock_conn_ctx.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_conn_ctx.__aexit__ = AsyncMock(return_value=None)
+            mock_pool.return_value.get_connection.return_value = mock_conn_ctx
+
+            result = await measurement.execute()
+
+        assert result.result == "PASS"
+        assert result.measured_value is None  # string-type: stored as None
+        mock_driver.send_command.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_execute_returns_error_when_instrument_not_configured(self):
+        test_plan_item = make_test_plan_item(
+            {"Instrument": "TCPIP_MISSING", "Command": "192.168.1.3 12345 31;01;f0"},
+        )
+        measurement = TCPIPMeasurement(test_plan_item, config={})
+
+        with patch("app.measurements.implementations.get_instrument_settings") as mock_settings, \
+             patch("app.measurements.implementations.get_driver_class"), \
+             patch("app.measurements.implementations.get_connection_pool"):
+
+            mock_settings.return_value.get_instrument.return_value = None
+            result = await measurement.execute()
+
+        assert result.result == "ERROR"
+        assert "not configured" in result.error_message.lower()
+
+    @pytest.mark.asyncio
+    async def test_execute_returns_error_when_missing_instrument_param(self):
+        test_plan_item = make_test_plan_item({"Command": "192.168.1.3 12345 31;01;f0"})
+        measurement = TCPIPMeasurement(test_plan_item, config={})
+
+        with patch("app.measurements.implementations.get_instrument_settings"), \
+             patch("app.measurements.implementations.get_driver_class"), \
+             patch("app.measurements.implementations.get_connection_pool"):
+
+            result = await measurement.execute()
+
+        assert result.result == "ERROR"
