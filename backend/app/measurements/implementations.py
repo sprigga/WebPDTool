@@ -15,17 +15,21 @@ from app.measurements.base import (
 )
 from app.config import settings
 
-# Module-level imports for instrument services (lazy to avoid circular imports)
-# These are imported here so that unit tests can patch them via
-# app.measurements.implementations.<name>
-try:
-    from app.services.instrument_connection import get_connection_pool
-    from app.services.instruments import get_driver_class
-    from app.core.instrument_config import get_instrument_settings
-except ImportError:
-    get_connection_pool = None  # type: ignore
-    get_driver_class = None  # type: ignore
-    get_instrument_settings = None  # type: ignore
+# 修改: 移除 module-level imports，改為在 execute() 中使用 lazy imports，以避免循環 import
+# 原有程式碼 (已註釋):
+# try:
+#     from app.services.instrument_connection import get_connection_pool
+#     from app.services.instruments import get_driver_class
+#     from app.core.instrument_config import get_instrument_settings
+# except ImportError:
+#     get_connection_pool = None  # type: ignore
+#     get_driver_class = None  # type: ignore
+#     get_instrument_settings = None  # type: ignore
+#
+# 保留 module-level 變數供 unittest.mock.patch 使用 (patchable via app.measurements.implementations.<name>)
+get_connection_pool = None  # type: ignore
+get_driver_class = None  # type: ignore
+get_instrument_settings = None  # type: ignore
 
 
 # ============================================================================
@@ -388,8 +392,19 @@ class ComPortMeasurement(BaseMeasurement):
 
     async def execute(self) -> MeasurementResult:
         try:
-            # get_connection_pool, get_driver_class, get_instrument_settings
-            # are imported at module level for testability (patchable via unittest.mock)
+            # 修改: 使用 lazy imports 於 execute() 內部，與 PowerReadMeasurement 一致
+            # 若 module-level 變數已被 unittest.mock.patch 替換，則優先使用 (支援單元測試)
+            # 否則進行 lazy import (避免循環 import 及 optional dependency 問題)
+            # 原有程式碼: 使用 module-level 的 get_connection_pool, get_driver_class, get_instrument_settings
+            import app.measurements.implementations as _self_module
+            _get_connection_pool = _self_module.get_connection_pool
+            _get_driver_class = _self_module.get_driver_class
+            _get_instrument_settings = _self_module.get_instrument_settings
+            if _get_connection_pool is None:
+                from app.services.instrument_connection import get_connection_pool as _get_connection_pool
+                from app.services.instruments import get_driver_class as _get_driver_class
+                from app.core.instrument_config import get_instrument_settings as _get_instrument_settings
+
             instrument_name = get_param(self.test_params, "Instrument", "instrument")
             if not instrument_name:
                 return self.create_result(
@@ -397,7 +412,7 @@ class ComPortMeasurement(BaseMeasurement):
                     error_message="Missing required parameter: Instrument"
                 )
 
-            instrument_settings = get_instrument_settings()
+            instrument_settings = _get_instrument_settings()
             config = instrument_settings.get_instrument(instrument_name)
             if config is None:
                 return self.create_result(
@@ -405,26 +420,29 @@ class ComPortMeasurement(BaseMeasurement):
                     error_message=f"Instrument '{instrument_name}' not configured"
                 )
 
-            driver_class = get_driver_class(config.type)
+            driver_class = _get_driver_class(config.type)
             if driver_class is None:
                 return self.create_result(
                     result="ERROR",
                     error_message=f"No driver for instrument type '{config.type}'"
                 )
 
-            connection_pool = get_connection_pool()
+            connection_pool = _get_connection_pool()
             async with connection_pool.get_connection(instrument_name) as conn:
                 driver = driver_class(conn)
                 await driver.initialize()
                 response = await driver.send_command(self.test_params)
 
             self.logger.info(f"ComPort response: {repr(response)}")
-            measured_value = str(response) if response is not None else ""
+            # 修改: 使用字串 response_str 進行 validate_result，但 create_result 傳入 None
+            # 原有程式碼: measured_value = str(response) ... create_result(measured_value=measured_value)
+            # BUG: create_result 接受 Optional[Decimal]，不應傳入 str
+            response_str = str(response) if response is not None else ""
 
-            is_valid, error_msg = self.validate_result(measured_value)
+            is_valid, error_msg = self.validate_result(response_str)
             return self.create_result(
                 result="PASS" if is_valid else "FAIL",
-                measured_value=measured_value,
+                measured_value=None,
                 error_message=error_msg if not is_valid else None
             )
 

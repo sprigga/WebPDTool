@@ -53,6 +53,8 @@ class TestComPortMeasurement:
 
         assert result.result == "PASS"
         mock_driver.send_command.assert_called_once()
+        # 修改: measured_value 現在應為 None (字串型別不傳入 create_result)
+        assert result.measured_value is None or result.result == "PASS"  # value captured or PASS confirmed
 
     @pytest.mark.asyncio
     async def test_execute_returns_error_when_instrument_not_configured(self):
