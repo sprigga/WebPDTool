@@ -124,11 +124,12 @@ async def health_check():
 # Import and include routers
 # Original single-file routers backed up as .backup
 # New modular routers are used instead
-from app.api import auth, projects, stations, tests, measurements, dut_control
+from app.api import auth, projects, stations, tests, measurements, dut_control, users
 from app.api.testplan import router as testplans_router
 from app.api.results import router as measurement_results_router
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(projects.router, prefix="/api/projects", tags=["Projects"])
 app.include_router(stations.router, prefix="/api", tags=["Stations"])
 app.include_router(testplans_router, prefix="/api", tags=["Test Plans"])
