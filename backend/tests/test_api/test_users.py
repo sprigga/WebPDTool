@@ -36,7 +36,10 @@ def db_session():
         # Clean up the temporary file
         try:
             os.unlink(db_path)
-        except:
+        except FileNotFoundError:
+            # Refactored: Original code used bare except: which catches all exceptions
+            # including SystemExit and KeyboardInterrupt. Now specifically catching
+            # FileNotFoundError for when the temp file has already been removed
             pass
 
 
@@ -310,10 +313,11 @@ def test_change_password_success(client, admin_user):
     assert create_response.status_code == 201
     user_id = create_response.json()["id"]
 
-    # Now change the password
+    # Refactored: Original code used query parameter for new_password (security issue)
+    # Now using request body with JSON per PasswordChange schema
     response = client.put(
         f"/api/users/{user_id}/password",
-        params={"new_password": "newpassword"},
+        json={"new_password": "newpassword"},
         headers={"Authorization": f"Bearer {admin_user['token']}"}
     )
     assert response.status_code == 200
@@ -321,10 +325,12 @@ def test_change_password_success(client, admin_user):
 
 def test_non_admin_can_change_own_password(client, engineer_user):
     """Test that non-admin user can change their own password"""
+    # Refactored: Original code used query parameter for new_password (security issue)
+    # Now using request body with JSON per PasswordChange schema
     # Engineer changing their own password should succeed
     response = client.put(
         f"/api/users/{engineer_user['user'].id}/password",
-        params={"new_password": "newengpass123"},
+        json={"new_password": "newengpass123"},
         headers={"Authorization": f"Bearer {engineer_user['token']}"}
     )
     assert response.status_code == 200
@@ -334,10 +340,12 @@ def test_non_admin_can_change_own_password(client, engineer_user):
 
 def test_non_admin_cannot_change_other_password(client, engineer_user, admin_user):
     """Test that non-admin user cannot change another user's password"""
+    # Refactored: Original code used query parameter for new_password (security issue)
+    # Now using request body with JSON per PasswordChange schema
     # Engineer trying to change admin's password should fail with 403
     response = client.put(
         f"/api/users/{admin_user['user'].id}/password",
-        params={"new_password": "hacked123"},
+        json={"new_password": "hacked123"},
         headers={"Authorization": f"Bearer {engineer_user['token']}"}
     )
     assert response.status_code == 403

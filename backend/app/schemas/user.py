@@ -23,6 +23,12 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=100)
     email: Optional[EmailStr] = None
     is_active: Optional[bool] = None
+    # Note: role and username cannot be updated through this endpoint
+
+
+class PasswordChange(BaseModel):
+    """Password change request schema"""
+    new_password: str = Field(..., min_length=6, description="New password (minimum 6 characters)")
 
 
 class UserInDB(UserBase):
