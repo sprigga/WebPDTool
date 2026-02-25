@@ -337,8 +337,9 @@ const router = useRouter()
 const projectStore = useProjectStore()
 const authStore = useAuthStore()
 
-const projectStore = useProjectStore()
-const authStore = useAuthStore()
+// 原有程式碼: 重複聲明的變數已移除 (lines 340-341)
+// const projectStore = useProjectStore()  // 移除重複聲明
+// const authStore = useAuthStore()  // 移除重複聲明
 
 // 新增: 導航函數
 const navigateTo = (path) => {

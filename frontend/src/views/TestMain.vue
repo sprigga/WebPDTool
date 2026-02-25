@@ -60,16 +60,17 @@
         </el-col>
         <el-col :span="7" style="text-align: right">
           <!-- 新增: 導航按鈕組 - 提供快速存取各個管理頁面 -->
-          <el-button size="small" @click="navigateTo('/testplan')">
+          <!-- 修改: 統一使用 size="default" 與其他頁面保持一致 -->
+          <el-button size="default" @click="navigateTo('/testplan')">
             測試計劃
           </el-button>
-          <el-button size="small" @click="navigateTo('/projects')">
+          <el-button size="default" @click="navigateTo('/projects')">
             專案管理
           </el-button>
-          <el-button size="small" @click="navigateTo('/users')">
+          <el-button size="default" @click="navigateTo('/users')">
             使用者管理
           </el-button>
-          <el-button type="danger" size="small" @click="handleLogout">
+          <el-button type="danger" size="default" @click="handleLogout">
             登出
           </el-button>
         </el-col>
