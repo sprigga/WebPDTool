@@ -317,3 +317,29 @@ def test_change_password_success(client, admin_user):
         headers={"Authorization": f"Bearer {admin_user['token']}"}
     )
     assert response.status_code == 200
+
+
+def test_non_admin_can_change_own_password(client, engineer_user):
+    """Test that non-admin user can change their own password"""
+    # Engineer changing their own password should succeed
+    response = client.put(
+        f"/api/users/{engineer_user['user'].id}/password",
+        params={"new_password": "newengpass123"},
+        headers={"Authorization": f"Bearer {engineer_user['token']}"}
+    )
+    assert response.status_code == 200
+    # Verify password was changed by checking response contains the user
+    assert response.json()["id"] == engineer_user['user'].id
+
+
+def test_non_admin_cannot_change_other_password(client, engineer_user, admin_user):
+    """Test that non-admin user cannot change another user's password"""
+    # Engineer trying to change admin's password should fail with 403
+    response = client.put(
+        f"/api/users/{admin_user['user'].id}/password",
+        params={"new_password": "hacked123"},
+        headers={"Authorization": f"Bearer {engineer_user['token']}"}
+    )
+    assert response.status_code == 403
+    # Verify the error message contains expected text
+    assert "can only change your own password" in response.json()["detail"].lower()

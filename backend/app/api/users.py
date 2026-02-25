@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.api_helpers import PermissionChecker
+from app.core.constants import ErrorMessages
 from app.schemas.user import UserCreate, UserUpdate, UserInDB
 from app.models.user import User as UserModel
 from app.services import auth as auth_service
@@ -34,6 +35,7 @@ async def get_user(
     """Get user by ID"""
     user = db.query(UserModel).filter(UserModel.id == user_id).first()
     if not user:
+        # TODO: Use ErrorMessages.USER_NOT_FOUND when available
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
@@ -55,6 +57,7 @@ async def create_user(
         UserModel.username == user.username
     ).first()
     if existing_user:
+        # TODO: Use ErrorMessages.USERNAME_ALREADY_EXISTS when available
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username already exists"
@@ -77,6 +80,7 @@ async def update_user(
 
     db_user = db.query(UserModel).filter(UserModel.id == user_id).first()
     if not db_user:
+        # TODO: Use ErrorMessages.USER_NOT_FOUND when available
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
@@ -102,6 +106,7 @@ async def change_user_password(
     """Change user password (Admin only or self)"""
     # Allow admins or users changing their own password
     if current_user.get("role") != "admin" and current_user.get("id") != user_id:
+        # TODO: Use ErrorMessages.ONLY_CHANGE_OWN_PASSWORD when available
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only change your own password"
@@ -109,6 +114,7 @@ async def change_user_password(
 
     db_user = db.query(UserModel).filter(UserModel.id == user_id).first()
     if not db_user:
+        # TODO: Use ErrorMessages.USER_NOT_FOUND when available
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
@@ -132,6 +138,7 @@ async def delete_user(
 
     # Prevent self-deletion
     if current_user.get("id") == user_id:
+        # TODO: Use ErrorMessages.CANNOT_DELETE_SELF when available
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete your own account"
@@ -139,6 +146,7 @@ async def delete_user(
 
     db_user = db.query(UserModel).filter(UserModel.id == user_id).first()
     if not db_user:
+        # TODO: Use ErrorMessages.USER_NOT_FOUND when available
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
