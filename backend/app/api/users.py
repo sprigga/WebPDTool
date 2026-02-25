@@ -1,13 +1,14 @@
 """Users API endpoints for user management"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional, Set
 
 from app.core.database import get_db
 from app.core.api_helpers import PermissionChecker, get_entity_or_404
 from app.core.constants import ErrorMessages
 from app.schemas.user import UserCreate, UserUpdate, UserInDB, PasswordChange
-from app.models.user import User as UserModel
+from app.models.user import User as UserModel, UserRole
 from app.services import auth as auth_service
 from app.dependencies import get_current_active_user
 
@@ -23,11 +24,42 @@ USER_UPDATE_WHITELIST: Set[str] = {"full_name", "email", "is_active"}
 async def get_users(
     offset: int = 0,
     limit: int = 100,
+    search: Optional[str] = None,
+    role: Optional[UserRole] = None,
+    is_active: Optional[bool] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
 ):
-    """Get list of all users"""
-    users = db.query(UserModel).offset(offset).limit(limit).all()
+    """Get list of all users with optional search and filtering"""
+    query = db.query(UserModel)
+
+    # Original code: Basic query with no filtering
+    # Enhanced: Added search across username, full_name, and email fields
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                UserModel.username.like(search_pattern),
+                UserModel.full_name.like(search_pattern),
+                UserModel.email.like(search_pattern)
+            )
+        )
+
+    # Original code: No role filtering
+    # Enhanced: Added role filter using UserRole enum
+    if role is not None:
+        query = query.filter(UserModel.role == role)
+
+    # Original code: No is_active filtering
+    # Enhanced: Added is_active status filter
+    if is_active is not None:
+        query = query.filter(UserModel.is_active == is_active)
+
+    # Original code: No ordering
+    # Enhanced: Order results by username ascending for consistent pagination
+    query = query.order_by(UserModel.username.asc())
+
+    users = query.offset(offset).limit(limit).all()
     return users
 
 
