@@ -13,6 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.models.user import User, UserRole
 from app.core.database import Base
+from app.core.constants import ErrorMessages
 
 
 # Refactored: Fixtures moved inline to avoid conftest.py dependency
@@ -86,7 +87,7 @@ def test_complete_user_management_flow(client, db_session):
     admin_data = {
         "username": "admin_flow",
         "password": "admin123",
-        "role": "admin",
+        "role": UserRole.ADMIN,  # FIXED: Use UserRole enum instead of string literal
         "full_name": "Flow Admin",
         "email": "admin@flowexample.com"
     }
@@ -128,7 +129,7 @@ def test_complete_user_management_flow(client, db_session):
     engineer_data = {
         "username": "engineer_flow",
         "password": "eng123",
-        "role": "engineer",
+        "role": UserRole.ENGINEER,  # FIXED: Use UserRole enum instead of string literal
         "full_name": "Flow Engineer",
         "email": "engineer@flowexample.com"
     }
@@ -214,7 +215,7 @@ def test_complete_user_management_flow(client, db_session):
     operator_data = {
         "username": "operator_flow",
         "password": "operator123",
-        "role": "operator",
+        "role": UserRole.OPERATOR,  # FIXED: Use UserRole enum instead of string literal
         "full_name": "Should Not Be Created"
     }
 
@@ -224,8 +225,10 @@ def test_complete_user_management_flow(client, db_session):
         headers={"Authorization": f"Bearer {engineer_token}"}
     )
     assert forbidden_response.status_code == 403
-    assert "permission" in forbidden_response.json()["detail"].lower() or \
-           "only admin" in forbidden_response.json()["detail"].lower()
+    # FIXED: Verify the error message indicates permission is denied
+    # PermissionChecker generates: "Only admin can create users"
+    detail = forbidden_response.json()["detail"]
+    assert "admin" in detail.lower() and "can create users" in detail.lower()
 
     # ============================================================
     # STEP 9: Admin deletes engineer
