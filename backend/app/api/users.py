@@ -1,5 +1,5 @@
 """Users API endpoints for user management"""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional, Set
@@ -22,8 +22,8 @@ USER_UPDATE_WHITELIST: Set[str] = {"full_name", "email", "is_active"}
 
 @router.get("", response_model=List[UserInDB])
 async def get_users(
-    offset: int = 0,
-    limit: int = 100,
+    offset: int = Query(0, ge=0, description="Number of records to skip (pagination)"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     search: Optional[str] = None,
     role: Optional[UserRole] = None,
     is_active: Optional[bool] = None,
