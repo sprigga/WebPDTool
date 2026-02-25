@@ -93,12 +93,13 @@ bash scripts/batch_import.sh
 - `frontend/src/views/TestMain.vue` - Main test execution interface (495 lines, PDTool4 UI clone)
 - `frontend/src/views/TestPlanManage.vue` - Test plan CRUD interface
 - `frontend/src/views/ProjectManage.vue` - Project and station management
-- `frontend/src/stores/` - Pinia state management (auth, project)
+- `frontend/src/views/UserManage.vue` - User management interface (admin only)
+- `frontend/src/stores/` - Pinia state management (auth, project, users)
 - `frontend/src/api/` - Axios API client with JWT interceptors
 
 **Backend (FastAPI + SQLAlchemy 2.0)**
 - `backend/app/main.py` - FastAPI application entry point, router registration
-- `backend/app/api/` - 7 API router modules (auth, projects, stations, testplan, tests, measurements, results)
+- `backend/app/api/` - 8 API router modules (auth, users, projects, stations, testplan, tests, measurements, results)
 - `backend/app/services/` - Business logic layer
 - `backend/app/models/` - SQLAlchemy ORM models (7 tables)
 - `backend/app/measurements/` - Measurement abstraction layer
@@ -309,6 +310,35 @@ MYSQL_PORT=33306
 - API calls through centralized clients in `frontend/src/api/`
 - Element Plus UI components for consistency
 - Follow existing patterns in `TestMain.vue` for test-related UIs
+
+### Managing Users
+
+User management allows administrators to create, edit, and delete user accounts with role-based access control.
+
+**File Locations:**
+- Backend API: `backend/app/api/users.py` - User CRUD endpoints
+- Backend Schemas: `backend/app/schemas/user.py` - User data validation schemas
+- Backend Models: `backend/app/models/user.py` - User ORM model with UserRole enum
+- Frontend View: `frontend/src/views/UserManage.vue` - User management UI
+- Frontend Store: `frontend/src/stores/users.js` - User state management
+- Frontend API: `frontend/src/api/users.js` - User API client functions
+
+**User Roles:**
+- `admin` - Full system access including user management (can create, edit, delete users)
+- `engineer` - Test plan management and test execution
+- `operator` - Test execution only
+
+**API Endpoints Summary:**
+- `GET /api/users` - List users with pagination and filtering (offset, limit, search, role, is_active)
+- `GET /api/users/{id}` - Get specific user
+- `POST /api/users` - Create new user (admin only)
+- `PUT /api/users/{id}` - Update user (admin only; allows full_name, email, is_active)
+- `PUT /api/users/{id}/password` - Change password (admin or self)
+- `DELETE /api/users/{id}` - Delete user (admin only; prevents self-deletion)
+
+**Documentation:**
+- Complete API reference: `docs/api/users-api.md`
+- Interactive API docs: http://localhost:9100/docs (Swagger UI)
 
 ## Important Implementation Details
 
