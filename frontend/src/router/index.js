@@ -47,6 +47,12 @@ const routes = [
     name: 'ProjectManage',
     component: () => import('@/views/ProjectManage.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/users',
+    name: 'UserManage',
+    component: () => import('@/views/UserManage.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 
