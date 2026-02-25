@@ -5,12 +5,12 @@
       <el-row :gutter="20" align="middle">
         <!-- 原有程式碼: 只顯示專案和站別的資訊 -->
         <!-- 修改: 增加專案和站別選擇器,允許使用者切換不同的專案和站別 -->
-        <el-col :span="6">
+        <el-col :span="5">
           <el-form-item label="專案:" label-width="60px" style="margin-bottom: 0">
             <el-select
               v-model="selectedProjectId"
               placeholder="選擇專案"
-              style="width: 160px"
+              style="width: 140px"
               filterable
               clearable
               size="small"
@@ -25,12 +25,12 @@
             </el-select>
           </el-form-item>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="5">
           <el-form-item label="站別:" label-width="60px" style="margin-bottom: 0">
             <el-select
               v-model="selectedStationId"
               placeholder="選擇站別"
-              style="width: 160px"
+              style="width: 140px"
               filterable
               clearable
               size="small"
@@ -52,14 +52,24 @@
             <span class="info-value">{{ currentUser?.username || '-' }}</span>
           </div>
         </el-col>
-        <el-col :span="4">
+        <el-col :span="3">
           <div class="info-item">
             <span class="info-label">版本:</span>
             <span class="info-value">v1.0.0</span>
           </div>
         </el-col>
-        <el-col :span="4" style="text-align: right">
-          <el-button type="danger" @click="handleLogout">
+        <el-col :span="7" style="text-align: right">
+          <!-- 新增: 導航按鈕組 - 提供快速存取各個管理頁面 -->
+          <el-button size="small" @click="navigateTo('/testplan')">
+            測試計劃
+          </el-button>
+          <el-button size="small" @click="navigateTo('/projects')">
+            專案管理
+          </el-button>
+          <el-button size="small" @click="navigateTo('/users')">
+            使用者管理
+          </el-button>
+          <el-button type="danger" size="small" @click="handleLogout">
             登出
           </el-button>
         </el-col>
@@ -1499,6 +1509,11 @@ const handleLogout = async () => {
     projectStore.clearCurrentSelection()
     router.push('/login')
   }
+}
+
+// 新增: 導航函數 - 用於在不同頁面之間跳轉
+const navigateTo = (path) => {
+  router.push(path)
 }
 
 // 新增: 處理專案變更

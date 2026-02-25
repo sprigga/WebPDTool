@@ -1,5 +1,33 @@
 <template>
   <div class="user-manage-container">
+    <!-- 新增: 導航列 - 提供快速存取各個管理頁面 -->
+    <el-card class="nav-card" shadow="never">
+      <el-row :gutter="10" align="middle" justify="space-between">
+        <el-col :span="18">
+          <div class="nav-buttons">
+            <el-button size="default" @click="navigateTo('/main')">
+              測試主畫面
+            </el-button>
+            <el-button size="default" @click="navigateTo('/testplan')">
+              測試計劃管理
+            </el-button>
+            <el-button size="default" @click="navigateTo('/projects')">
+              專案管理
+            </el-button>
+            <el-button type="primary" size="default" disabled>
+              使用者管理
+            </el-button>
+          </div>
+        </el-col>
+        <el-col :span="6" style="text-align: right">
+          <el-text type="info">{{ authStore.user?.username || '-' }}</el-text>
+          <el-button type="danger" size="small" @click="handleLogout" style="margin-left: 10px">
+            登出
+          </el-button>
+        </el-col>
+      </el-row>
+    </el-card>
+
     <el-alert
       v-if="!isAdmin"
       title="僅供查看"
@@ -241,14 +269,34 @@
 
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUsersStore } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import { createUser, updateUser, changeUserPassword, deleteUser } from '@/api/users'
 
-const usersStore = useUsersStore()
+// 新增: Router 用於導航
+const router = useRouter()
 const authStore = useAuthStore()
+
+// 新增: 導航函數
+const navigateTo = (path) => {
+  router.push(path)
+}
+
+// 新增: 登出函數
+const handleLogout = async () => {
+  try {
+    await authStore.logout()
+    router.push('/login')
+  } catch (error) {
+    console.error('Logout failed:', error)
+    router.push('/login')
+  }
+}
+
+const usersStore = useUsersStore()
 
 // State
 const loading = ref(false)
@@ -548,6 +596,20 @@ onMounted(async () => {
 .user-manage-container {
   padding: 20px;
   height: calc(100vh - 180px);
+}
+
+/* 新增: 導航列樣式 */
+.nav-card {
+  margin-bottom: 20px;
+}
+
+.nav-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-buttons .el-button {
+  margin: 0;
 }
 
 .card-header {
