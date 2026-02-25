@@ -479,6 +479,5 @@ await deleteUser(1)
 
 ## Related Documentation
 
-- [User Management UI](../features/user-management.md) - Frontend user interface documentation
 - [Authentication API](./auth-api.md) - Login and token management
 - [Main API Documentation](http://localhost:9100/docs) - Interactive Swagger UI
