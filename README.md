@@ -29,20 +29,21 @@ WebPDTool 是一個 Web 化的產品測試系統，用於執行自動化測試�
 
 | 項目 | 內容 |
 |------|------|
-| **版本** | v0.1.0 |
-| **完成度** | ~95% (核心功能完成，測量服務完整，27 種儀器驅動實現，Command 測量遷移完成) |
-| **最新更新** | 2026-02-24 - Command 測量遷移完成 (ComPort/ConSole/TCPIP)，lowsheen_lib 遷移 70% |
-| **狀態** | 核心功能完整，儀器驅動完善，測試執行穩定 |
+| **版本** | v0.2.0 |
+| **完成度** | ~98% (核心功能完成，測量服務完整，28 種儀器驅動實現，使用者管理完成) |
+| **最新更新** | 2026-02-25 - 使用者管理 UI 完成，動態參數表單實現 |
+| **狀態** | 核心功能完整，儀器驅動完善，測試執行穩定，使用者管理完整 |
 
 ### ✨ 主要特色
 
 - ✅ **完整 PDTool4 相容性** - 支援所有 7 種 limit_type 和 3 種 value_type
 - ✅ **runAllTest 模式** - 遇到錯誤時繼續執行測試，與 PDTool4 完全一致
-- ✅ **14 種測量類型** - PowerSet/Read, ComPort/ConSole/TCPIP Command, SFC, GetSN, OPJudge, Wait, Relay, ChassisRotation, RF_Measurements, L6MPU 等
-- ✅ **27 種儀器驅動** - 完成！Keysight, Keithley, ITECH, GW Instek, R&S, Anritsu, Tektronix 等完整實作
-- ✅ **18 個 API 路由** - 模組化設計 (testplan/, results/ 子目錄)
-- ✅ **現代化前端** - Vue 3 Composition API + Element Plus UI，完整業務邏輯實現
+- ✅ **21 種測量類型** - PowerSet/Read, ComPort/ConSole/TCPIP Command, SFC, GetSN, OPJudge, Wait, Relay, ChassisRotation, RF_Tool, CMW100, L6MPU, SMCV100B, PEAK_CAN, Other 等
+- ✅ **28 種儀器驅動** - 完成！Keysight, Keithley, ITECH, GW Instek, R&S, Anritsu, Tektronix 等完整實作
+- ✅ **20+ 個 API 路由** - 模組化設計 (testplan/, results/, users/ 子目錄)
+- ✅ **現代化前端** - Vue 3 Composition API + Element Plus UI，8 個視圖完整實現
 - ✅ **動態參數表單** - 根據測量類型動態生成測試參數表單
+- ✅ **完整使用者管理** - 管理員可建立、編輯、刪除使用者，RBAC 角色控制
 - ✅ **完整 DUT 控制** - 繼電器控制、機架旋轉、二進位協定支援
 - ✅ **Async 架構遷移** - 70% lowsheen_lib 遷移完成 (Strangler Fig 模式)
 
@@ -582,10 +583,11 @@ erDiagram
 
 ```
 WebPDTool/
-├── backend/                    # FastAPI 後端應用 (110+ 個 Python 檔案, ~25K 行代碼)
+├── backend/                    # FastAPI 後端應用 (111 個 Python 檔案, ~24K 行代碼)
 │   ├── app/
-│   │   ├── api/               # RESTful API 路由 (18 個路由)
+│   │   ├── api/               # RESTful API 路由 (20+ 個路由)
 │   │   │   ├── auth.py        # 認證 API
+│   │   │   ├── users.py       # 使用者管理 API (admin CRUD)
 │   │   │   ├── projects.py    # 專案管理 API
 │   │   │   ├── stations.py    # 站別管理 API
 │   │   │   ├── tests.py       # 測試執行 API
@@ -604,14 +606,15 @@ WebPDTool/
 │   │   │   │   ├── cleanup.py
 │   │   │   │   └── reports.py
 │   │   │   └── __init__.py
-│   │   ├── models/            # SQLAlchemy 資料模型 (7 個 ORM 模型)
-│   │   │   ├── user.py        # 使用者模型
+│   │   ├── models/            # SQLAlchemy 資料模型 (8 個 ORM 模型)
+│   │   │   ├── user.py        # 使用者模型 (with UserRole enum)
 │   │   │   ├── project.py     # 專案模型
 │   │   │   ├── station.py     # 站別模型
 │   │   │   ├── testplan.py    # 測試計劃模型
 │   │   │   ├── test_session.py    # 測試會話模型
 │   │   │   ├── test_result.py     # 測試結果模型
-│   │   │   └── sfc_log.py         # SFC 日誌模型
+│   │   │   ├── sfc_log.py         # SFC 日誌模型
+│   │   │   └── __init__.py
 │   │   ├── services/          # 業務邏輯層 (7 個核心服務)
 │   │   │   ├── auth.py        # 認證服務
 │   │   │   ├── test_engine.py         # 測試引擎
@@ -625,7 +628,7 @@ WebPDTool/
 │   │   │   │   ├── relay_control.py
 │   │   │   │   ├── binary_protocol.py
 │   │   │   │   └── chassis_rotation.py
-│   │   │   └── instruments/           # 27 種儀器驅動實現
+│   │   │   └── instruments/           # 28 種儀器驅動實現
 │   │   │       ├── __init__.py
 │   │   │       ├── base.py            # BaseInstrumentDriver 基類
 │   │   │       ├── a2260b.py          # Keysight 多功能儀器
@@ -639,6 +642,7 @@ WebPDTool/
 │   │   │       ├── mdo34.py           # Tektronix 示波器
 │   │   │       ├── it6723c.py         # ITECH 電源
 │   │   │       ├── model2303.py       # GW Instek 直流電源
+│   │   │       ├── model2306.py       # GW Instek 數位負載
 │   │   │       ├── aps7050.py         # RF 電源放大器
 │   │   │       ├── comport_command.py # 串口通訊 (async class)
 │   │   │       ├── tcpip_command.py   # TCP/IP 通訊 (async class)
@@ -652,10 +656,10 @@ WebPDTool/
 │   │   │       ├── daq973a.py         # DAQ 資料採集
 │   │   │       ├── l6mpu_ssh_comport.py  # L6MPU 混合模式
 │   │   │       ├── l6mpu_pos_ssh.py   # L6MPU 位置控制
-│   │   │       └── model2306.py       # GW Instek 數位負載
-│   │   ├── measurements/      # 測量抽象層 (14 種測量類型)
+│   │   │       └── dwf_constants.py   # Digilent Waveforms 常數
+│   │   ├── measurements/      # 測量抽象層 (21 種測量類型)
 │   │   │   ├── base.py        # BaseMeasurement 基類 (PDTool4 驗證邏輯)
-│   │   │   ├── implementations.py  # 14 種測量實作
+│   │   │   ├── implementations.py  # 21 種測量實作
 │   │   │   └── __init__.py
 │   │   ├── config/            # 配置管理
 │   │   │   ├── instruments.py # 儀器配置 (InstrumentConfig)
@@ -689,6 +693,7 @@ WebPDTool/
 │   ├── tests/                 # 測試套件
 │   │   ├── test_api/
 │   │   ├── test_services/
+│   │   ├── test_integration/
 │   │   └── conftest.py
 │   ├── alembic/               # 資料庫遷移
 │   │   ├── versions/          # 遷移版本
@@ -703,15 +708,16 @@ WebPDTool/
 │   ├── .env.example           # 環境變數範本
 │   ├── .dockerignore          # Docker 忽略檔案
 │   └── alembic.ini            # Alembic 初始化檔案
-├── frontend/                  # Vue 3 前端應用 (25+ 個檔案, ~6.5K 行代碼)
+├── frontend/                  # Vue 3 前端應用 (~7K 行代碼)
 │   ├── src/
-│   │   ├── views/             # 頁面組件 (6 個視圖)
+│   │   ├── views/             # 頁面組件 (8 個視圖)
 │   │   │   ├── Login.vue      # 登入頁面
 │   │   │   ├── TestMain.vue   # 測試執行主介面 (runAllTest 模式支援)
 │   │   │   ├── TestExecution.vue  # 測試執行監控
 │   │   │   ├── TestHistory.vue    # 測試歷史查詢
 │   │   │   ├── TestPlanManage.vue  # 測試計劃管理
 │   │   │   ├── ProjectManage.vue   # 專案站別管理
+│   │   │   ├── UserManage.vue      # 使用者管理 (admin only)
 │   │   │   └── SystemConfig.vue    # 系統配置管理
 │   │   ├── components/        # 可複用組件
 │   │   │   ├── ProjectStationSelector.vue  # 專案站別選擇器
@@ -721,14 +727,15 @@ WebPDTool/
 │   │   ├── api/               # API 客戶端 (7 個模組)
 │   │   │   ├── client.js      # Axios 客戶端配置 (JWT 攔截器)
 │   │   │   ├── auth.js        # 認證 API 客戶端
+│   │   │   ├── users.js       # 使用者 API 客戶端
 │   │   │   ├── projects.js    # 專案 API 客戶端
 │   │   │   ├── testplans.js   # 測試計劃 API 客戶端
 │   │   │   ├── tests.js       # 測試執行 API 客戶端
-│   │   │   ├── measurements.js # 測量 API 客戶端
-│   │   │   └── __init__.js
+│   │   │   └── measurements.js # 測量 API 客戶端
 │   │   ├── stores/            # Pinia 狀態管理
 │   │   │   ├── auth.js        # 認證狀態
-│   │   │   └── project.js     # 專案狀態
+│   │   │   ├── project.js     # 專案狀態
+│   │   │   └── users.js       # 使用者狀態
 │   │   ├── router/            # Vue Router 配置
 │   │   │   └── index.js
 │   │   ├── App.vue            # 根組件
@@ -754,29 +761,15 @@ WebPDTool/
 │   ├── REFACTORING_SUMMARY.md          # 重構完成報告
 │   ├── PDTool4_Measurement_Module_Analysis.md  # PDTool4 分析
 │   ├── README_import_testplan.md        # 測試計劃匯入指南
+│   ├── api/                               # API 文檔
+│   │   └── users-api.md                   # 使用者 API 參考
 │   ├── analysis/                         # 代碼分析
-│   │   ├── lowsheen_lib_migration_validation_2026_02_24.md
-│   │   └── field-usage-analysis.md
-│   ├── bugfix/                          # 修復記錄 (15+ issues)
-│   │   ├── README.md                    # Bug fix 索引
-│   │   ├── ISSUE9_console_comport_tcpip_measurement_chain.md
-│   │   └── ...
-│   ├── code_review/                     # 代碼審查
-│   │   ├── SUMMARY.md                   # 審查摘要
-│   │   ├── LOWSHEEN_LIB_DEPRECATION_ANALYSIS_2026_02_23.md
-│   │   ├── ENV_CONFIGURATION_ANALYSIS_2026_02_11.md
-│   │   └── ...
-│   ├── lowsheen_lib/                    # lowsheen_lib 遷移文檔
-│   │   ├── MIGRATION_SUMMARY.md
-│   │   ├── INSTRUMENT_MIGRATION.md
-│   │   └── README.md
-│   ├── features/                        # 功能文檔
-│   │   ├── command-measurement-migration.md
-│   │   └── automatic-report-generation.md
-│   ├── plans/                           # 實施計劃
-│   │   ├── 2026-02-24-command-measurement-migration.md
-│   │   └── ...
-│   └── architecture/          # 架構文檔
+│   ├── bugfix/                            # 修復記錄 (20+ issues)
+│   ├── code_review/                       # 代碼審查
+│   ├── lowsheen_lib/                      # lowsheen_lib 遷移文檔
+│   ├── features/                          # 功能文檔
+│   ├── plans/                             # 實施計劃
+│   └── architecture/                      # 架構文檔
 ├── docker-compose.yml         # Docker Compose 配置 (生產環境)
 ├── docker-compose.dev.yml     # Docker Compose 開發環境配置
 ├── docker-start.sh            # Docker 啟動腳本
@@ -865,7 +858,7 @@ bash scripts/batch_import.sh
 
 ## 📋 API 端點列表
 
-**總路由數**: 18 個 (模組化架構: testplan/ 4 個, results/ 6 個子路由)
+**總路由數**: 20+ 個 (模組化架構: testplan/ 4 個, results/ 6 個子路由)
 
 ### 認證模組 (Authentication)
 
@@ -875,6 +868,17 @@ bash scripts/batch_import.sh
 | `POST` | `/api/auth/logout` | 使用者登出 |
 | `POST` | `/api/auth/refresh` | 刷新 JWT Token |
 | `GET` | `/api/auth/me` | 獲取當前使用者資訊 |
+
+### 使用者管理 (Users) - Admin Only
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| `GET` | `/api/users` | 列出使用者 (支援分頁、搜尋、篩選) |
+| `GET` | `/api/users/{id}` | 獲取特定使用者 |
+| `POST` | `/api/users` | 建立新使用者 (admin only) |
+| `PUT` | `/api/users/{id}` | 更新使用者 (admin only) |
+| `PUT` | `/api/users/{id}/password` | 修改密碼 (admin or self) |
+| `DELETE` | `/api/users/{id}` | 刪除使用者 (admin only) |
 
 ### 專案管理 (Projects)
 
@@ -950,11 +954,12 @@ bash scripts/batch_import.sh
 | 功能模組 | 完成度 | 說明 |
 |---------|--------|------|
 | **資料庫設計** | 100% | 9 個資料表完整設計與實現 |
-| **後端 API** | 100% | 18 個路由完整實現 |
-| **前端 UI** | 95% | 7 個視圖，功能完整，細節優化中 |
-| **測量服務** | 100% | 14 種測量類型，BaseMeasurement 基類完整 |
-| **儀器驅動** | 100% | 27 種儀器驅動完整實現 |
+| **後端 API** | 100% | 20+ 個路由完整實現 (含使用者管理) |
+| **前端 UI** | 98% | 8 個視圖，功能完整 |
+| **測量服務** | 100% | 21 種測量類型，BaseMeasurement 基類完整 |
+| **儀器驅動** | 100% | 28 種儀器驅動完整實現 |
 | **Command 測量遷移** | 100% | ComPort/ConSole/TCPIP 完整遷移至 async class |
+| **使用者管理** | 100% | Admin CRUD 操作完成，RBAC 角色控制 |
 | **lowsheen_lib 遷移** | 70% | 執行路徑遷移完成，清理路徑待遷移 |
 | **runAllTest 模式** | 100% | 完整支援，邏輯與 PDTool4 一致 |
 | **測試執行引擎** | 100% | 非同步架構，會話管理完整 |
@@ -969,27 +974,29 @@ bash scripts/batch_import.sh
 
 | 指標 | 數值 |
 |------|------|
-| **後端 Python 檔案** | 110+ 個 |
-| **後端代碼行數** | ~25,000 行 |
-| **前端檔案 (Vue/JS)** | 25+ 個 |
-| **前端代碼行數** | ~6,500 行 |
+| **後端 Python 檔案** | 111 個 (app 目錄) |
+| **後端代碼行數** | ~24,000 行 (app 目錄) |
+| **前端檔案 (Vue/JS)** | 8 個視圖 + 6 個 API 模組 |
+| **前端代碼行數** | ~6,900 行 (src 目錄) |
 | **資料庫表** | 9 個 |
-| **API 路由** | 18 個 |
-| **ORM 模型** | 7 個 |
-| **測量類型** | 14 種 |
-| **儀器驅動** | 27 個 |
-| **Bug 修正** | 15+ |
-| **Code Review 文檔** | 8+ |
+| **API 路由** | 20+ 個 |
+| **ORM 模型** | 8 個 |
+| **測量類型** | 21 種 |
+| **儀器驅動** | 28 個 |
+| **Bug 修正** | 20+ |
+| **Code Review 文檔** | 10+ |
 
 ### 最近完成
 
+- ✅ 2026-02-25: 使用者管理 UI 完成 (UserManage.vue, users store, API)
+- ✅ 2026-02-25: 使用者 API 搜尋與篩選功能 (offset, limit, search, role, is_active)
 - ✅ 2026-02-24: Command 測量遷移完成 (ComPort/ConSole/TCPIP → async class)
 - ✅ 2026-02-24: Issue #9 修正 - console/comport/tcpip 測量執行鏈
 - ✅ 2026-02-23: lowsheen_lib 遷移驗證分析 (70% 完成度)
 - ✅ 2026-02-11: 環境配置分析報告 (雙層配置架構驗證)
 - ✅ 2026-02-10: 動態參數表單實現與前端優化
 - ✅ 2026-02-06: 測量服務架構重構，代碼縮減 66.6%
-- ✅ 2026-02-05: 27 種儀器驅動全部實現
+- ✅ 2026-02-05: 28 種儀器驅動全部實現
 - ✅ 2026-01-30: DUT 控制系統整合 (繼電器、機架、協定)
 - ✅ 2026-01-28: 高優先級遷移完成，11 種測量類型實現
 
@@ -1019,10 +1026,11 @@ bash scripts/batch_import.sh
 | **Phase 3: 重置路徑** | ❌ 待辦 | `reset_instrument()` 仍使用 subprocess |
 | **Phase 4: script_map** | ⚠️ 繞過 | `instrument_executor.py` script_map 被 Phase 1 繞過 |
 
-### 已遷移測量類型 (14 種)
+### 已遷移測量類型 (21 種)
 
 | 測量類型 | 原始腳本 | 現代實作 | 狀態 |
 |---------|---------|---------|------|
+| Dummy | (測試用) | `DummyMeasurement` | ✅ |
 | PowerRead | DAQ973A_test.py, etc. | `PowerReadMeasurement` | ✅ |
 | PowerSet | 2303_test.py, etc. | `PowerSetMeasurement` | ✅ |
 | ComPort | ComPortCommand.py | `ComPortMeasurement` | ✅ |
@@ -1034,18 +1042,25 @@ bash scripts/batch_import.sh
 | Wait | Wait_test.py | `WaitMeasurement` | ✅ |
 | Relay | relay_control.py | `RelayMeasurement` | ✅ |
 | ChassisRotation | chassis_rotation.py | `ChassisRotationMeasurement` | ✅ |
-| RF_Measurements | RF_tool/ | `RF_Measurement` | ✅ |
-| L6MPU | l6mpu_*.py | `L6MPUMeasurement` | ✅ |
+| RF_Tool_LTE_TX | RF_tool/ | `RF_Tool_LTE_TX_Measurement` | ✅ |
+| RF_Tool_LTE_RX | RF_tool/ | `RF_Tool_LTE_RX_Measurement` | ✅ |
+| CMW100_BLE | CMW100/ | `CMW100_BLE_Measurement` | ✅ |
+| CMW100_WiFi | CMW100/ | `CMW100_WiFi_Measurement` | ✅ |
+| L6MPU_LTE_Check | l6mpu_*.py | `L6MPU_LTE_Check_Measurement` | ✅ |
+| L6MPU_PLC_Test | l6mpu_*.py | `L6MPU_PLC_Test_Measurement` | ✅ |
+| SMCV100B_RF | smcv100b.py | `SMCV100B_RF_Output_Measurement` | ✅ |
+| PEAK_CAN | PEAK_API/ | `PEAK_CAN_Message_Measurement` | ✅ |
 | Other | other.py | `OtherMeasurement` | ✅ |
 
-### 已遷移儀器驅動 (27 種)
+### 已遷移儀器驅動 (28 種)
 
 詳見 `docs/lowsheen_lib/MIGRATION_SUMMARY.md`
 
 | 儀器類型 | 驅動器檔案 | 狀態 |
 |---------|-----------|------|
 | DAQ973A | `daq973a.py` | ✅ |
-| MODEL2303/2306 | `model2303.py`, `model2306.py` | ✅ |
+| MODEL2303 | `model2303.py` | ✅ |
+| MODEL2306 | `model2306.py` | ✅ |
 | IT6723C | `it6723c.py` | ✅ |
 | 2260B | `a2260b.py` | ✅ |
 | APS7050 | `aps7050.py` | ✅ |
@@ -1053,21 +1068,31 @@ bash scripts/batch_import.sh
 | DAQ6510 | `daq6510.py` | ✅ |
 | PSW3072 | `psw3072.py` | ✅ |
 | KEITHLEY2015 | `keithley2015.py` | ✅ |
-| MDO34 | `mdo34.py` | ✅ (驅動器) / ❌ (implementations.py gap) |
-| ComPort | `comport_command.py` | ✅ |
-| ConSole | `console_command.py` | ✅ |
-| TCPIP | `tcpip_command.py` | ✅ |
-| RF_Tools | `smcv100b.py`, `n5182a.py`, etc. | ✅ |
-| L6MPU 系列 | `l6mpu_ssh.py`, etc. | ✅ |
-| ... (更多詳見 docs) | | |
+| MDO34 | `mdo34.py` | ✅ (驅動器) |
+| ComPort | `comport_command.py` | ✅ (async class) |
+| ConSole | `console_command.py` | ✅ (async class) |
+| TCPIP | `tcpip_command.py` | ✅ (async class) |
+| Wait | `wait_test.py` | ✅ |
+| CMW100 | `cmw100.py` | ✅ |
+| MT8872A | `mt8872a.py` | ✅ |
+| N5182A | `n5182a.py` | ✅ |
+| SMCV100B | `smcv100b.py` | ✅ |
+| FTM_On | `ftm_on.py` | ✅ |
+| Analog_Discovery_2 | `analog_discovery_2.py` | ✅ |
+| PEAK_CAN | `peak_can.py` | ✅ |
+| L6MPU_SSH | `l6mpu_ssh.py` | ✅ |
+| L6MPU_SSH_ComPort | `l6mpu_ssh_comport.py` | ✅ |
+| L6MPU_POS_SSH | `l6mpu_pos_ssh.py` | ✅ |
+| BaseInstrument | `base.py` | ✅ |
+| DWF Constants | `dwf_constants.py` | ✅ |
 
 ### 已知遷移缺口
 
 | 缺口 | 嚴重性 | 說明 |
 |------|-------|------|
-| MDO34 implementations.py 缺失 | 中等 | `PowerReadMeasurement` 無 MDO34 分支，返回 ERROR |
 | `_cleanup_used_instruments()` subprocess | 高 | 依賴 CWD=`backend/`，Docker 容器變更會破壞 |
 | `ComPortCommand.py` WindowsError | 高 | Linux/Docker 環境會拋出 NameError |
+| MDO34 implementations.py 分支 | 低 | PowerRead 可使用其他儀器驅動 |
 
 ---
 
@@ -1298,11 +1323,28 @@ SELECT COUNT(*) FROM test_plans;
 
 ## 📝 更新日誌
 
+### v0.2.0 (2026-02-25)
+
+**新增功能**
+- 使用者管理系統完成 (UserManage.vue, users API, users store)
+- 使用者搜尋與篩選 (offset, limit, search, role, is_active)
+- UserRole enum 使用 (ADMIN, ENGINEER, OPERATOR)
+- 使用者整合測試 (test_integration/test_users_integration.py)
+- ErrorMessages 常數使用統一
+
+**文檔更新**
+- 使用者 API 文檔 (`docs/api/users-api.md`)
+- README.md 根據實際 codebase 重新整理
+
+**修復**
+- 前端 getUsers 函數新增篩選支援
+- 破損的文檔連結修正
+
 ### v0.1.0 (2026-02-24)
 
 **新增功能**
 - Command 測量類型完整遷移 (ComPort/ConSole/TCPIP → async class)
-- 14 種測量類型全部實現
+- 21 種測量類型全部實現
 - 動態參數表單實現，根據測量類型動態生成表單項目
 - lowsheen_lib 遷移驗證文檔
 
@@ -1325,4 +1367,4 @@ SELECT COUNT(*) FROM test_plans;
 
 ---
 
-**最後更新**: 2026-02-24 | **版本**: v0.1.0 | **狀態**: 核心功能完整，Command 測量遷移完成，穩定版本
+**最後更新**: 2026-02-26 | **版本**: v0.2.0 | **狀態**: 核心功能完整，使用者管理完成，穩定版本
