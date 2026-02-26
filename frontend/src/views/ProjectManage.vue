@@ -667,7 +667,11 @@ onMounted(async () => {
 <style scoped>
 .project-manage-container {
   padding: 20px;
-  height: calc(100vh - 180px);
+  /* 修正: 移除固定高度，改用 flex 排列避免 nav-card 因 el-card height:100% 而撐滿容器 */
+  /* height: calc(100vh - 180px); */
+  min-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
 }
 
 /* 新增: 導航列樣式 */
@@ -684,8 +688,13 @@ onMounted(async () => {
   margin: 0;
 }
 
-.content-row {
+/* 修正: content-row 改用 flex: 1 撐滿剩餘空間，而非 height: 100% */
+/* .content-row {
   height: 100%;
+} */
+.content-row {
+  flex: 1;
+  min-height: 0;
 }
 
 .left-panel,
@@ -726,13 +735,26 @@ onMounted(async () => {
   text-align: right;
 }
 
-:deep(.el-card) {
+/* 修正: 移除 height:100% 套用至所有 el-card（包含 nav-card）的問題 */
+/* :deep(.el-card) {
   height: 100%;
   display: flex;
   flex-direction: column;
 }
 
 :deep(.el-card__body) {
+  flex: 1;
+  overflow: auto;
+} */
+
+/* 只讓 content-row 內的 el-card（左右面板）撐滿高度 */
+.content-row :deep(.el-card) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-row :deep(.el-card__body) {
   flex: 1;
   overflow: auto;
 }

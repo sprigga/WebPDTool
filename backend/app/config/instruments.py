@@ -103,30 +103,32 @@ MEASUREMENT_TEMPLATES = {
             }
         }
     },
-    "CommandTest": {
-        "comport": {
-            "required": ["Port", "Baud", "Command"],
-            "optional": ["keyWord", "spiltCount", "splitLength", "EqLimit"],
-            "example": {
-                "Port": "COM4",
-                "Baud": "9600",
-                "Command": "AT+VERSION",
-                "keyWord": "VERSION",
-                "spiltCount": "1",
-                "splitLength": "10"
-            }
-        },
-        "tcpip": {
-            "required": ["Host", "Port", "Command"],
-            "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
-            "example": {
-                "Host": "192.168.1.100",
-                "Port": "5025",
-                "Command": "*IDN?",
-                "Timeout": "5"
-            }
-        }
-    },
+    # 已移除: CommandTest 的 comport/tcpip switch_mode 與直接測試類型 comport/tcpip 功能重疊
+    # 無舊 CSV 測試計劃使用此格式，故安全移除。請改用 test_type=comport 或 test_type=tcpip
+    # "CommandTest": {
+    #     "comport": {
+    #         "required": ["Port", "Baud", "Command"],
+    #         "optional": ["keyWord", "spiltCount", "splitLength", "EqLimit"],
+    #         "example": {
+    #             "Port": "COM4",
+    #             "Baud": "9600",
+    #             "Command": "AT+VERSION",
+    #             "keyWord": "VERSION",
+    #             "spiltCount": "1",
+    #             "splitLength": "10"
+    #         }
+    #     },
+    #     "tcpip": {
+    #         "required": ["Host", "Port", "Command"],
+    #         "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
+    #         "example": {
+    #             "Host": "192.168.1.100",
+    #             "Port": "5025",
+    #             "Command": "*IDN?",
+    #             "Timeout": "5"
+    #         }
+    #     }
+    # },
     "SFCtest": {
         "default": {
             "required": ["Mode"],
@@ -282,11 +284,12 @@ MEASUREMENT_TYPE_DESCRIPTIONS = {
         "description": "Voltage/current measurement reading",
         "category": "power"
     },
-    "CommandTest": {
-        "name": "CommandTest",
-        "description": "Serial/network command execution",
-        "category": "communication"
-    },
+    # 已移除: CommandTest 描述，對應 MEASUREMENT_TEMPLATES 中 CommandTest 的移除
+    # "CommandTest": {
+    #     "name": "CommandTest",
+    #     "description": "Serial/network command execution",
+    #     "category": "communication"
+    # },
     "SFCtest": {
         "name": "SFCtest",
         "description": "SFC integration testing",

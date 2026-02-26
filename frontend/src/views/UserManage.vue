@@ -595,7 +595,12 @@ onMounted(async () => {
 <style scoped>
 .user-manage-container {
   padding: 20px;
-  height: calc(100vh - 180px);
+  /* 修正: 移除固定高度，改用 min-height 避免 el-card height:100% 撐滿整個 nav-card */
+  /* height: calc(100vh - 180px); */
+  min-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 /* 新增: 導航列樣式 */
@@ -635,13 +640,26 @@ onMounted(async () => {
   text-align: right;
 }
 
-:deep(.el-card) {
+/* 修正: 移除 height:100% 套用至所有 el-card（包含 nav-card）的問題 */
+/* :deep(.el-card) {
   height: 100%;
   display: flex;
   flex-direction: column;
 }
 
 :deep(.el-card__body) {
+  flex: 1;
+  overflow: auto;
+} */
+
+/* 只讓主要 card（使用者管理表格）伸展填滿剩餘空間 */
+.user-manage-container > .el-card:last-of-type {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.user-manage-container > .el-card:last-of-type :deep(.el-card__body) {
   flex: 1;
   overflow: auto;
 }

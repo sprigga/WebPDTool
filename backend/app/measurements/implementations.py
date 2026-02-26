@@ -1829,6 +1829,100 @@ class L6MPU_PLC_Test_Measurement(BaseMeasurement):
 
 
 # ============================================================================
+# MDO34 Measurements
+# ============================================================================
+class MDO34Measurement(BaseMeasurement):
+    """
+    Oscilloscope measurement using Tektronix MDO34.
+
+    Parameters:
+        Instrument: Instrument name in config (default: 'MDO34')
+        Channel: Oscilloscope channel number (1-4)
+        Item: Measurement type index (1-38), e.g. '9' → FREQuency, '1' → AMPlitude
+
+    Supported measurement types (38 total via MDO34Driver.MEASUREMENT_TYPES):
+        '1'=AMPlitude, '9'=FREQuency, '13'=MAXimum, '14'=MEAN,
+        '16'=MINImum, '25'=PERIod, '27'=PK2Pk, '32'=RMS, etc.
+
+    Integration: Uses MDO34Driver from backend/app/services/instruments/mdo34.py
+    """
+
+    async def execute(self) -> MeasurementResult:
+        try:
+            # Lazy imports to avoid circular imports
+            from app.services.instrument_connection import get_connection_pool
+            from app.services.instruments import get_driver_class
+            from app.core.instrument_config import get_instrument_settings
+
+            # Get parameters
+            instrument_name = get_param(self.test_params, 'Instrument', 'instrument', default='MDO34')
+            channel = get_param(self.test_params, 'Channel', 'channel')
+            item = get_param(self.test_params, 'Item', 'item')
+
+            if channel is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message="MDO34 measurement requires 'Channel' parameter (1-4)"
+                )
+            if item is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message="MDO34 measurement requires 'Item' parameter (1-38)"
+                )
+
+            self.logger.info(f"MDO34 measurement: instrument={instrument_name}, channel={channel}, item={item}")
+
+            # Get instrument configuration
+            instrument_settings = get_instrument_settings()
+            config = instrument_settings.get_instrument(instrument_name)
+            if config is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"Instrument {instrument_name} not found in configuration"
+                )
+
+            # Get driver class
+            driver_class = get_driver_class(config.type)
+            if driver_class is None:
+                return self.create_result(
+                    result="ERROR",
+                    error_message=f"No driver found for instrument type: {config.type}"
+                )
+
+            cmd_params = {
+                'Item': str(item),
+                'Channel': int(channel),
+            }
+
+            # Get connection and execute measurement
+            connection_pool = get_connection_pool()
+            async with connection_pool.get_connection(instrument_name) as conn:
+                driver = driver_class(conn)
+
+                if not hasattr(driver, '_initialized'):
+                    await driver.initialize()
+                    driver._initialized = True
+
+                result_str = await driver.execute_command(cmd_params)
+
+            # Empty result means instrument error (driver returns '' on failure)
+            if not result_str:
+                return self.create_result(
+                    result="ERROR",
+                    error_message="No instrument found"
+                )
+
+            return self.create_result(
+                result="PASS",
+                measured_value=Decimal(result_str)
+            )
+
+        except Exception as e:
+            self.logger.error(f"MDO34 measurement error: {e}", exc_info=True)
+            return self.create_result(result="ERROR", error_message=str(e))
+
+
+# ============================================================================
 # SMCV100B Measurements
 # ============================================================================
 class SMCV100B_RF_Output_Measurement(BaseMeasurement):
@@ -2043,6 +2137,8 @@ MEASUREMENT_REGISTRY = {
     # L6MPU measurements
     "L6MPU_LTE_CHECK": L6MPU_LTE_Check_Measurement,
     "L6MPU_PLC_TEST": L6MPU_PLC_Test_Measurement,
+    # MDO34 oscilloscope measurements
+    "MDO34": MDO34Measurement,
     # SMCV100B measurements
     "SMCV100B_RF": SMCV100B_RF_Output_Measurement,
     # PEAK CAN measurements
@@ -2104,6 +2200,8 @@ def get_measurement_class(test_command: str) -> Optional[type]:
         "L6MPU_PLC": "L6MPU_PLC_TEST",
         "L6MPULTE": "L6MPU_LTE_CHECK",
         "L6MPUPPLC": "L6MPU_PLC_TEST",
+        # MDO34 mappings
+        "MDO34": "MDO34",
         # SMCV100B mappings
         "SMCV100B": "SMCV100B_RF",
         "SMCV": "SMCV100B_RF",
