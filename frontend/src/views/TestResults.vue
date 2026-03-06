@@ -551,6 +551,7 @@ const formatDateTime = (dateStr) => {
 onMounted(async () => {
   try {
     await projectStore.fetchProjects()
+    await projectStore.fetchAllStations()
     await loadSessions()
   } catch (error) {
     ElMessage.error('初始化資料失敗')

@@ -561,7 +561,12 @@ async def get_session_results(
 @router.get("/sessions", response_model=List[TestSession])
 async def list_test_sessions(
     station_id: int = None,
+    project_id: int = None,
     serial_number: str = None,
+    test_plan_name: str = None,
+    final_result: str = None,
+    start_date: str = None,
+    end_date: str = None,
     limit: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -572,7 +577,12 @@ async def list_test_sessions(
 
     Args:
         station_id: Filter by station ID
+        project_id: Filter by project ID (via station join)
         serial_number: Filter by serial number (partial match)
+        test_plan_name: Filter by test plan name (via test_results join)
+        final_result: Filter by final result (PASS/FAIL/ABORT)
+        start_date: Filter sessions starting after this datetime (ISO format)
+        end_date: Filter sessions starting before this datetime (ISO format)
         limit: Maximum number of results
         offset: Number of results to skip
         db: Database session
@@ -581,22 +591,62 @@ async def list_test_sessions(
     Returns:
         List of test sessions ordered by start_time descending
     """
+    from sqlalchemy import func, exists, select as sa_select
+    from app.models.station import Station as StationModel
+
     query = db.query(TestSessionModel)
 
     if station_id:
         query = query.filter(TestSessionModel.station_id == station_id)
 
-    # Original: query = query.filter(TestSessionModel.serial_number.like(f"%{serial_number}%"))
+    # Filter by project_id via station join
+    if project_id:
+        query = query.join(StationModel, TestSessionModel.station_id == StationModel.id)\
+                     .filter(StationModel.project_id == project_id)
+
     # Modified: Use parameterized query to prevent SQL injection risk
     if serial_number:
-        # SQLAlchemy handles parameterization automatically, but using concat is more explicit and safe
-        from sqlalchemy import func
         query = query.filter(
             TestSessionModel.serial_number.like(func.concat('%', serial_number, '%'))
+        )
+
+    if final_result:
+        query = query.filter(TestSessionModel.final_result == final_result)
+
+    if start_date:
+        query = query.filter(TestSessionModel.start_time >= start_date)
+
+    if end_date:
+        query = query.filter(TestSessionModel.start_time <= end_date)
+
+    # Filter by test_plan_name via test_results → test_plans join
+    if test_plan_name:
+        query = query.filter(
+            exists(
+                sa_select(TestResultModel.id).where(
+                    TestResultModel.session_id == TestSessionModel.id
+                ).join(TestPlan, TestResultModel.test_plan_id == TestPlan.id)
+                .where(TestPlan.test_plan_name == test_plan_name)
+            )
         )
 
     sessions = query.order_by(
         desc(TestSessionModel.start_time)
     ).limit(limit).offset(offset).all()
 
-    return sessions
+    # Populate test_plan_name for each session from its first test result's plan
+    result = []
+    for session in sessions:
+        first_result = db.query(TestResultModel)\
+            .filter(TestResultModel.session_id == session.id)\
+            .first()
+        plan_name = None
+        if first_result and first_result.test_plan_id:
+            plan = db.query(TestPlan).filter(TestPlan.id == first_result.test_plan_id).first()
+            if plan:
+                plan_name = plan.test_plan_name
+        session_dict = {c.name: getattr(session, c.name) for c in session.__table__.columns}
+        session_dict['test_plan_name'] = plan_name
+        result.append(TestSession(**session_dict))
+
+    return result

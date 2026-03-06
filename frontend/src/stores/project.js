@@ -30,6 +30,21 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
+  async function fetchAllStations() {
+    try {
+      const allStations = []
+      for (const project of projects.value) {
+        const data = await getProjectStations(project.id)
+        allStations.push(...data)
+      }
+      stations.value = allStations
+      return allStations
+    } catch (error) {
+      console.error('Failed to fetch all stations:', error)
+      throw error
+    }
+  }
+
   function setCurrentProject(project) {
     currentProject.value = project
     if (project) {
@@ -62,6 +77,7 @@ export const useProjectStore = defineStore('project', () => {
     stations,
     fetchProjects,
     fetchProjectStations,
+    fetchAllStations,
     setCurrentProject,
     setCurrentStation,
     clearCurrentSelection

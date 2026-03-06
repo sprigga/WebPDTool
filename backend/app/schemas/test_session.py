@@ -55,6 +55,7 @@ class TestSession(BaseModel):
     fail_items: Optional[int] = None
     test_duration_seconds: Optional[float] = None
     created_at: datetime
+    test_plan_name: Optional[str] = None
 
     class Config:
         from_attributes = True
