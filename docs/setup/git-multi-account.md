@@ -64,6 +64,47 @@ git config user.email "plin5958@gmail.com"
 git -c user.name="Polo-Lin-TW" -c user.email="plin5958@gmail.com" commit -m "message"
 ```
 
+## GitHub CLI (gh) 帳號管理
+
+### 問題：push 時出現 403 Permission denied
+
+當 gh CLI 登入的帳號與遠端 repo 擁有者不同時，push 會失敗：
+
+```
+remote: Permission to sprigga/WebPDTool.git denied to Polo-Lin-TW.
+fatal: unable to access '...': The requested URL returned error: 403
+```
+
+### 新增帳號登入
+
+```bash
+gh auth login
+# 選擇 GitHub.com → HTTPS → Login with a web browser
+# 複製 one-time code，在瀏覽器完成驗證
+```
+
+### 切換 active 帳號
+
+```bash
+gh auth switch --user sprigga      # 切換到 sprigga
+gh auth switch --user Polo-Lin-TW  # 切換到 Polo-Lin-TW
+```
+
+### 確認目前登入狀態
+
+```bash
+gh auth status
+```
+
+### 推送流程（確保帳號正確）
+
+```bash
+gh auth switch --user sprigga
+git push origin main
+```
+
+---
+
 ## Git 設定優先級
 
 命令列 `-c` > 本地 `.git/config` > 全域 `~/.gitconfig` > 系統 `/etc/gitconfig`
