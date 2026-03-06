@@ -64,6 +64,9 @@
           <el-button size="default" @click="navigateTo('/testplan')">
             測試計劃
           </el-button>
+          <el-button size="default" @click="navigateTo('/results')">
+            測試結果查詢
+          </el-button>
           <el-button size="default" @click="navigateTo('/projects')">
             專案管理
           </el-button>
@@ -981,7 +984,7 @@ const executeMeasurements = async () => {
           total_items: testPlanItems.value.length,
           pass_items: passCount,
           fail_items: failCount + errorCount,  // 錯誤視為失敗
-          test_duration_seconds: Math.round(elapsedSeconds)
+          test_duration_seconds: elapsedSeconds
         })
         addStatusMessage('測試 session 已完成並保存', 'success')
       } catch (completeError) {
@@ -1041,15 +1044,6 @@ const executeSingleItem = async (item, index) => {
       }
     })
 
-    // 新增: 日誌輸出 item 欄位和 testParams 內容
-    console.log('[DEBUG] ============================================')
-    console.log('[DEBUG] 項目:', item.item_name)
-    console.log('[DEBUG] item 欄位:', Object.keys(item))
-    console.log('[DEBUG] item.use_result:', item.use_result)
-    console.log('[DEBUG] item.UseResult:', item.UseResult)
-    console.log('[DEBUG] item.parameters:', item.parameters)
-    console.log('[DEBUG] 建構後的 testParams:', testParams)
-
     // 修正: 合併 parameters 欄位到 testParams（優先級最高）
     // parameters 欄位包含從動態參數表單設定的值，應覆蓋資料庫欄位的值
     if (item.parameters && typeof item.parameters === 'object') {
@@ -1059,79 +1053,51 @@ const executeSingleItem = async (item, index) => {
           testParams[key] = value
         }
       })
-      console.log('[DEBUG] 合併 parameters 後的 testParams:', testParams)
     }
-    console.log('[DEBUG] testParams.use_result:', testParams.use_result)
-    console.log('[DEBUG] testParams.UseResult:', testParams.UseResult)
 
     // Handle UseResult dependency (參考 oneCSV_atlas_2.py:146-155)
     // 原有程式碼: 只檢查大寫的 UseResult，但資料庫欄位是小寫的 use_result
     // 修正: 同時檢查大小寫，並將 use_result 的值替換為實際的測量結果
     // 這樣後端就會收到實際的測量值 (例如 "123") 而不是項目名稱 (例如 "123_1")
 
-    // 新增: 詳細日誌追蹤 use_result 處理
-    console.log('[DEBUG] ============================================')
-    console.log('[DEBUG] UseResult 處理開始')
-    console.log('[DEBUG] 項目:', item.item_name)
-    console.log('[DEBUG] testParams.use_result (原始):', testParams.use_result)
-    console.log('[DEBUG] testParams.UseResult (原始):', testParams.UseResult)
-    console.log('[DEBUG] testResults.value:', testResults.value)
-    console.log('[DEBUG] testResults keys:', Object.keys(testResults.value))
-
     // 處理小寫 use_result (資料庫欄位名稱)
     if (testParams.use_result) {
-      console.log('[DEBUG] 找到小寫 use_result:', testParams.use_result)
       const useResultValue = testResults.value[testParams.use_result]
-      console.log('[DEBUG] 從 testResults 查找:', testParams.use_result, '→', useResultValue)
       if (useResultValue !== undefined) {
         // 修正: 標準化數值格式，去除 ".0" 後綴以匹配腳本期望
         // 例如: "123.0" → "123", "456.0" → "456"
         let normalizedValue = useResultValue
         if (typeof useResultValue === 'string' && /^\d+\.0$/.test(useResultValue)) {
           normalizedValue = useResultValue.replace(/\.0$/, '')
-          console.log('[DEBUG] 標準化數值:', useResultValue, '→', normalizedValue)
         }
 
         // 將 use_result 的值替換為實際的測量結果
         testParams.use_result = normalizedValue
-        console.log('[DEBUG] 替換後 use_result:', testParams.use_result)
 
         // 如果有 Command 欄位，也附加結果值 (PDTool4 兼容)
         if (testParams.Command) {
           testParams.Command = testParams.Command + ' ' + normalizedValue
         }
-      } else {
-        console.log('[DEBUG] ⚠️ 未找到對應的測試結果:', testParams.use_result)
       }
     }
 
     // 處理大寫 UseResult (向後兼容舊的命名)
     if (testParams.UseResult) {
-      console.log('[DEBUG] 找到大寫 UseResult:', testParams.UseResult)
       const useResultValue = testResults.value[testParams.UseResult]
-      console.log('[DEBUG] 從 testResults 查找:', testParams.UseResult, '→', useResultValue)
       if (useResultValue !== undefined) {
         // 修正: 標準化數值格式，去除 ".0" 後綴
         let normalizedValue = useResultValue
         if (typeof useResultValue === 'string' && /^\d+\.0$/.test(useResultValue)) {
           normalizedValue = useResultValue.replace(/\.0$/, '')
-          console.log('[DEBUG] 標準化數值:', useResultValue, '→', normalizedValue)
         }
 
         testParams.UseResult = normalizedValue
-        console.log('[DEBUG] 替換後 UseResult:', testParams.UseResult)
 
         if (testParams.Command) {
           testParams.Command = testParams.Command + ' ' + normalizedValue
         }
-      } else {
-        console.log('[DEBUG] ⚠️ 未找到對應的測試結果:', testParams.UseResult)
       }
     }
-
-    console.log('[DEBUG] 最終 testParams.use_result:', testParams.use_result)
-    console.log('[DEBUG] 最終 testParams.UseResult:', testParams.UseResult)
-    console.log('[DEBUG] ============================================')
 
     // Track used instruments
     if (testParams.Instrument) {

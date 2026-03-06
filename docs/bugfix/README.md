@@ -21,7 +21,9 @@ docs/bugfix/
 ├── dynamic-parameter-form-incomplete-templates-fix.md # 動態參數表單模板不完整修正
 ├── dynamic-parameter-form-no-display-fix.md          # 動態參數表單不顯示修正
 ├── migration_fix_20260209.md                         # 2026-02-09 遷移修正
-└── wait-msec-parameter-fix.md                        # wait_msec 參數修正（詳細指南）
+├── wait-msec-parameter-fix.md                        # wait_msec 參數修正（詳細指南）
+├── architecture-issues-fix-2026-03-06.md             # 2026-03-06 架構議題修正紀錄
+└── alembic-validation-fix-2026-03-06.md              # 2026-03-06 Alembic 可用性驗證與修正
 ```
 
 ## 問題分類
@@ -76,6 +78,22 @@ docs/bugfix/
 
 ## 最近修正的問題
 
+### 2026-03-06
+- **測試時長精度損失**：移除 `Math.round()` 保留浮點秒數
+  - 詳細文檔: [frontend-test-duration-precision-fix.md](./frontend-test-duration-precision-fix.md)
+- **TestMain 導覽列缺少「測試結果查詢」按鈕**：在按鈕組補上 `/results` 導覽按鈕
+  - 詳細文檔: [frontend-testmain-missing-nav-button-fix.md](./frontend-testmain-missing-nav-button-fix.md)
+- **Alembic 可用性驗證失敗（環境綁定問題）**：
+  - 修正 `backend/alembic/env.py`，支援 `ALEMBIC_DATABASE_URL` / `DATABASE_URL` 覆寫
+  - 避免固定綁定 `host.docker.internal` 導致 `alembic current/check` 在特定環境失敗
+  - 以 MySQL dialect offline SQL 模式完成 migration 鏈驗證
+  - 詳細文檔: [alembic-validation-fix-2026-03-06.md](./alembic-validation-fix-2026-03-06.md)
+- 架構議題修正（由 code review simplify 延伸）
+  - 同步 SQLAlchemy + `async def` 路由混用：將無 `await` 路由改為同步 `def`
+  - 管理頁導覽列重複：抽取共用元件 `AppNavBar.vue`
+  - 整合測試 DB 不一致：`test_user_management_flow.py` 改用 `TEST_DATABASE_URL`（測試 MySQL）
+  - 詳細文檔: [architecture-issues-fix-2026-03-06.md](./architecture-issues-fix-2026-03-06.md)
+
 ### 2026-02-24
 - **Issue #9**: console/comport/tcpip 測量類型執行鏈多重修正
   - 修正 `executeSingleItem()` specialTypes 覆寫問題（→ OtherMeasurement）
@@ -126,10 +144,12 @@ docs/bugfix/
 - 表單不顯示
 - 參數欄位缺失
 - 選項清單為空
+- 導覽按鈕缺失
 
 **相關文檔:**
 - [dynamic-parameter-form-no-display-fix.md](./dynamic-parameter-form-no-display-fix.md)
 - [dynamic-parameter-form-incomplete-templates-fix.md](./dynamic-parameter-form-incomplete-templates-fix.md)
+- [frontend-testmain-missing-nav-button-fix.md](./frontend-testmain-missing-nav-button-fix.md)
 
 ### 4. 環境配置問題
 
@@ -211,7 +231,7 @@ docs/bugfix/
 - **進行中問題**: 0
 - **未解決問題**: 0
 
-最後更新: 2026-02-24
+最後更新: 2026-03-06
 
 ## 聯絡資訊
 

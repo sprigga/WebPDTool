@@ -1,5 +1,5 @@
 """Test Session Model"""
-from sqlalchemy import Column, Integer, String, TIMESTAMP, Enum, ForeignKey, func
+from sqlalchemy import Column, Integer, String, TIMESTAMP, Enum, ForeignKey, Float, func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 import enum
@@ -28,7 +28,7 @@ class TestSession(Base):
     total_items = Column(Integer, nullable=True)
     pass_items = Column(Integer, nullable=True)
     fail_items = Column(Integer, nullable=True)
-    test_duration_seconds = Column(Integer, nullable=True)
+    test_duration_seconds = Column(Float, nullable=True)
 
     created_at = Column(TIMESTAMP, server_default=func.now())
 

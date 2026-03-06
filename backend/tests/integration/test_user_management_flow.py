@@ -5,7 +5,6 @@ real-world usage scenarios where an admin user performs a series of operations
 to manage users in the system.
 """
 import pytest
-import tempfile
 import os
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -21,18 +20,16 @@ from app.core.constants import ErrorMessages
 @pytest.fixture(scope="function")
 def db_session():
     """Get database session with fresh schema for each test"""
-    # Use a file-based database for tests to avoid thread/connection issues
-    db_fd, db_path = tempfile.mkstemp(suffix=".db")
-    os.close(db_fd)
+    test_database_url = os.getenv("TEST_DATABASE_URL")
+    if not test_database_url:
+        pytest.skip("TEST_DATABASE_URL is required for integration tests")
+    if "test" not in test_database_url.lower():
+        pytest.skip("TEST_DATABASE_URL must point to a dedicated test database")
 
-    # connect_args={"check_same_thread": False} is needed for TestClient
-    test_engine = create_engine(
-        f"sqlite:///{db_path}",
-        connect_args={"check_same_thread": False}
-    )
+    test_engine = create_engine(test_database_url, pool_pre_ping=True)
     TestingSessionLocal = sessionmaker(bind=test_engine)
 
-    # Create all tables
+    Base.metadata.drop_all(bind=test_engine)
     Base.metadata.create_all(bind=test_engine)
 
     db = TestingSessionLocal()
@@ -40,12 +37,8 @@ def db_session():
         yield db
     finally:
         db.close()
+        Base.metadata.drop_all(bind=test_engine)
         test_engine.dispose()
-        # Clean up the temporary file
-        try:
-            os.unlink(db_path)
-        except FileNotFoundError:
-            pass
 
 
 @pytest.fixture

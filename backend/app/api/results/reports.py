@@ -31,7 +31,7 @@ class SavedReportInfo(BaseModel):
 
 
 @router.get("/reports/list", response_model=List[SavedReportInfo])
-async def list_saved_reports(
+def list_saved_reports(
     project_name: Optional[str] = Query(None, description="Filter by project name"),
     station_name: Optional[str] = Query(None, description="Filter by station name"),
     date_from: Optional[date] = Query(None, description="Filter from date (YYYY-MM-DD)"),
@@ -117,7 +117,7 @@ async def list_saved_reports(
 
 
 @router.get("/reports/download/{session_id}")
-async def download_saved_report(
+def download_saved_report(
     session_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -163,7 +163,7 @@ async def download_saved_report(
 
 
 @router.get("/reports/download-by-path")
-async def download_report_by_path(
+def download_report_by_path(
     filepath: str = Query(..., description="Full path to the report file"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -227,7 +227,7 @@ async def download_report_by_path(
 
 
 @router.delete("/reports/cleanup")
-async def cleanup_old_reports(
+def cleanup_old_reports(
     days_to_keep: int = Query(90, ge=1, le=3650, description="Number of days to keep reports"),
     project_name: Optional[str] = Query(None, description="Limit cleanup to specific project"),
     station_name: Optional[str] = Query(None, description="Limit cleanup to specific station"),

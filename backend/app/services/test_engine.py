@@ -403,7 +403,7 @@ class TestEngine:
             
             # Calculate duration
             if test_state.start_time:
-                duration_seconds = int((datetime.utcnow() - test_state.start_time).total_seconds())
+                duration_seconds = round((datetime.utcnow() - test_state.start_time).total_seconds(), 6)
             else:
                 duration_seconds = 0
             

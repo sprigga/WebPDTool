@@ -1,32 +1,6 @@
 <template>
   <div class="project-manage-container">
-    <!-- 新增: 導航列 - 提供快速存取各個管理頁面 -->
-    <el-card class="nav-card" shadow="never">
-      <el-row :gutter="10" align="middle" justify="space-between">
-        <el-col :span="18">
-          <div class="nav-buttons">
-            <el-button size="default" @click="navigateTo('/main')">
-              測試主畫面
-            </el-button>
-            <el-button size="default" @click="navigateTo('/testplan')">
-              測試計劃管理
-            </el-button>
-            <el-button type="primary" size="default" disabled>
-              專案管理
-            </el-button>
-            <el-button size="default" @click="navigateTo('/users')">
-              使用者管理
-            </el-button>
-          </div>
-        </el-col>
-        <el-col :span="6" style="text-align: right">
-          <el-text type="info">{{ authStore.user?.username || '-' }}</el-text>
-          <el-button type="danger" size="small" @click="handleLogout" style="margin-left: 10px">
-            登出
-          </el-button>
-        </el-col>
-      </el-row>
-    </el-card>
+    <AppNavBar current-page="projects" />
 
     <el-alert
       v-if="!isAdmin"
@@ -325,37 +299,19 @@
 
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
-import { useRouter } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
 import { createProject, updateProject, deleteProject, createStation, updateStation, deleteStation } from '@/api/projects'
+import AppNavBar from '@/components/AppNavBar.vue'
 
-// 新增: Router 用於導航
-const router = useRouter()
 const projectStore = useProjectStore()
 const authStore = useAuthStore()
 
 // 原有程式碼: 重複聲明的變數已移除 (lines 340-341)
 // const projectStore = useProjectStore()  // 移除重複聲明
 // const authStore = useAuthStore()  // 移除重複聲明
-
-// 新增: 導航函數
-const navigateTo = (path) => {
-  router.push(path)
-}
-
-// 新增: 登出函數
-const handleLogout = async () => {
-  try {
-    await authStore.logout()
-    router.push('/login')
-  } catch (error) {
-    console.error('Logout failed:', error)
-    router.push('/login')
-  }
-}
 
 // State
 const selectedProjectId = ref(parseInt(localStorage.getItem('selectedProjectId')) || null)
@@ -672,20 +628,6 @@ onMounted(async () => {
   min-height: calc(100vh - 40px);
   display: flex;
   flex-direction: column;
-}
-
-/* 新增: 導航列樣式 */
-.nav-card {
-  margin-bottom: 20px;
-}
-
-.nav-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.nav-buttons .el-button {
-  margin: 0;
 }
 
 /* 修正: content-row 改用 flex: 1 撐滿剩餘空間，而非 height: 100% */

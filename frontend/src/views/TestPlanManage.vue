@@ -1,32 +1,6 @@
 <template>
   <div class="testplan-manage-container">
-    <!-- 新增: 導航列 - 提供快速存取各個管理頁面 -->
-    <el-card class="nav-card" shadow="never">
-      <el-row :gutter="10" align="middle" justify="space-between">
-        <el-col :span="18">
-          <div class="nav-buttons">
-            <el-button size="default" @click="navigateTo('/main')">
-              測試主畫面
-            </el-button>
-            <el-button type="primary" size="default" disabled>
-              測試計劃管理
-            </el-button>
-            <el-button size="default" @click="navigateTo('/projects')">
-              專案管理
-            </el-button>
-            <el-button size="default" @click="navigateTo('/users')">
-              使用者管理
-            </el-button>
-          </div>
-        </el-col>
-        <el-col :span="6" style="text-align: right">
-          <el-text type="info">{{ authStore.user?.username || '-' }}</el-text>
-          <el-button type="danger" size="small" @click="handleLogout" style="margin-left: 10px">
-            登出
-          </el-button>
-        </el-col>
-      </el-row>
-    </el-card>
+    <AppNavBar current-page="testplan" />
 
     <el-card>
       <template #header>
@@ -530,31 +504,9 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
-import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Plus, Delete, QuestionFilled } from '@element-plus/icons-vue'  // 新增: QuestionFilled icon 用於提示
-
-// 新增: Router 用於導航
-const router = useRouter()
-const authStore = useAuthStore()
-
-// 新增: 導航函數
-const navigateTo = (path) => {
-  router.push(path)
-}
-
-// 新增: 登出函數
-const handleLogout = async () => {
-  try {
-    await authStore.logout()
-    router.push('/login')
-  } catch (error) {
-    console.error('Logout failed:', error)
-    router.push('/login')
-  }
-}
 import {
   getStationTestPlan,
   uploadTestPlanCSV,
@@ -567,6 +519,7 @@ import {
 import DynamicParamForm from '@/components/DynamicParamForm.vue'
 // 修正: 引入 ProjectStationSelector 元件
 import ProjectStationSelector from '@/components/ProjectStationSelector.vue'
+import AppNavBar from '@/components/AppNavBar.vue'
 import { useMeasurementParams } from '@/composables/useMeasurementParams'
 // 新增: 獲取驗證類型選項
 import { getValidationTypes } from '@/api/measurements'
@@ -1112,19 +1065,6 @@ onMounted(async () => {
 }
 
 /* 新增: 導航列樣式 */
-.nav-card {
-  margin-bottom: 20px;
-}
-
-.nav-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.nav-buttons .el-button {
-  margin: 0;
-}
-
 .card-header {
   display: flex;
   justify-content: space-between;

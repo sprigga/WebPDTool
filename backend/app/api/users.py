@@ -11,6 +11,7 @@ from app.schemas.user import UserCreate, UserUpdate, UserInDB, PasswordChange
 from app.models.user import User as UserModel, UserRole
 from app.services import auth as auth_service
 from app.dependencies import get_current_active_user
+from app.core.security import get_password_hash
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ USER_UPDATE_WHITELIST: Set[str] = {"full_name", "email", "is_active"}
 
 
 @router.get("", response_model=List[UserInDB])
-async def get_users(
+def get_users(
     offset: int = Query(0, ge=0, description="Number of records to skip (pagination)"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     search: Optional[str] = None,
@@ -64,7 +65,7 @@ async def get_users(
 
 
 @router.get("/{user_id}", response_model=UserInDB)
-async def get_user(
+def get_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -76,7 +77,7 @@ async def get_user(
 
 
 @router.post("", response_model=UserInDB, status_code=status.HTTP_201_CREATED)
-async def create_user(
+def create_user(
     user: UserCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -102,7 +103,7 @@ async def create_user(
 
 
 @router.put("/{user_id}", response_model=UserInDB)
-async def update_user(
+def update_user(
     user_id: int,
     user: UserUpdate,
     db: Session = Depends(get_db),
@@ -132,7 +133,7 @@ async def update_user(
 
 
 @router.put("/{user_id}/password", response_model=UserInDB)
-async def change_user_password(
+def change_user_password(
     user_id: int,
     password_data: PasswordChange,
     db: Session = Depends(get_db),
@@ -158,7 +159,6 @@ async def change_user_password(
     # Now using centralized get_entity_or_404 helper from app/core/api_helpers.py
     db_user = get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
 
-    from app.core.security import get_password_hash
     db_user.password_hash = get_password_hash(password_data.new_password)
     db.commit()
     db.refresh(db_user)
@@ -166,7 +166,7 @@ async def change_user_password(
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(
+def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)

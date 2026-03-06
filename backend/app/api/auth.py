@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
+def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     """
     User login endpoint
 
@@ -53,7 +53,7 @@ async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login-form", response_model=Token)
-async def login_form(
+def login_form(
     form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
     """
@@ -79,7 +79,7 @@ async def login_form(
 
 
 @router.post("/logout")
-async def logout(current_user: dict = Depends(get_current_active_user)):
+def logout(current_user: dict = Depends(get_current_active_user)):
     """
     User logout endpoint
 
@@ -91,7 +91,7 @@ async def logout(current_user: dict = Depends(get_current_active_user)):
 
 
 @router.get("/me", response_model=UserSchema)
-async def get_current_user_info(
+def get_current_user_info(
     current_user: dict = Depends(get_current_active_user), db: Session = Depends(get_db)
 ):
     """
@@ -111,7 +111,7 @@ async def get_current_user_info(
 
 
 @router.post("/refresh", response_model=Token)
-async def refresh_token(current_user: dict = Depends(get_current_active_user)):
+def refresh_token(current_user: dict = Depends(get_current_active_user)):
     """
     Refresh access token
     """

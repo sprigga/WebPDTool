@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 @router.get("", response_model=List[Project])
-async def get_projects(
+def get_projects(
     # Original code: skip parameter (inconsistent with tests.py)
     # Modified: Renamed to offset for API consistency across all endpoints
     offset: int = 0,
@@ -44,7 +44,7 @@ async def get_projects(
 
 
 @router.get("/{project_id}", response_model=ProjectWithStations)
-async def get_project(
+def get_project(
     project_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -71,7 +71,7 @@ async def get_project(
 
 
 @router.post("", response_model=Project, status_code=status.HTTP_201_CREATED)
-async def create_project(
+def create_project(
     project: ProjectCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -119,7 +119,7 @@ async def create_project(
 
 
 @router.put("/{project_id}", response_model=Project)
-async def update_project(
+def update_project(
     project_id: int,
     project: ProjectUpdate,
     db: Session = Depends(get_db),
@@ -169,7 +169,7 @@ async def update_project(
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project(
+def delete_project(
     project_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)

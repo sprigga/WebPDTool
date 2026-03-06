@@ -38,7 +38,7 @@ class TestSessionComplete(BaseModel):
     total_items: int
     pass_items: int
     fail_items: int
-    test_duration_seconds: int
+    test_duration_seconds: float
 
 
 class TestSession(BaseModel):
@@ -53,7 +53,7 @@ class TestSession(BaseModel):
     total_items: Optional[int] = None
     pass_items: Optional[int] = None
     fail_items: Optional[int] = None
-    test_duration_seconds: Optional[int] = None
+    test_duration_seconds: Optional[float] = None
     created_at: datetime
 
     class Config:

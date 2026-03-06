@@ -117,19 +117,19 @@ class OtherMeasurement(BaseMeasurement):
             #   - test_plan_item.use_result: 資料庫原始值 "123_1" (測項名稱)
             #   - 應該優先使用 test_params 的值，因為那是已經處理過的實際測量值
 
-            # 新增: 詳細日誌追蹤 use_result 的來源和值
-            self.logger.info(f"[DEBUG] test_plan_item keys: {list(self.test_plan_item.keys())}")
-            self.logger.info(f"[DEBUG] test_params keys: {list(self.test_params.keys()) if self.test_params else 'None'}")
-            self.logger.info(f"[DEBUG] use_result from test_plan_item (原始值): {self.test_plan_item.get('use_result')}")
-            self.logger.info(f"[DEBUG] use_result from test_params (前端替換值): {get_param(self.test_params, 'use_result', 'UseResult')}")
+            # 追蹤 use_result 的來源和值
+            self.logger.debug(f"test_plan_item keys: {list(self.test_plan_item.keys())}")
+            self.logger.debug(f"test_params keys: {list(self.test_params.keys()) if self.test_params else 'None'}")
+            self.logger.debug(f"use_result from test_plan_item (原始值): {self.test_plan_item.get('use_result')}")
+            self.logger.debug(f"use_result from test_params (前端替換值): {get_param(self.test_params, 'use_result', 'UseResult')}")
 
             # 修正: 優先使用 test_params (前端替換後的值)，只有當 test_params 沒有時才使用 test_plan_item
             use_result = get_param(self.test_params, "use_result", "UseResult") or self.test_plan_item.get("use_result")
             timeout = get_param(self.test_params, "timeout", "Timeout") or self.test_plan_item.get("timeout", 5000)
             wait_msec = get_param(self.test_params, "wait_msec", "WaitmSec") or self.test_plan_item.get("wait_msec", 0)
 
-            self.logger.info(f"[DEBUG] Final use_result value: {use_result}")
-            self.logger.info(f"[DEBUG] timeout: {timeout}, wait_msec: {wait_msec}")
+            self.logger.debug(f"Final use_result value: {use_result}")
+            self.logger.debug(f"timeout: {timeout}, wait_msec: {wait_msec}")
 
             # 新增: 當 switch_mode 為 "script" 時，從 command 欄位讀取腳本路徑或命令
             # 這是通用腳本執行模式，允許在「命令」欄位中指定完整的腳本路徑或命令
@@ -217,9 +217,8 @@ class OtherMeasurement(BaseMeasurement):
                 timeout_seconds = timeout / 1000.0
                 cmd = ["python3", script_path] + args
 
-                # 新增: 日誌顯示實際執行的命令
-                self.logger.info(f"[DEBUG] Executing command: {' '.join(cmd)}")
-                self.logger.info(f"[DEBUG] use_result parameter: {use_result} (type: {type(use_result).__name__})")
+                self.logger.debug(f"Executing command: {' '.join(cmd)}")
+                self.logger.debug(f"use_result parameter: {use_result} (type: {type(use_result).__name__})")
 
                 # 使用腳本目錄作為工作目錄
                 cwd = scripts_dir
@@ -262,16 +261,16 @@ class OtherMeasurement(BaseMeasurement):
                 # 先嘗試解析為整數
                 if output.isdigit() or (output.startswith('-') and output[1:].isdigit()):
                     measured_value = int(output)
-                    self.logger.info(f"[DEBUG] Parsed as integer: {measured_value}")
+                    self.logger.debug(f"Parsed as integer: {measured_value}")
                 else:
                     # 嘗試解析為浮點數
                     measured_value = float(output)
-                    self.logger.info(f"[DEBUG] Parsed as float: {measured_value}")
+                    self.logger.debug(f"Parsed as float: {measured_value}")
             except ValueError:
                 # String result (e.g., "Hello World!")
                 # 修正: 使用 StringType.cast() 而非 StringType()
                 measured_value = StringType.cast(output)
-                self.logger.info(f"[DEBUG] Parsed as string: {measured_value}")
+                self.logger.debug(f"Parsed as string: {measured_value}")
 
             # Validate result
             is_valid, error_msg = self.validate_result(measured_value)
@@ -282,10 +281,10 @@ class OtherMeasurement(BaseMeasurement):
                 error_message=error_msg if not is_valid else None
             )
 
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             return self.create_result(
                 result="ERROR",
-                error_message=f"Script not found: {script_path}"
+                error_message=f"Script not found: {e}"
             )
         except Exception as e:
             self.logger.error(f"Other measurement error: {e}", exc_info=True)

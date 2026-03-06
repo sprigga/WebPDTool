@@ -38,7 +38,7 @@ class MeasurementResultResponse(BaseModel):
 
 
 @router.get("/results", response_model=List[MeasurementResultResponse])
-async def get_measurement_results(
+def get_measurement_results(
     # Original code: skip parameter (inconsistent with tests.py which uses offset)
     # Modified: Renamed to offset for API consistency
     offset: int = Query(0, ge=0, description="Number of records to skip (pagination)"),

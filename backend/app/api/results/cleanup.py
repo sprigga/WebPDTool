@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_test_session(
+def delete_test_session(
     session_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -71,7 +71,7 @@ async def delete_test_session(
 
 
 @router.post("/cleanup")
-async def cleanup_old_results(
+def cleanup_old_results(
     days_to_keep: int = Query(30, ge=1, le=365),
     dry_run: bool = Query(True),
     db: Session = Depends(get_db),

@@ -20,7 +20,7 @@ router = APIRouter()
 
 
 @router.get("/stations/{station_id}/testplan", response_model=List[TestPlanSchema])
-async def get_station_testplan(
+def get_station_testplan(
     station_id: int,
     project_id: Optional[int] = None,
     enabled_only: bool = True,
@@ -77,7 +77,7 @@ async def get_station_testplan(
 
 
 @router.get("/stations/{station_id}/testplan-names", response_model=List[str])
-async def get_station_testplan_names(
+def get_station_testplan_names(
     station_id: int,
     project_id: Optional[int] = None,
     db: Session = Depends(get_db),
@@ -127,7 +127,7 @@ async def get_station_testplan_names(
 
 
 @router.get("/stations/{station_id}/testplan-map")
-async def get_station_testplan_map(
+def get_station_testplan_map(
     station_id: int,
     project_id: int,
     test_plan_name: Optional[str] = None,

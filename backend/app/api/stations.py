@@ -15,7 +15,7 @@ router = APIRouter()
 
 
 @router.get("/projects/{project_id}/stations", response_model=List[Station])
-async def get_project_stations(
+def get_project_stations(
     project_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -44,7 +44,7 @@ async def get_project_stations(
 
 
 @router.get("/stations/{station_id}", response_model=Station)
-async def get_station(
+def get_station(
     station_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -70,7 +70,7 @@ async def get_station(
 
 
 @router.post("/stations", response_model=Station, status_code=status.HTTP_201_CREATED)
-async def create_station(
+def create_station(
     station: StationCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
@@ -121,7 +121,7 @@ async def create_station(
 
 
 @router.put("/stations/{station_id}", response_model=Station)
-async def update_station(
+def update_station(
     station_id: int,
     station: StationUpdate,
     db: Session = Depends(get_db),
@@ -171,7 +171,7 @@ async def update_station(
 
 
 @router.delete("/stations/{station_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_station(
+def delete_station(
     station_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)

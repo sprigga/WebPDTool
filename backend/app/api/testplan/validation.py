@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.post("/testplans/validate-test-point")
-async def validate_test_point(
+def validate_test_point(
     unique_id: str,
     measured_value: str,
     run_all_test: str = "OFF",

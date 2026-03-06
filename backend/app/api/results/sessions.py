@@ -90,7 +90,7 @@ class TestSessionResponse(BaseModel):
 
 
 @router.get("/sessions", response_model=List[TestSessionResponse])
-async def get_test_sessions(
+def get_test_sessions(
     # Original code: skip parameter (inconsistent with tests.py which uses offset)
     # Modified: Renamed to offset for API consistency - FastAPI convention uses offset
     offset: int = Query(0, ge=0, description="Number of records to skip (pagination)"),
@@ -182,7 +182,7 @@ async def get_test_sessions(
 
 
 @router.get("/sessions/{session_id}", response_model=TestSessionResponse)
-async def get_test_session(
+def get_test_session(
     session_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)

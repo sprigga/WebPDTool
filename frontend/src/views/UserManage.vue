@@ -1,32 +1,6 @@
 <template>
   <div class="user-manage-container">
-    <!-- 新增: 導航列 - 提供快速存取各個管理頁面 -->
-    <el-card class="nav-card" shadow="never">
-      <el-row :gutter="10" align="middle" justify="space-between">
-        <el-col :span="18">
-          <div class="nav-buttons">
-            <el-button size="default" @click="navigateTo('/main')">
-              測試主畫面
-            </el-button>
-            <el-button size="default" @click="navigateTo('/testplan')">
-              測試計劃管理
-            </el-button>
-            <el-button size="default" @click="navigateTo('/projects')">
-              專案管理
-            </el-button>
-            <el-button type="primary" size="default" disabled>
-              使用者管理
-            </el-button>
-          </div>
-        </el-col>
-        <el-col :span="6" style="text-align: right">
-          <el-text type="info">{{ authStore.user?.username || '-' }}</el-text>
-          <el-button type="danger" size="small" @click="handleLogout" style="margin-left: 10px">
-            登出
-          </el-button>
-        </el-col>
-      </el-row>
-    </el-card>
+    <AppNavBar current-page="users" />
 
     <el-alert
       v-if="!isAdmin"
@@ -42,7 +16,7 @@
         <div class="card-header">
           <h2>使用者管理</h2>
           <el-button
-            v-if="canEdit"
+            v-if="isAdmin"
             type="primary"
             :icon="Plus"
             @click="handleAddUser"
@@ -93,34 +67,34 @@
 
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-tooltip content="需要管理員權限" :disabled="canEdit">
+            <el-tooltip content="需要管理員權限" :disabled="isAdmin">
               <span>
                 <el-button
                   size="small"
-                  :disabled="!canEdit"
+                  :disabled="!isAdmin"
                   @click="handleEditUser(row)"
                 >
                   編輯
                 </el-button>
               </span>
             </el-tooltip>
-            <el-tooltip content="需要管理員權限" :disabled="canEdit">
+            <el-tooltip content="需要管理員權限" :disabled="isAdmin">
               <span>
                 <el-button
                   size="small"
-                  :disabled="!canEdit"
+                  :disabled="!isAdmin"
                   @click="handleChangePassword(row)"
                 >
                   變更密碼
                 </el-button>
               </span>
             </el-tooltip>
-            <el-tooltip :content="row.id === currentUser?.id ? '無法刪除自己' : '需要管理員權限'" :disabled="canEdit && row.id !== currentUser?.id">
+            <el-tooltip :content="row.id === currentUser?.id ? '無法刪除自己' : '需要管理員權限'" :disabled="isAdmin && row.id !== currentUser?.id">
               <span>
                 <el-button
                   size="small"
                   type="danger"
-                  :disabled="!canEdit || row.id === currentUser?.id"
+                  :disabled="!isAdmin || row.id === currentUser?.id"
                   @click="handleDeleteUser(row)"
                 >
                   刪除
@@ -269,32 +243,14 @@
 
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
-import { useRouter } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUsersStore } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import { createUser, updateUser, changeUserPassword, deleteUser } from '@/api/users'
+import AppNavBar from '@/components/AppNavBar.vue'
 
-// 新增: Router 用於導航
-const router = useRouter()
 const authStore = useAuthStore()
-
-// 新增: 導航函數
-const navigateTo = (path) => {
-  router.push(path)
-}
-
-// 新增: 登出函數
-const handleLogout = async () => {
-  try {
-    await authStore.logout()
-    router.push('/login')
-  } catch (error) {
-    console.error('Logout failed:', error)
-    router.push('/login')
-  }
-}
 
 const usersStore = useUsersStore()
 
@@ -306,7 +262,6 @@ const savingPassword = ref(false)
 // Computed
 const currentUser = computed(() => authStore.user)
 const isAdmin = computed(() => currentUser.value?.role === 'admin')
-const canEdit = computed(() => isAdmin.value)
 
 // Dialog state
 const showUserDialog = ref(false)
@@ -535,8 +490,11 @@ const handleSaveUser = async () => {
 
       showUserDialog.value = false
       loading.value = true
-      await usersStore.fetchUsers()
-      loading.value = false
+      try {
+        await usersStore.fetchUsers()
+      } finally {
+        loading.value = false
+      }
     } catch (error) {
       console.error('Save user failed:', error)
       const message = error.response?.data?.detail || '操作失敗'
@@ -601,20 +559,6 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 0;
-}
-
-/* 新增: 導航列樣式 */
-.nav-card {
-  margin-bottom: 20px;
-}
-
-.nav-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.nav-buttons .el-button {
-  margin: 0;
 }
 
 .card-header {

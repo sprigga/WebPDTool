@@ -31,7 +31,7 @@ class ResultSummary(BaseModel):
 
 
 @router.get("/summary", response_model=ResultSummary)
-async def get_result_summary(
+def get_result_summary(
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
     project_id: int | None = Query(None),

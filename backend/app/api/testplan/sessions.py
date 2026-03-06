@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.get("/sessions/{session_id}/test-results")
-async def get_session_test_results(
+def get_session_test_results(
     session_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)

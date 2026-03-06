@@ -22,7 +22,7 @@ router = APIRouter()
 
 
 @router.get("/export/csv/{session_id}")
-async def export_session_csv(
+def export_session_csv(
     session_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)

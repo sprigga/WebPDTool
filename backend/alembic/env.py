@@ -24,8 +24,14 @@ from app.models.sfc_log import SFCLog
 # access to the values within the .ini file in use.
 config = context.config
 
-# Override sqlalchemy.url with our DATABASE_URL from config
-config.set_main_option('sqlalchemy.url', DATABASE_URL)
+def _resolve_alembic_database_url() -> str:
+    env_database_url = os.getenv("ALEMBIC_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if env_database_url:
+        return env_database_url
+    return DATABASE_URL
+
+
+config.set_main_option("sqlalchemy.url", _resolve_alembic_database_url())
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
