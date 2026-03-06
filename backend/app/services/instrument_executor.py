@@ -160,7 +160,10 @@ class InstrumentExecutor:
         import subprocess
         import json
 
-        # Map instrument types to script files
+        # Legacy fallback: map instrument types to lowsheen_lib scripts.
+        # Only reached when get_driver_class() returns None (no modern async driver registered).
+        # All 11 primary instrument types now have modern drivers, so this path is only hit
+        # by edge-case or unregistered instrument types. Kept for backward compatibility.
         script_map = {
             'DAQ973A': 'DAQ973A_test.py',
             '34970A': '34970A.py',

@@ -41,22 +41,6 @@ class MeasurementService:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.active_sessions: Dict[int, Dict] = {}
 
-        # Legacy: Instrument reset mapping (equivalent to PDTool4's used_instruments cleanup)
-        # TODO: This can be removed once all instruments use modern async drivers with proper cleanup
-        self.instrument_reset_map = {
-            "DAQ973A": "DAQ973A_test.py",
-            "MODEL2303": "2303_test.py",
-            "MODEL2306": "2306_test.py",
-            "IT6723C": "IT6723C.py",
-            "PSW3072": "PSW3072.py",
-            "2260B": "2260B.py",
-            "APS7050": "APS7050.py",
-            "34970A": "34970A.py",
-            "KEITHLEY2015": "Keithley2015.py",
-            "DAQ6510": "DAQ6510.py",
-            "MDO34": "MDO34.py",
-            "MT8872A_INF": "MT8872A_INF.py",
-        }
 
     async def execute_single_measurement(
         self,
@@ -184,6 +168,7 @@ class MeasurementService:
                 "test_results": {},  # PDTool4-style result collection
                 "errors": [],  # 收集所有錯誤 (runAllTest 模式)
                 "run_all_test": run_all_test,
+                "used_instruments": {},  # instrument_id -> type, for post-session cleanup
             }
 
             session_data = self.active_sessions[session_id]
@@ -212,6 +197,11 @@ class MeasurementService:
                 session_data["test_results"][
                     measurement_request["test_point_id"]
                 ] = result.measured_value
+
+                # Track used instrument for post-session cleanup
+                instrument_id = measurement_request["test_params"].get("Instrument")
+                if instrument_id:
+                    session_data["used_instruments"][instrument_id] = measurement_request["switch_mode"]
 
                 # PDTool4 runAllTest: 收集錯誤但不停止
                 if result.result == "ERROR":
@@ -376,27 +366,32 @@ class MeasurementService:
     async def _cleanup_used_instruments(self, used_instruments: Dict[str, str]):
         """
         Cleanup instruments after test completion (PDTool4 style)
+
+        Phase 2 migration: Replaced legacy subprocess calls to lowsheen_lib --final scripts
+        with modern InstrumentExecutor.cleanup_instruments() which uses async driver reset().
+        Each driver's reset() is equivalent to the old --final flag:
+          - Measurement instruments: sends *RST
+          - Power supplies: sends OUTP OFF
+
+        # 原有程式碼 (lowsheen_lib subprocess 路徑，已遷移):
+        # for instrument_location, script_name in used_instruments.items():
+        #     script_path = f"./src/lowsheen_lib/{script_name}"
+        #     await asyncio.create_subprocess_exec(
+        #         "python3", script_path, "--final", str({"Instrument": instrument_location}),
+        #         stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+        #     )
+        # 問題: 1) create_subprocess_exec 結果未 await，為 fire-and-forget 導致清理未完成
+        #       2) 依賴 CWD=backend/，Docker 容器中路徑會失效
+        #       3) used_instruments 在 execute_batch_measurements 中從未被填入，此方法實際上從未執行清理
         """
-        for instrument_location, script_name in used_instruments.items():
-            try:
-                script_path = f"./src/lowsheen_lib/{script_name}"
-                test_params = {"Instrument": instrument_location}
+        from app.services.instrument_executor import InstrumentExecutor
 
-                # 原有程式碼: 使用 python3 而非 python，確保在不同環境中都能執行
-                await asyncio.create_subprocess_exec(
-                    "python3",
-                    script_path,
-                    "--final",
-                    str(test_params),
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                self.logger.info(f"Reset instrument {instrument_location}")
+        instrument_ids = list(used_instruments.keys())
+        if not instrument_ids:
+            return
 
-            except Exception as e:
-                self.logger.warning(
-                    f"Failed to reset instrument {instrument_location}: {e}"
-                )
+        executor = InstrumentExecutor()
+        await executor.cleanup_instruments(instrument_ids)
 
     async def validate_params(
         self, measurement_type: str, switch_mode: str, test_params: Dict[str, Any]
@@ -658,20 +653,24 @@ class MeasurementService:
     async def reset_instrument(self, instrument_id: str) -> Dict[str, Any]:
         """
         Reset a specific instrument
+
+        Phase 3 migration: Replaced hard-coded if/elif chain with delegation to
+        InstrumentExecutor.reset_instrument(), which supports all 11 instrument types
+        via their BaseInstrumentDriver.reset() async method.
+
+        # 原有程式碼 (lowsheen_lib subprocess 路徑，已遷移):
+        # if instrument_id.startswith("daq973a"):
+        #     script_path = "./src/lowsheen_lib/DAQ973A_test.py"
+        # elif instrument_id.startswith("model2303"):
+        #     script_path = "./src/lowsheen_lib/2303_test.py"
+        # else:
+        #     raise Exception(f"Unknown instrument: {instrument_id}")  # 僅支援 2 種儀器
+        # await self._execute_instrument_command(script_path=script_path, ...)
         """
-        # Find instrument type and call appropriate reset script
-        if instrument_id.startswith("daq973a"):
-            script_path = "./src/lowsheen_lib/DAQ973A_test.py"
-        elif instrument_id.startswith("model2303"):
-            script_path = "./src/lowsheen_lib/2303_test.py"
-        else:
-            raise Exception(f"Unknown instrument: {instrument_id}")
+        from app.services.instrument_executor import InstrumentExecutor
 
-        test_params = {"Instrument": instrument_id}
-        await self._execute_instrument_command(
-            script_path=script_path, test_point_id="reset", test_params=test_params
-        )
-
+        executor = InstrumentExecutor()
+        await executor.reset_instrument(instrument_id)
         return {"status": "IDLE"}
 
     async def get_session_results(
