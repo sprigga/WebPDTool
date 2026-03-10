@@ -1,5 +1,6 @@
 <template>
   <div class="report-analysis-page" style="padding: 20px;">
+    <AppNavBar current-page="analysis" />
     <h2>報表分析</h2>
 
     <!-- 篩選區 -->
@@ -176,6 +177,7 @@ import {
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import VChart from 'vue-echarts'
+import AppNavBar from '@/components/AppNavBar.vue'
 import { useProjectStore } from '@/stores/project'
 import { getAnalysis } from '@/api/analysis'
 import apiClient from '@/api/client'

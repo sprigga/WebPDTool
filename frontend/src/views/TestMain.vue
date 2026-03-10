@@ -46,36 +46,20 @@
             </el-select>
           </el-form-item>
         </el-col>
-        <el-col :span="4">
+        <el-col :span="3">
           <div class="info-item">
             <span class="info-label">使用者:</span>
             <span class="info-value">{{ currentUser?.username || '-' }}</span>
           </div>
         </el-col>
-        <el-col :span="3">
-          <div class="info-item">
-            <span class="info-label">版本:</span>
-            <span class="info-value">v1.0.0</span>
-          </div>
-        </el-col>
-        <el-col :span="7" style="text-align: right">
+        <el-col :span="11" style="text-align: right; white-space: nowrap;">
           <!-- 新增: 導航按鈕組 - 提供快速存取各個管理頁面 -->
-          <!-- 修改: 統一使用 size="default" 與其他頁面保持一致 -->
-          <el-button size="default" @click="navigateTo('/testplan')">
-            測試計劃
-          </el-button>
-          <el-button size="default" @click="navigateTo('/results')">
-            測試結果查詢
-          </el-button>
-          <el-button size="default" @click="navigateTo('/projects')">
-            專案管理
-          </el-button>
-          <el-button size="default" @click="navigateTo('/users')">
-            使用者管理
-          </el-button>
-          <el-button type="danger" size="default" @click="handleLogout">
-            登出
-          </el-button>
+          <el-button size="default" @click="navigateTo('/testplan')">測試計劃</el-button>
+          <el-button size="default" @click="navigateTo('/results')">測試結果查詢</el-button>
+          <el-button size="default" @click="navigateTo('/projects')">專案管理</el-button>
+          <el-button size="default" @click="navigateTo('/users')">使用者管理</el-button>
+          <el-button size="default" @click="navigateTo('/analysis')">報表分析</el-button>
+          <el-button type="danger" size="default" @click="handleLogout">登出</el-button>
         </el-col>
       </el-row>
     </el-card>
