@@ -22,6 +22,7 @@ from app.api.results.summary import router as summary_router
 from app.api.results.export import router as export_router
 from app.api.results.cleanup import router as cleanup_router
 from app.api.results.reports import router as reports_router
+from app.api.results.analysis import router as analysis_router
 
 # Create main router
 router = APIRouter()
@@ -33,6 +34,7 @@ router.include_router(summary_router)
 router.include_router(export_router)
 router.include_router(cleanup_router)
 router.include_router(reports_router)
+router.include_router(analysis_router)
 
 # Export for backward compatibility
 __all__ = ["router"]
