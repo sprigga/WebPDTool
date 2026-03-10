@@ -62,9 +62,22 @@ class SessionStats(BaseModel):
     mad_s: Optional[float]
 
 
+class SessionPoint(BaseModel):
+    session_id: int
+    start_time: datetime
+    duration_ms: Optional[float]
+
+
+class ItemSeries(BaseModel):
+    item_no: int
+    item_name: str
+    sessions: List[SessionPoint]
+
+
 class AnalysisResponse(BaseModel):
     item_stats: List[ItemStats]
     session_stats: SessionStats
+    item_series: List[ItemSeries] = []  # 時間序列資料，預設空列表保持向後相容
 
 
 @router.get("/analysis", response_model=AnalysisResponse)
@@ -81,6 +94,7 @@ def get_analysis(
 
     - item_stats: per-item execution_duration_ms statistics (mean, median, stdev, MAD)
     - session_stats: total test_duration_seconds statistics across matched sessions
+    - item_series: per-item time-series data (session_id, start_time, duration_ms) sorted by time
     """
     # --- Build session query ---
     session_q = db.query(TestSessionModel).filter(
@@ -99,6 +113,7 @@ def get_analysis(
             session_stats=SessionStats(
                 sample_count=0, mean_s=None, median_s=None, stdev_s=None, mad_s=None
             ),
+            item_series=[],
         )
 
     session_ids = [s.id for s in sessions]
@@ -130,7 +145,7 @@ def get_analysis(
     ]
 
     if not plan_ids:
-        return AnalysisResponse(item_stats=[], session_stats=session_stats)
+        return AnalysisResponse(item_stats=[], session_stats=session_stats, item_series=[])
 
     # --- Per-item stats (execution_duration_ms) ---
     results = (
@@ -142,7 +157,7 @@ def get_analysis(
         .all()
     )
 
-    # Group by item_no
+    # Group by item_no for aggregate stats
     item_groups: dict = defaultdict(lambda: {"item_name": "", "durations": []})
     for r in results:
         key = r.item_no
@@ -166,4 +181,35 @@ def get_analysis(
             )
         )
 
-    return AnalysisResponse(item_stats=item_stats, session_stats=session_stats)
+    # --- Per-item time-series (session_id, start_time, duration_ms) ---
+    session_map = {s.id: s.start_time for s in sessions}
+
+    item_series_groups: dict = defaultdict(lambda: {"item_name": "", "sessions": {}})
+    for r in results:
+        key = r.item_no
+        item_series_groups[key]["item_name"] = r.item_name
+        sid = r.session_id
+        # Only keep the first result per (item_no, session_id)
+        if sid not in item_series_groups[key]["sessions"]:
+            item_series_groups[key]["sessions"][sid] = {
+                "session_id": sid,
+                "start_time": session_map.get(sid),
+                "duration_ms": float(r.execution_duration_ms) if r.execution_duration_ms is not None else None,
+            }
+
+    item_series = []
+    for item_no in sorted(item_series_groups.keys()):
+        g = item_series_groups[item_no]
+        sorted_sessions = sorted(
+            g["sessions"].values(),
+            key=lambda x: x["start_time"] or datetime.min,
+        )
+        item_series.append(
+            ItemSeries(
+                item_no=item_no,
+                item_name=g["item_name"],
+                sessions=[SessionPoint(**sp) for sp in sorted_sessions],
+            )
+        )
+
+    return AnalysisResponse(item_stats=item_stats, session_stats=session_stats, item_series=item_series)
