@@ -11,5 +11,5 @@ import apiClient from './client'
  * @param {string} [params.date_to]       - YYYY-MM-DD
  */
 export function getAnalysis(params) {
-  return apiClient.get('/results/analysis', { params })
+  return apiClient.get('/api/measurement-results/analysis', { params })
 }
