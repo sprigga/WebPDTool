@@ -32,7 +32,7 @@
             style="width: 160px;"
           >
             <el-option
-              v-for="s in filteredStations"
+              v-for="s in stationList"
               :key="s.id"
               :label="s.station_name"
               :value="s.id"
@@ -106,12 +106,33 @@
       </el-row>
     </el-card>
 
+    <!-- 項目名稱篩選 -->
+    <el-card v-if="itemStats.length > 0" style="margin-bottom: 16px;">
+      <el-form :inline="true" label-width="80px">
+        <el-form-item label="項目名稱">
+          <el-select
+            v-model="selectedItemNo"
+            placeholder="選擇項目（可選，不選則顯示全部）"
+            clearable
+            style="width: 320px;"
+          >
+            <el-option
+              v-for="opt in itemOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <!-- 各測試項目執行時間統計 -->
-    <el-card v-if="itemStats.length > 0">
+    <el-card v-if="itemStats.length > 0" style="margin-bottom: 16px;">
       <template #header>
         <span>各測試項目執行時間統計（ms）</span>
       </template>
-      <el-table :data="itemStats" stripe border style="width: 100%;">
+      <el-table :data="filteredItemStats" stripe border style="width: 100%;">
         <el-table-column prop="item_no" label="項次" width="70" align="center" />
         <el-table-column prop="item_name" label="項目名稱" min-width="200" />
         <el-table-column prop="sample_count" label="樣本數" width="80" align="right" />
@@ -130,6 +151,14 @@
       </el-table>
     </el-card>
 
+    <!-- 折線圖 -->
+    <el-card v-if="chartOption" style="margin-bottom: 16px;">
+      <template #header>
+        <span>執行時間趨勢圖</span>
+      </template>
+      <v-chart :option="chartOption" style="height: 320px;" autoresize />
+    </el-card>
+
     <el-empty v-else-if="queried && itemStats.length === 0" description="此條件無資料" />
   </div>
 </template>
@@ -137,9 +166,21 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { use } from 'echarts/core'
+import { LineChart } from 'echarts/charts'
+import {
+  GridComponent,
+  TooltipComponent,
+  TitleComponent,
+  LegendComponent,
+} from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+import VChart from 'vue-echarts'
 import { useProjectStore } from '@/stores/project'
 import { getAnalysis } from '@/api/analysis'
 import apiClient from '@/api/client'
+
+use([LineChart, GridComponent, TooltipComponent, TitleComponent, LegendComponent, CanvasRenderer])
 
 const projectStore = useProjectStore()
 
@@ -151,21 +192,18 @@ const filters = ref({
   date_from: null,
   date_to: null,
 })
+const stationList = ref([])
 const testPlanNames = ref([])
 const loadingPlans = ref(false)
 const loading = ref(false)
 const queried = ref(false)
 const itemStats = ref([])
 const sessionStats = ref(null)
+const selectedItemNo = ref(null)
+const itemSeries = ref([])
 
 // --- Computed ---
 const projects = computed(() => projectStore.projects || [])
-
-const filteredStations = computed(() => {
-  if (!filters.value.project_id) return []
-  const proj = projects.value.find(p => p.id === filters.value.project_id)
-  return proj?.stations || []
-})
 
 const sessionStatItems = computed(() => {
   if (!sessionStats.value) return []
@@ -178,15 +216,73 @@ const sessionStatItems = computed(() => {
   ]
 })
 
+const itemOptions = computed(() =>
+  (itemStats.value || []).map(i => ({
+    label: `${i.item_no}. ${i.item_name}`,
+    value: i.item_no,
+  }))
+)
+
+const filteredItemStats = computed(() => {
+  if (selectedItemNo.value === null) return itemStats.value
+  return itemStats.value.filter(i => i.item_no === selectedItemNo.value)
+})
+
+const chartOption = computed(() => {
+  if (selectedItemNo.value === null) return null
+  const series = itemSeries.value.find(s => s.item_no === selectedItemNo.value)
+  if (!series || !series.sessions.length) return null
+
+  const xData = series.sessions.map(s =>
+    s.start_time ? s.start_time.slice(0, 16).replace('T', ' ') : ''
+  )
+  const yData = series.sessions.map(s => s.duration_ms ?? null)
+
+  return {
+    title: {
+      text: `${series.item_name} — 每次 Session 執行時間`,
+      left: 'center',
+      textStyle: { fontSize: 14 },
+    },
+    tooltip: {
+      trigger: 'axis',
+      formatter: params =>
+        `${params[0].axisValue}<br/>執行時間: ${params[0].value ?? 'N/A'} ms`,
+    },
+    xAxis: {
+      type: 'category',
+      data: xData,
+      axisLabel: { rotate: 30, fontSize: 11 },
+    },
+    yAxis: { type: 'value', name: 'ms', nameTextStyle: { fontSize: 11 } },
+    series: [
+      {
+        type: 'line',
+        data: yData,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        lineStyle: { width: 2 },
+        itemStyle: { color: '#409EFF' },
+      },
+    ],
+    grid: { left: 60, right: 20, bottom: 60, top: 60 },
+  }
+})
+
 // --- Methods ---
 function fmt(val) {
   return val !== null && val !== undefined ? val : 'N/A'
 }
 
-function onProjectChange() {
+async function onProjectChange() {
   filters.value.station_id = null
   filters.value.test_plan_name = null
   testPlanNames.value = []
+  stationList.value = []
+  if (!filters.value.project_id) return
+  await projectStore.fetchProjectStations(filters.value.project_id)
+  stationList.value = projectStore.stations || []
 }
 
 async function onStationChange() {
@@ -197,8 +293,8 @@ async function onStationChange() {
   loadingPlans.value = true
   try {
     // GET /api/stations/{station_id}/testplan-names returns List[str]
-    const res = await apiClient.get(`/stations/${filters.value.station_id}/testplan-names`)
-    testPlanNames.value = res.data || []
+    const res = await apiClient.get(`/api/stations/${filters.value.station_id}/testplan-names`)
+    testPlanNames.value = Array.isArray(res) ? res : []
   } catch (e) {
     ElMessage.error('載入測試腳本失敗')
   } finally {
@@ -211,6 +307,8 @@ async function fetchAnalysis() {
   queried.value = false
   itemStats.value = []
   sessionStats.value = null
+  itemSeries.value = []
+  selectedItemNo.value = null
 
   try {
     const params = {
@@ -221,8 +319,9 @@ async function fetchAnalysis() {
     if (filters.value.date_to) params.date_to = filters.value.date_to
 
     const res = await getAnalysis(params)
-    itemStats.value = res.data.item_stats || []
-    sessionStats.value = res.data.session_stats || null
+    itemStats.value = res.item_stats || []
+    sessionStats.value = res.session_stats || null
+    itemSeries.value = res.item_series || []
     queried.value = true
   } catch (e) {
     ElMessage.error('查詢失敗，請確認篩選條件')
