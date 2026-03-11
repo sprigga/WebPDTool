@@ -286,6 +286,165 @@ def get_instrument_settings() -> InstrumentSettings:
 # Configuration Example JSON Format
 # ============================================================================
 
+# ============================================================================
+# DB-Backed Instrument Config Provider
+# Replaces InstrumentSettings singleton for production use.
+# Keeps the same interface: get_instrument(), list_enabled_instruments()
+# ============================================================================
+
+import threading
+import time as _time
+
+
+class InstrumentConfigProvider:
+    """
+    DB-backed instrument configuration provider with in-memory cache.
+
+    Drop-in replacement for InstrumentSettings. Consumers call:
+        provider.get_instrument(instrument_id)
+        provider.list_enabled_instruments()
+        provider.list_instruments()
+        provider.invalidate_cache()   # call after CRUD mutations
+
+    cache_ttl: seconds until the full list is refreshed from DB (default 30).
+    """
+
+    def __init__(self, repo, cache_ttl: float = 30.0):
+        self._repo = repo
+        self._cache_ttl = cache_ttl
+        self._cache: Optional[Dict[str, InstrumentConfig]] = None
+        self._cache_time: float = 0.0
+        self._lock = threading.Lock()
+
+    # ------------------------------------------------------------------
+    # Public interface (same as InstrumentSettings)
+    # ------------------------------------------------------------------
+
+    def get_instrument(self, instrument_id: str) -> Optional[InstrumentConfig]:
+        """Lookup by logical ID. Uses cache; falls back to direct DB query on miss."""
+        cached = self._get_cache()
+        if cached is not None and instrument_id in cached:
+            return cached[instrument_id]
+        # Direct DB lookup for a single instrument (avoids full-list refresh)
+        row = self._repo.get_by_instrument_id(instrument_id)
+        return self._row_to_config(row) if row else None
+
+    def list_instruments(self) -> Dict[str, InstrumentConfig]:
+        """Return all instruments (enabled + disabled)."""
+        return self._build_all_map()
+
+    def list_enabled_instruments(self) -> Dict[str, InstrumentConfig]:
+        """Return only enabled instruments, using cache."""
+        cache = self._get_cache()
+        if cache is not None:
+            return cache
+        return self._refresh_cache()
+
+    def invalidate_cache(self):
+        """Force next call to re-fetch from DB. Call after any CRUD mutation."""
+        with self._lock:
+            self._cache = None
+            self._cache_time = 0.0
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _get_cache(self) -> Optional[Dict[str, InstrumentConfig]]:
+        with self._lock:
+            if self._cache is not None and (_time.monotonic() - self._cache_time) < self._cache_ttl:
+                return self._cache
+        return None
+
+    def _refresh_cache(self) -> Dict[str, InstrumentConfig]:
+        rows = self._repo.list_enabled()
+        result = {row.instrument_id: self._row_to_config(row) for row in rows}
+        with self._lock:
+            self._cache = result
+            self._cache_time = _time.monotonic()
+        return result
+
+    def _build_all_map(self) -> Dict[str, InstrumentConfig]:
+        rows = self._repo.list_all()
+        return {row.instrument_id: self._row_to_config(row) for row in rows}
+
+    @staticmethod
+    def _row_to_config(row) -> InstrumentConfig:
+        """Convert an ORM Instrument row to the existing InstrumentConfig Pydantic model."""
+        params = row.conn_params or {}
+        conn_type = row.conn_type
+
+        if conn_type == "SERIAL":
+            connection = SerialAddress(
+                port=params.get("port", "COM1"),
+                baudrate=params.get("baudrate", 115200),
+                stopbits=params.get("stopbits", 1),
+                parity=params.get("parity", "N"),
+                bytesize=params.get("bytesize", 8),
+                timeout=params.get("timeout", 5000),
+            )
+        elif conn_type == "TCPIP_SOCKET":
+            connection = TCPIPSocketAddress(
+                host=params.get("host", "localhost"),
+                port=params.get("port", 2268),
+                timeout=params.get("timeout", 5000),
+            )
+        elif conn_type == "GPIB":
+            connection = GPIBAddress(
+                board=params.get("board", 0),
+                address=params.get("address", 0),
+                timeout=params.get("timeout", 5000),
+            )
+        elif conn_type == "LOCAL":
+            connection = InstrumentAddress(
+                type="LOCAL",
+                address=params.get("address", "local://unknown"),
+                timeout=params.get("timeout", 5000),
+            )
+        else:
+            # Default: VISA
+            connection = VISAAddress(
+                address=params.get("address", ""),
+                timeout=params.get("timeout", 5000),
+            )
+
+        return InstrumentConfig(
+            id=row.instrument_id,
+            type=row.instrument_type,
+            name=row.name,
+            connection=connection,
+            enabled=row.enabled,
+            description=row.description,
+        )
+
+
+def get_instrument_provider(db) -> "InstrumentConfigProvider":
+    """
+    Create an InstrumentConfigProvider backed by the given DB session.
+    Intended to be called from FastAPI dependency injection.
+
+    Usage in endpoint:
+        from app.core.database import get_db
+        from app.core.instrument_config import get_instrument_provider
+        from app.repositories.instrument_repository import InstrumentRepository
+
+        @router.get("/{id}")
+        def get_instrument(instrument_id: str, db: Session = Depends(get_db)):
+            provider = get_instrument_provider(db)
+            return provider.get_instrument(instrument_id)
+
+    For long-lived services (InstrumentExecutor), use a module-level provider
+    and call invalidate_cache() after mutations.
+    """
+    from app.repositories.instrument_repository import InstrumentRepository
+    repo = InstrumentRepository(db)
+    return InstrumentConfigProvider(repo=repo, cache_ttl=30.0)
+
+
+# ============================================================================
+# Configuration Example JSON Format
+# ============================================================================
+
 EXAMPLE_CONFIG = """
 {
   "instruments": {
