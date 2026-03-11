@@ -1,5 +1,6 @@
 """Instrument model - DB-backed instrument configuration"""
-from sqlalchemy import Column, Integer, String, Boolean, Text, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Boolean, Text, TIMESTAMP, JSON
+# from sqlalchemy import DateTime  # replaced by TIMESTAMP to match user.py style
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -20,9 +21,10 @@ class Instrument(Base):
                          comment="Connection parameters (address, port, baudrate...)")
     enabled = Column(Boolean, nullable=False, default=True)
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, server_default=func.now())
-    updated_at = Column(DateTime, nullable=False, server_default=func.now(),
-                        onupdate=func.now())
+    # created_at = Column(DateTime, nullable=False, server_default=func.now())  # was DateTime
+    # updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())  # was DateTime
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
         return f"<Instrument {self.instrument_id} ({self.instrument_type})>"

@@ -6,11 +6,17 @@ from app.core.database import Base
 from app.models.instrument import Instrument
 
 
-@pytest.fixture(scope="module")
+# @pytest.fixture(scope="module")  # was module scope — caused test order dependency
+# def engine():
+#     eng = create_engine("sqlite:///:memory:")
+#     Base.metadata.create_all(eng)
+#     return eng
+@pytest.fixture(scope="function")
 def engine():
     eng = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(eng)
-    return eng
+    yield eng
+    Base.metadata.drop_all(eng)
 
 
 @pytest.fixture
@@ -47,6 +53,17 @@ def test_instrument_create_and_read(db):
 
 def test_instrument_unique_constraint(db):
     from sqlalchemy.exc import IntegrityError
+    # First insert succeeds
+    db.add(Instrument(
+        instrument_id="DAQ973A_1",
+        instrument_type="DAQ973A",
+        name="First",
+        conn_type="VISA",
+        conn_params={},
+        enabled=True,
+    ))
+    db.commit()
+    # Second insert with same instrument_id should fail
     db.add(Instrument(
         instrument_id="DAQ973A_1",
         instrument_type="DAQ973A",
