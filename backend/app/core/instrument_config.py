@@ -330,7 +330,8 @@ class InstrumentConfigProvider:
         return self._row_to_config(row) if row else None
 
     def list_instruments(self) -> Dict[str, InstrumentConfig]:
-        """Return all instruments (enabled + disabled)."""
+        """Return all instruments (enabled + disabled). Always fetches fresh from DB
+        (intentional — used by admin interfaces that need current state)."""
         return self._build_all_map()
 
     def list_enabled_instruments(self) -> Dict[str, InstrumentConfig]:
@@ -350,19 +351,47 @@ class InstrumentConfigProvider:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    # def _get_cache(self) -> Optional[Dict[str, InstrumentConfig]]:
+    #     # Old implementation: returned internal reference (not a copy), allowing
+    #     # callers to mutate cache state. Also had TOCTOU race: lock was released
+    #     # before caller used the returned value.
+    #     with self._lock:
+    #         if self._cache is not None and (_time.monotonic() - self._cache_time) < self._cache_ttl:
+    #             return self._cache
+    #     return None
+    #
+    # def _refresh_cache(self) -> Dict[str, InstrumentConfig]:
+    #     # Old implementation: fetched from DB outside the lock, then acquired lock
+    #     # to write. Two threads could both see expired cache, both fetch from DB,
+    #     # and both write — wasting DB calls. No double-check after acquiring lock.
+    #     rows = self._repo.list_enabled()
+    #     result = {row.instrument_id: self._row_to_config(row) for row in rows}
+    #     with self._lock:
+    #         self._cache = result
+    #         self._cache_time = _time.monotonic()
+    #     return result
+
     def _get_cache(self) -> Optional[Dict[str, InstrumentConfig]]:
+        """Return cache copy if still valid, else None. Thread-safe (returns copy while holding lock)."""
         with self._lock:
-            if self._cache is not None and (_time.monotonic() - self._cache_time) < self._cache_ttl:
-                return self._cache
+            if (self._cache is not None and
+                    (_time.monotonic() - self._cache_time) < self._cache_ttl):
+                return dict(self._cache)  # return a copy while holding lock
         return None
 
     def _refresh_cache(self) -> Dict[str, InstrumentConfig]:
-        rows = self._repo.list_enabled()
-        result = {row.instrument_id: self._row_to_config(row) for row in rows}
+        """Fetch enabled instruments from DB, populate cache. Thread-safe with double-checked locking."""
         with self._lock:
+            # Double-check: another thread may have refreshed while we waited for the lock
+            if (self._cache is not None and
+                    (_time.monotonic() - self._cache_time) < self._cache_ttl):
+                return dict(self._cache)
+            # We hold the lock — fetch from DB and update cache
+            rows = self._repo.list_enabled()
+            result = {row.instrument_id: self._row_to_config(row) for row in rows}
             self._cache = result
             self._cache_time = _time.monotonic()
-        return result
+            return dict(result)
 
     def _build_all_map(self) -> Dict[str, InstrumentConfig]:
         rows = self._repo.list_all()

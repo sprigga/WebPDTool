@@ -94,3 +94,47 @@ def test_orm_row_to_instrument_config_serial():
     provider = InstrumentConfigProvider(repo=repo, cache_ttl=30)
     config = provider.get_instrument("MODEL2303_1")
     assert isinstance(config.connection, SerialAddress)
+
+
+def test_orm_row_to_instrument_config_tcpip_socket():
+    row = _make_db_row(
+        instrument_id="tcpip_sock_1",
+        conn_type="TCPIP_SOCKET",
+        conn_params={"host": "192.168.1.20", "port": 2268, "timeout": 5000},
+    )
+    from app.core.instrument_config import InstrumentConfigProvider, TCPIPSocketAddress
+    repo = MagicMock()
+    repo.get_by_instrument_id.return_value = row
+    provider = InstrumentConfigProvider(repo=repo, cache_ttl=30)
+    config = provider.get_instrument("tcpip_sock_1")
+    assert isinstance(config.connection, TCPIPSocketAddress)
+    assert config.connection.host == "192.168.1.20"
+
+
+def test_orm_row_to_instrument_config_gpib():
+    row = _make_db_row(
+        instrument_id="gpib_1",
+        conn_type="GPIB",
+        conn_params={"board": 0, "address": 16, "timeout": 5000},
+    )
+    from app.core.instrument_config import InstrumentConfigProvider, GPIBAddress
+    repo = MagicMock()
+    repo.get_by_instrument_id.return_value = row
+    provider = InstrumentConfigProvider(repo=repo, cache_ttl=30)
+    config = provider.get_instrument("gpib_1")
+    assert isinstance(config.connection, GPIBAddress)
+
+
+def test_orm_row_to_instrument_config_local():
+    row = _make_db_row(
+        instrument_id="console_1",
+        conn_type="LOCAL",
+        conn_params={"address": "local://console", "timeout": 5000},
+    )
+    from app.core.instrument_config import InstrumentConfigProvider, InstrumentAddress
+    repo = MagicMock()
+    repo.get_by_instrument_id.return_value = row
+    provider = InstrumentConfigProvider(repo=repo, cache_ttl=30)
+    config = provider.get_instrument("console_1")
+    assert isinstance(config.connection, InstrumentAddress)
+    assert config.connection.type == "LOCAL"
