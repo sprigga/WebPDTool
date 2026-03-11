@@ -174,3 +174,21 @@ CREATE TABLE modbus_logs (
     INDEX idx_created_at (created_at),
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Instrument Configuration Table
+-- Replaces instrument_config.py file/env-based storage
+CREATE TABLE IF NOT EXISTS instruments (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    instrument_id   VARCHAR(64) NOT NULL UNIQUE COMMENT 'Logical ID, e.g. DAQ973A_1',
+    instrument_type VARCHAR(64) NOT NULL COMMENT 'Driver type, e.g. DAQ973A',
+    name        VARCHAR(128) NOT NULL,
+    conn_type   VARCHAR(32) NOT NULL COMMENT 'VISA | SERIAL | TCPIP_SOCKET | GPIB | LOCAL',
+    conn_params JSON NOT NULL COMMENT 'Connection parameters (address, port, baudrate…)',
+    enabled     TINYINT(1) NOT NULL DEFAULT 1,
+    description TEXT,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_instruments_type (instrument_type),
+    INDEX idx_instruments_enabled (enabled)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Instrument connection configurations (DB-backed, runtime editable)';

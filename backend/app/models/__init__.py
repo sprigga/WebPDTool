@@ -1,5 +1,6 @@
 """Models package"""
 from app.models.user import User
+from app.models.instrument import Instrument
 from app.models.project import Project
 from app.models.station import Station
 from app.models.testplan import TestPlan
@@ -16,5 +17,6 @@ __all__ = [
     "SessionResult",
     "TestResult",
     "ItemResult",
-    "SFCLog"
+    "SFCLog",
+    "Instrument"
 ]
