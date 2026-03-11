@@ -125,6 +125,7 @@ async def health_check():
 # Original single-file routers backed up as .backup
 # New modular routers are used instead
 from app.api import auth, projects, stations, tests, measurements, dut_control, users
+from app.api import instruments as instruments_api
 from app.api.testplan import router as testplans_router
 from app.api.results import router as measurement_results_router
 
@@ -137,6 +138,7 @@ app.include_router(tests.router, prefix="/api/tests", tags=["Test Execution"])
 app.include_router(measurements.router, prefix="/api/measurements", tags=["Measurements"])
 app.include_router(measurement_results_router, prefix="/api/measurement-results", tags=["Measurement Results"])
 app.include_router(dut_control.router, prefix="/api", tags=["DUT Control"])
+app.include_router(instruments_api.router, prefix="/api/instruments", tags=["Instruments"])
 
 # Additional routers will be added in later phases
 # from app.api import results, sfc, modbus, config
