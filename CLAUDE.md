@@ -68,7 +68,25 @@ pytest --cov=app tests/
 
 # Run refactoring validation suite
 python scripts/test_refactoring.py
+
+# Use convenience script (from project root)
+./scripts/run_tests.sh              # Run all tests
+./scripts/run_tests.sh unit         # Run unit tests only
+./scripts/run_tests.sh -k "test_instrument_model2306"  # Run specific test
+
+# Using pytest markers
+pytest -m unit                       # Fast unit tests only
+pytest -m "not slow"                # Skip slow tests
+pytest -m "not hardware"            # Skip tests requiring physical hardware
+pytest -m instrument_34970a         # Run tests for specific instrument
 ```
+
+**Available pytest markers:**
+- **Speed:** `slow`, `fast`
+- **Type:** `unit`, `integration`, `e2e`
+- **Hardware:** `hardware`, `simulation`
+- **Instruments:** `instrument_34970a`, `instrument_model2306`, `instrument_it6723c`, `instrument_2260b`, `instrument_cmw100`, `instrument_mt8872a`
+- **Components:** `measurements`, `instruments`, `api`, `services`
 
 ### Test Plan Import
 
@@ -90,16 +108,23 @@ bash scripts/batch_import.sh
 ### Core Components
 
 **Frontend (Vue 3 + Element Plus)**
-- `frontend/src/views/TestMain.vue` - Main test execution interface (495 lines, PDTool4 UI clone)
+- `frontend/src/views/TestMain.vue` - Main test execution interface (PDTool4 UI clone)
+- `frontend/src/views/ReportAnalysis.vue` - Statistics analysis with charts (added 2026-03-10)
 - `frontend/src/views/TestPlanManage.vue` - Test plan CRUD interface
 - `frontend/src/views/ProjectManage.vue` - Project and station management
 - `frontend/src/views/UserManage.vue` - User management interface (admin only)
+- `frontend/src/views/TestResults.vue` - Test results query and export
+- `frontend/src/views/TestExecution.vue` - Test execution monitoring
+- `frontend/src/views/TestHistory.vue` - Historical test sessions
+- `frontend/src/views/SystemConfig.vue` - System configuration
 - `frontend/src/stores/` - Pinia state management (auth, project, users)
 - `frontend/src/api/` - Axios API client with JWT interceptors
 
 **Backend (FastAPI + SQLAlchemy 2.0)**
 - `backend/app/main.py` - FastAPI application entry point, router registration
-- `backend/app/api/` - 8 API router modules (auth, users, projects, stations, testplan, tests, measurements, results)
+- `backend/app/api/` - 9 API router modules (auth, users, projects, stations, testplan, tests, measurements, measurement-results, dut_control)
+  - `results/` - 7 sub-routers (sessions, measurements, summary, export, cleanup, reports, analysis)
+  - `testplan/` - 4 sub-routers (queries, mutations, sessions, validation)
 - `backend/app/services/` - Business logic layer
 - `backend/app/models/` - SQLAlchemy ORM models (7 tables)
 - `backend/app/measurements/` - Measurement abstraction layer
@@ -235,6 +260,11 @@ DATABASE_URL=mysql+asyncmy://pdtool:pdtool123@db:3306/webpdtool
 SECRET_KEY=your-secret-key-minimum-32-characters-change-in-production
 ACCESS_TOKEN_EXPIRE_MINUTES=480  # 8 hours
 DEBUG=false  # Set to false in production
+
+# Redis Logging (optional, for distributed logging)
+REDIS_ENABLED=true
+REDIS_URL=redis://redis:6379/0
+REDIS_LOG_TTL=3600  # Log expiration in seconds
 
 # Database (docker-compose.yml or .env)
 MYSQL_ROOT_PASSWORD=rootpassword
