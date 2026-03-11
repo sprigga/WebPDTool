@@ -30,6 +30,7 @@ docker-compose up -d
 # Database initialization (first time only)
 docker-compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} webpdtool < database/schema.sql
 docker-compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} webpdtool < database/seed_data.sql
+docker-compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} webpdtool < database/seed_instruments.sql  # NEW: Instrument config seed data
 ```
 
 ### Local Development
