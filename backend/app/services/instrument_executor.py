@@ -26,10 +26,25 @@ class InstrumentExecutor:
     2. Legacy: Subprocess execution for backward compatibility
     """
 
-    def __init__(self):
+    # MODIFIED: Accept optional DB-backed InstrumentConfigProvider
+    # Old code used get_instrument_settings() singleton directly.
+    # New code accepts an injected provider; falls back to legacy singleton if not given.
+    def __init__(self, config_provider=None):
+        if config_provider is not None:
+            self._config_provider = config_provider
+        else:
+            # Legacy fallback: use file/env-based singleton
+            from app.core.instrument_config import get_instrument_settings
+            self._config_provider = get_instrument_settings()
+        # Keep existing pool setup:
         self.connection_pool = get_connection_pool()
-        self.instrument_settings = get_instrument_settings()
+        # For backward compatibility, also store as instrument_settings
+        self.instrument_settings = self._config_provider
         self.logger = logging.getLogger(self.__class__.__name__)
+
+    def get_instrument_config(self, instrument_id: str):
+        """Retrieve InstrumentConfig from the injected provider."""
+        return self._config_provider.get_instrument(instrument_id)
 
     # ========================================================================
     # Modern Execution (using async drivers)
