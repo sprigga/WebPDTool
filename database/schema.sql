@@ -118,7 +118,7 @@ CREATE TABLE test_results (
     test_plan_id INT NOT NULL,
     item_no INT NOT NULL,
     item_name VARCHAR(100) NOT NULL,
-    measured_value DECIMAL(15,6),
+    measured_value VARCHAR(100),          -- Changed from DECIMAL(15,6) to support string measurement values (e.g. console output)
     lower_limit DECIMAL(15,6),
     upper_limit DECIMAL(15,6),
     unit VARCHAR(20),

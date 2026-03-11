@@ -151,6 +151,135 @@ async def stop_test_session(
         raise HTTPException(status_code=500, detail=f"Error stopping test: {str(e)}")
 
 
+@router.get("/sessions/export")
+async def export_test_sessions_csv(
+    station_id: int = None,
+    project_id: int = None,
+    serial_number: str = None,
+    test_plan_name: str = None,
+    final_result: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Export test sessions and their results as CSV
+
+    Uses same filter parameters as GET /sessions.
+    Returns a CSV file with session summary rows followed by detail result rows.
+    """
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+    from sqlalchemy import func, exists, select as sa_select
+    from app.models.station import Station as StationModel
+    from app.models.project import Project as ProjectModel
+
+    query = db.query(TestSessionModel)
+
+    if station_id:
+        query = query.filter(TestSessionModel.station_id == station_id)
+
+    if project_id:
+        query = query.join(StationModel, TestSessionModel.station_id == StationModel.id)\
+                     .filter(StationModel.project_id == project_id)
+
+    if serial_number:
+        query = query.filter(
+            TestSessionModel.serial_number.like(func.concat('%', serial_number, '%'))
+        )
+
+    if final_result:
+        query = query.filter(TestSessionModel.final_result == final_result)
+
+    if start_date:
+        query = query.filter(TestSessionModel.start_time >= start_date)
+
+    if end_date:
+        query = query.filter(TestSessionModel.start_time <= end_date)
+
+    if test_plan_name:
+        query = query.filter(
+            exists(
+                sa_select(TestResultModel.id).where(
+                    TestResultModel.session_id == TestSessionModel.id
+                ).join(TestPlan, TestResultModel.test_plan_id == TestPlan.id)
+                .where(TestPlan.test_plan_name == test_plan_name)
+            )
+        )
+
+    sessions = query.order_by(desc(TestSessionModel.start_time)).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Header
+    writer.writerow([
+        'Session ID', '序號', '站別 ID', '測試計劃', '最終結果',
+        '開始時間', '結束時間', '測試時長(秒)',
+        '總項目', '通過', '失敗',
+        '項次', '測試項目', '測量值', '下限', '上限', '單位', '結果', '錯誤訊息', '執行時間(ms)'
+    ])
+
+    for session in sessions:
+        results = db.query(TestResultModel)\
+            .filter(TestResultModel.session_id == session.id)\
+            .order_by(TestResultModel.item_no)\
+            .all()
+
+        # Get test_plan_name from first result
+        plan_name = None
+        if results and results[0].test_plan_id:
+            plan = db.query(TestPlan).filter(TestPlan.id == results[0].test_plan_id).first()
+            if plan:
+                plan_name = plan.test_plan_name
+
+        if results:
+            for i, r in enumerate(results):
+                writer.writerow([
+                    session.id if i == 0 else '',
+                    session.serial_number if i == 0 else '',
+                    session.station_id if i == 0 else '',
+                    plan_name if i == 0 else '',
+                    session.final_result if i == 0 else '',
+                    session.start_time.isoformat() if i == 0 and session.start_time else '',
+                    session.end_time.isoformat() if i == 0 and session.end_time else '',
+                    session.test_duration_seconds if i == 0 else '',
+                    session.total_items if i == 0 else '',
+                    session.pass_items if i == 0 else '',
+                    session.fail_items if i == 0 else '',
+                    r.item_no,
+                    r.item_name,
+                    r.measured_value,
+                    r.lower_limit,
+                    r.upper_limit,
+                    r.unit or '',
+                    r.result,
+                    r.error_message or '',
+                    r.execution_duration_ms or ''
+                ])
+        else:
+            writer.writerow([
+                session.id, session.serial_number, session.station_id,
+                plan_name, session.final_result,
+                session.start_time.isoformat() if session.start_time else '',
+                session.end_time.isoformat() if session.end_time else '',
+                session.test_duration_seconds,
+                session.total_items, session.pass_items, session.fail_items,
+                '', '', '', '', '', '', '', '', ''
+            ])
+
+    output.seek(0)
+    filename = f"test-results-{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+
+    return StreamingResponse(
+        iter([output.getvalue().encode('utf-8-sig')]),  # utf-8-sig for Excel BOM
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 @router.get("/sessions/{session_id}", response_model=TestSession)
 async def get_test_session(
     session_id: int,

@@ -477,15 +477,18 @@ const handleViewResults = async (session) => {
 
 const handleExport = async () => {
   try {
-    const blob = await exportTestResults(buildQueryParams())
+    const response = await exportTestResults(buildQueryParams())
+    // response is a Blob (responseType: 'blob' set in API client)
+    const blob = response instanceof Blob ? response : new Blob([response])
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = `test-results-${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
     window.URL.revokeObjectURL(url)
+    ElMessage.success('匯出成功')
   } catch (error) {
-    ElMessage.info('匯出功能尚未啟用')
+    ElMessage.error('匯出失敗，請稍後再試')
   }
 }
 

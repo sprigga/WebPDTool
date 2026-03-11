@@ -85,12 +85,19 @@
           >
             啟用 SFC
           </el-checkbox>
-          <el-checkbox 
-            v-model="runAllTests" 
+          <el-checkbox
+            v-model="runAllTests"
             size="large"
             style="margin-left: 20px"
           >
             全測模式
+          </el-checkbox>
+          <el-checkbox
+            v-model="requireBarcode"
+            size="large"
+            style="margin-left: 20px"
+          >
+            強制序號
           </el-checkbox>
         </el-col>
         <el-col :span="4">
@@ -1156,15 +1163,13 @@ const executeSingleItem = async (item, index) => {
     // 在每個測項執行完畢後，立即保存結果到 test_results 表
     if (currentSession.value && item.id) {
       try {
-        // 修正: DB measured_value 欄位為 decimal(15,6)，只能存數值
-        // value_type='string' 的量測回應（如 'hello'）無法存入 decimal 欄位，需傳 null
-        // 原有程式碼: 直接轉為字串傳入，導致 MySQL DataError (Incorrect decimal value)
+        // 修正(2026-03-11): DB measured_value 欄位已改為 String(100)，支援字串類型
+        // 原有程式碼(已廢棄): 僅允許數值，字串傳 null（當時 decimal 欄位的限制）
+        // measured_value = Column(String(100), nullable=True) — 可直接儲存字串
         const rawValue = response.measured_value
         let measuredValueStr = null
-        if (rawValue !== null && rawValue !== undefined) {
-          const asNum = Number(rawValue)
-          // 只有能轉為有效數字的值才傳入 DB；純字串（如 'hello'）傳 null
-          measuredValueStr = (!isNaN(asNum) && rawValue !== '') ? String(rawValue) : null
+        if (rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '') {
+          measuredValueStr = String(rawValue)
         }
 
         await createTestResult(currentSession.value.id, {
@@ -1306,7 +1311,9 @@ const handleStartTest = async () => {
   })
 
   try {
-    const serialNumber = requireBarcode.value ? barcode.value.trim() : 'AUTO-' + Date.now()
+    // 原有程式碼: const serialNumber = requireBarcode.value ? barcode.value.trim() : 'AUTO-' + Date.now()
+    // 修正(2026-03-11): 當使用者有輸入序號時，優先使用輸入值；requireBarcode 只控制是否強制需要輸入
+    const serialNumber = barcode.value.trim() || 'AUTO-' + Date.now()
     addStatusMessage(`開始測試: ${serialNumber}`, 'info')
 
     // Create test session

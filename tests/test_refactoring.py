@@ -9,16 +9,27 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from app.measurements.base import (
     BaseMeasurement,
     MeasurementResult,
-    LOWER_LIMIT_TYPE,
-    UPPER_LIMIT_TYPE,
-    BOTH_LIMIT_TYPE,
-    EQUALITY_LIMIT_TYPE,
-    PARTIAL_LIMIT_TYPE,
-    INEQUALITY_LIMIT_TYPE,
-    NONE_LIMIT_TYPE,
-    INTEGER_VALUE_TYPE,
-    FLOAT_VALUE_TYPE,
-    STRING_VALUE_TYPE
+    # Fixed: _TYPE suffix constants do not exist; use actual class names
+    # LOWER_LIMIT_TYPE,    → LOWER_LIMIT
+    # UPPER_LIMIT_TYPE,    → UPPER_LIMIT
+    # BOTH_LIMIT_TYPE,     → BOTH_LIMIT
+    # EQUALITY_LIMIT_TYPE, → EQUALITY_LIMIT
+    # PARTIAL_LIMIT_TYPE,  → PARTIAL_LIMIT
+    # INEQUALITY_LIMIT_TYPE, → INEQUALITY_LIMIT
+    # NONE_LIMIT_TYPE,     → NONE_LIMIT
+    # INTEGER_VALUE_TYPE,  → IntegerType
+    # FLOAT_VALUE_TYPE,    → FloatType
+    # STRING_VALUE_TYPE    → StringType
+    LOWER_LIMIT,
+    UPPER_LIMIT,
+    BOTH_LIMIT,
+    EQUALITY_LIMIT,
+    PARTIAL_LIMIT,
+    INEQUALITY_LIMIT,
+    NONE_LIMIT,
+    IntegerType,
+    FloatType,
+    StringType
 )
 from decimal import Decimal
 
