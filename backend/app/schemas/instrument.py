@@ -26,6 +26,7 @@ class InstrumentCreate(InstrumentBase):
 
 class InstrumentUpdate(BaseModel):
     """Schema for PATCH /api/instruments/{id} — all fields optional"""
+    # instrument_id is intentionally excluded — it is a stable logical key and must not be patched
     instrument_type: Optional[str] = Field(None, max_length=64)
     name: Optional[str] = Field(None, max_length=128)
     conn_type: Optional[ConnType] = None

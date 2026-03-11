@@ -28,7 +28,7 @@ class InstrumentRepository:
     def list_enabled(self) -> List[Instrument]:
         return (
             self.db.query(Instrument)
-            .filter(Instrument.enabled == True)
+            .filter(Instrument.enabled.is_(True))
             .order_by(Instrument.instrument_id)
             .all()
         )
