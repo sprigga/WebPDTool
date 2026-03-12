@@ -54,7 +54,7 @@
         </el-col>
         <el-col :span="11" style="text-align: right; white-space: nowrap;">
           <!-- 新增: 導航按鈕組 - 提供快速存取各個管理頁面 -->
-          <el-button size="default" @click="navigateTo('/testplan')">測試計劃</el-button>
+          <el-button size="default" @click="navigateTo('/testplan')">測試計劃管理</el-button>
           <el-button size="default" @click="navigateTo('/results')">測試結果查詢</el-button>
           <el-button size="default" @click="navigateTo('/projects')">專案管理</el-button>
           <el-button size="default" @click="navigateTo('/users')">使用者管理</el-button>

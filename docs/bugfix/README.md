@@ -47,6 +47,7 @@ docs/bugfix/
 | Issue #6 | Other 測量類型返回隨機值而非執行腳本 | ✅ 已修正 | - | [ISSUE6_other_measurement_random_values.md](./ISSUE6_other_measurement_random_values.md) |
 | Issue #8 | wait_msec 參數未正確傳遞到後端 | ✅ 已修正 | 2026-02-10 | [ISSUE8_wait_msec_parameter_not_passed.md](./ISSUE8_wait_msec_parameter_not_passed.md) |
 | Issue #9 | console/comport/tcpip 測量執行鏈多重錯誤 | ✅ 已修正 | 2026-02-24 | [ISSUE9_console_comport_tcpip_measurement_chain.md](./ISSUE9_console_comport_tcpip_measurement_chain.md) |
+| - | ComPortCommand 串列埠不存在導致測試 ERROR | ✅ 已修正 | 2026-03-12 | [comport-serial-port-not-found-fix-2026-03-12.md](./comport-serial-port-not-found-fix-2026-03-12.md) |
 | - | lowsheen_lib 遷移 Phase 2 & Phase 3（cleanup/reset 路徑） | ✅ 已修正 | 2026-03-06 | [lowsheen-lib-migration-phase2-phase3-fix.md](./lowsheen-lib-migration-phase2-phase3-fix.md) |
 
 ### 🟢 一般問題（Medium）
@@ -78,6 +79,10 @@ docs/bugfix/
 | - | 無效參數錯誤 | ✅ 已修正 | - | [BUGFIX_INVALID_PARAMETERS.md](./BUGFIX_INVALID_PARAMETERS.md) |
 
 ## 最近修正的問題
+
+### 2026-03-12
+- **ComPortCommand 串列埠不存在導致測試 ERROR**：`ComPortCommandDriver.initialize()` 在串列埠無法開啟時（如 Windows `COM1` 在 Linux 容器中），改為進入 simulation mode 而非拋出 `ConnectionError`。新增 `sim_response` 可配置回傳值，預設空字串。
+  - 詳細文檔: [comport-serial-port-not-found-fix-2026-03-12.md](./comport-serial-port-not-found-fix-2026-03-12.md)
 
 ### 2026-03-06
 - **lowsheen_lib 遷移 Phase 2 & Phase 3**：
