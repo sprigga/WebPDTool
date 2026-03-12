@@ -6,8 +6,20 @@ Enables execution of external commands, scripts, and system utilities
 """
 import asyncio
 import logging
+import re
 import shlex
 from typing import Dict, Any, Optional, List
+
+# Shell metacharacters that require shell=True to work correctly
+# e.g. $((expr)), $(cmd), ${var}, |, &&, ||, >, >>, <, ;, *, ?, ~
+_SHELL_METACHAR_RE = re.compile(
+    r'\$\(\(|'     # arithmetic expansion: $((
+    r'\$\(|'       # command substitution: $(
+    r'\$\{|'       # variable expansion: ${
+    r'[|&;<>]|'    # pipes, redirects, semicolons
+    r'[\*\?\[\]]|' # glob wildcards
+    r'~/'          # tilde expansion
+)
 
 from app.services.instrument_connection import BaseInstrumentConnection
 from app.services.instruments.base import BaseInstrumentDriver, validate_required_params, get_param
@@ -84,6 +96,13 @@ class ConSoleCommandDriver(BaseInstrumentDriver):
         """
         # Determine shell usage
         use_shell = self.use_shell if shell is None else shell
+
+        # 修改: 當 shell 未明確指定時，自動偵測命令中的 shell 特殊字元
+        # 例如: $((1+1)), $(cmd), ${var}, |, &&, >  等需要 shell=True 才能正確執行
+        # 原有程式碼: 僅使用 self.use_shell (預設 False), 導致含特殊字元的命令無法展開
+        if shell is None and isinstance(command, str) and _SHELL_METACHAR_RE.search(command):
+            use_shell = True
+            self.logger.info(f"Auto-detected shell metacharacters in command, enabling shell mode")
 
         # Prepare command list
         if isinstance(command, str):
