@@ -58,6 +58,9 @@ mysql -h localhost -P 33306 -u pdtool -p webpdtool
 ```bash
 cd backend
 
+# Preferred: use uv to run in the managed environment
+uv run pytest
+
 # Run all tests
 pytest
 
@@ -110,26 +113,27 @@ bash scripts/batch_import.sh
 
 **Frontend (Vue 3 + Element Plus)**
 - `frontend/src/views/TestMain.vue` - Main test execution interface (PDTool4 UI clone)
-- `frontend/src/views/ReportAnalysis.vue` - Statistics analysis with charts (added 2026-03-10)
+- `frontend/src/views/ReportAnalysis.vue` - Statistics analysis with charts
 - `frontend/src/views/TestPlanManage.vue` - Test plan CRUD interface
 - `frontend/src/views/ProjectManage.vue` - Project and station management
 - `frontend/src/views/UserManage.vue` - User management interface (admin only)
+- `frontend/src/views/InstrumentManage.vue` - Instrument configuration CRUD (admin only)
 - `frontend/src/views/TestResults.vue` - Test results query and export
 - `frontend/src/views/TestExecution.vue` - Test execution monitoring
-- `frontend/src/views/TestHistory.vue` - Historical test sessions
 - `frontend/src/views/SystemConfig.vue` - System configuration
-- `frontend/src/stores/` - Pinia state management (auth, project, users)
-- `frontend/src/api/` - Axios API client with JWT interceptors
+- `frontend/src/stores/` - Pinia stores: auth, project, users, instruments
+- `frontend/src/api/` - Axios clients: auth, tests, testplans, projects, users, instruments, measurements, analysis
 
 **Backend (FastAPI + SQLAlchemy 2.0)**
 - `backend/app/main.py` - FastAPI application entry point, router registration
-- `backend/app/api/` - 9 API router modules (auth, users, projects, stations, testplan, tests, measurements, measurement-results, dut_control)
+- `backend/app/api/` - Router modules: auth, users, projects, stations, instruments, tests, measurements, dut_control
   - `results/` - 7 sub-routers (sessions, measurements, summary, export, cleanup, reports, analysis)
   - `testplan/` - 4 sub-routers (queries, mutations, sessions, validation)
 - `backend/app/services/` - Business logic layer
-- `backend/app/models/` - SQLAlchemy ORM models (7 tables)
+- `backend/app/models/` - SQLAlchemy ORM models (8 tables: users, projects, stations, test_plans, test_sessions, test_results, sfc_logs, instruments)
+- `backend/app/repositories/` - Data access layer (currently: `instrument_repository.py`)
 - `backend/app/measurements/` - Measurement abstraction layer
-- `backend/app/core/` - Database, logging, security core modules
+- `backend/app/core/` - Database, logging, security, instrument_config core modules
 
 **Database (MySQL 8.0)**
 - `database/schema.sql` - Complete database schema with indexes
@@ -340,7 +344,8 @@ MYSQL_PORT=33306
 - State management via Pinia stores in `frontend/src/stores/`
 - API calls through centralized clients in `frontend/src/api/`
 - Element Plus UI components for consistency
-- Follow existing patterns in `TestMain.vue` for test-related UIs
+- CRUD management pages: follow `UserManage.vue` / `InstrumentManage.vue` pattern (el-table + el-dialog + reactive form + ElMessageBox.confirm for delete)
+- Navigation: add route to `router/index.js`, button to `AppNavBar.vue` using `buttonType()`/`isCurrent()` helpers, and link to `TestMain.vue` top nav bar
 
 ### Managing Users
 
@@ -371,6 +376,39 @@ User management allows administrators to create, edit, and delete user accounts 
 - Complete API reference: `docs/api/users-api.md`
 - Interactive API docs: http://localhost:9100/docs (Swagger UI)
 
+### Managing Instruments
+
+Instrument management allows administrators to configure test instrument connections used during testing.
+
+**File Locations:**
+- Backend API: `backend/app/api/instruments.py` - Instrument CRUD endpoints
+- Backend Schemas: `backend/app/schemas/instrument.py` - Instrument data validation schemas
+- Backend Models: `backend/app/models/instrument.py` - Instrument ORM model
+- Backend Repository: `backend/app/repositories/instrument_repository.py` - Database operations
+- Frontend View: `frontend/src/views/InstrumentManage.vue` - Instrument management UI
+- Frontend Store: `frontend/src/stores/instruments.js` - Instrument state management
+- Frontend API: `frontend/src/api/instruments.js` - Instrument API client functions
+
+**Instrument Connection Types:**
+- `VISA` - VISA resource string (e.g., TCPIP0::192.168.1.100::inst0::INSTR)
+- `SERIAL` - Serial port (port, baudrate, databits, stopbits, parity)
+- `TCPIP_SOCKET` - TCP/IP socket connection (host, port)
+- `GPIB` - GPIB interface (address)
+- `LOCAL` - Local command execution
+
+**API Endpoints Summary:**
+- `GET /api/instruments` - List instruments (optional: enabled_only=true)
+- `GET /api/instruments/{instrument_id}` - Get specific instrument
+- `POST /api/instruments` - Create new instrument (admin only)
+- `PATCH /api/instruments/{instrument_id}` - Update instrument (admin only; instrument_id excluded)
+- `DELETE /api/instruments/{instrument_id}` - Delete instrument (admin only)
+
+**Supported Instrument Types:**
+- DAQ973A, DAQ6510, 34970A, 2260B, IT6723C, Model2306, Model2303
+- MT8872A, CMW100, SMCV100B, N5182A, APS7050, PSW3072
+- Keithley2015, MDO34, AnalogDiscovery2, PeakCAN
+- ConsoleCommand, ComPortCommand, TCPIPCommand, WaitTest
+
 ## Important Implementation Details
 
 ### Async/Await Pattern
@@ -400,10 +438,29 @@ The CSV parser (`backend/app/utils/csv_parser.py`) maps PDTool4 CSV columns to d
 - `下限值` → `lower_limit`
 - `limit_type`, `value_type` → PDTool4 validation parameters
 
+### Instrument Driver Registry (`backend/app/services/instruments/__init__.py`)
+
+`INSTRUMENT_DRIVERS` maps `instrument_type` strings to driver classes. The `instrument_type` stored in the DB (via `InstrumentManage.vue`) uses PDTool4 display names (`ConsoleCommand`, `ComPortCommand`, `TCPIPCommand`), while the internal runtime keys are lowercase (`console`, `comport`, `tcpip`). **Both aliases must exist in the registry.** When adding a new command-type instrument, register both variants:
+
+```python
+"console": ConSoleCommandDriver,
+"ConsoleCommand": ConSoleCommandDriver,  # DB-stored name from UI
+```
+
+Missing an alias produces `"No driver for instrument type 'X'"` at measurement runtime.
+
+### InstrumentConfig Provider
+
+`backend/app/core/instrument_config.py` has two providers:
+- **`InstrumentSettings`** — legacy hardcoded config, used as fallback
+- **`InstrumentConfigProvider`** — DB-backed with TTL cache (30s), injected at startup via `set_global_instrument_provider()`
+
+`_row_to_config()` maps `instrument.instrument_type` → `config.type`, which is then used as the driver registry key.
+
 ### Error Handling
 
 - Backend exceptions use FastAPI HTTPException with appropriate status codes
-- Frontend API client (`frontend/src/api/client.js`) has response interceptor for error handling
+- Frontend API client (`frontend/src/api/client.js`) has response interceptor for error handling; response data is automatically unwrapped (callers receive payload directly, not the Axios response object)
 - Measurement failures distinguish between validation failures (FAIL) and execution errors (ERROR)
 - runAllTest mode collects errors but continues execution
 

@@ -19,6 +19,7 @@ from app.models.testplan import TestPlan
 from app.models.test_result import TestResult
 from app.models.test_session import TestSession
 from app.models.sfc_log import SFCLog
+from app.models.instrument import Instrument  # Added for instruments table support
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

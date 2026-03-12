@@ -412,8 +412,16 @@ class ComPortMeasurement(BaseMeasurement):
                     error_message="Missing required parameter: Instrument"
                 )
 
-            instrument_settings = _gis()
-            config = instrument_settings.get_instrument(instrument_name)
+            # 修改: 優先使用全域 DB-backed provider（支援 instruments 表動態配置）
+            # 原有程式碼: instrument_settings = _gis()  # 只回傳 hardcoded singleton
+            from app.core.instrument_config import get_global_instrument_provider
+            _db_provider = get_global_instrument_provider()
+            if _db_provider is not None:
+                config = _db_provider.get_instrument(instrument_name)
+            else:
+                instrument_settings = _gis()
+                config = instrument_settings.get_instrument(instrument_name)
+
             if config is None:
                 return self.create_result(
                     result="ERROR",
@@ -497,8 +505,16 @@ class ConSoleMeasurement(BaseMeasurement):
                     error_message="Missing required parameter: Instrument"
                 )
 
-            instrument_settings = _gis()
-            config = instrument_settings.get_instrument(instrument_name)
+            # 修改: 優先使用全域 DB-backed provider（支援 instruments 表動態配置）
+            # 原有程式碼: instrument_settings = _gis()  # 只回傳 hardcoded singleton
+            from app.core.instrument_config import get_global_instrument_provider
+            _db_provider = get_global_instrument_provider()
+            if _db_provider is not None:
+                config = _db_provider.get_instrument(instrument_name)
+            else:
+                instrument_settings = _gis()
+                config = instrument_settings.get_instrument(instrument_name)
+
             if config is None:
                 return self.create_result(
                     result="ERROR",
@@ -579,8 +595,16 @@ class TCPIPMeasurement(BaseMeasurement):
                     error_message="Missing required parameter: Instrument"
                 )
 
-            instrument_settings = _gis()
-            config = instrument_settings.get_instrument(instrument_name)
+            # 修改: 優先使用全域 DB-backed provider（支援 instruments 表動態配置）
+            # 原有程式碼: instrument_settings = _gis()  # 只回傳 hardcoded singleton
+            from app.core.instrument_config import get_global_instrument_provider
+            _db_provider = get_global_instrument_provider()
+            if _db_provider is not None:
+                config = _db_provider.get_instrument(instrument_name)
+            else:
+                instrument_settings = _gis()
+                config = instrument_settings.get_instrument(instrument_name)
+
             if config is None:
                 return self.create_result(
                     result="ERROR",

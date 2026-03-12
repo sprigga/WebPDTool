@@ -432,8 +432,15 @@ class InstrumentConnectionPool:
         async with self._lock:
             # Get or create connection
             if instrument_id not in self._connections:
-                settings = get_instrument_settings()
-                config = settings.get_instrument(instrument_id)
+                # 修改: 優先使用全域 DB-backed provider，回退到 hardcoded singleton
+                # 原有程式碼: settings = get_instrument_settings()
+                from app.core.instrument_config import get_global_instrument_provider
+                _db_provider = get_global_instrument_provider()
+                if _db_provider is not None:
+                    config = _db_provider.get_instrument(instrument_id)
+                else:
+                    settings = get_instrument_settings()
+                    config = settings.get_instrument(instrument_id)
 
                 if config is None:
                     raise InstrumentNotFoundError(

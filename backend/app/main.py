@@ -80,6 +80,20 @@ async def startup_event():
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     logger.info(f"Debug mode: {settings.DEBUG}")
 
+    # 新增: 初始化全域 DB-backed InstrumentConfigProvider
+    # 讓 ConSoleMeasurement / ComPortMeasurement / TCPIPMeasurement 能讀 instruments 表
+    try:
+        from app.core.database import SessionLocal as SyncSessionLocal
+        from app.repositories.instrument_repository import InstrumentRepository
+        from app.core.instrument_config import InstrumentConfigProvider, set_global_instrument_provider
+        db = SyncSessionLocal()
+        repo = InstrumentRepository(db)
+        provider = InstrumentConfigProvider(repo=repo, cache_ttl=30.0)
+        set_global_instrument_provider(provider)
+        logger.info("Global DB-backed InstrumentConfigProvider initialized")
+    except Exception as e:
+        logger.warning(f"Failed to initialize DB instrument provider (fallback to hardcoded): {e}")
+
     # ✅ Added: Start Redis log flusher if Redis is enabled
     if settings.REDIS_ENABLED:
         async def flush_logs_periodically():

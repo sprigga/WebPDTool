@@ -43,6 +43,7 @@ services:
       - mysql_data:/var/lib/mysql
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./database/seed_data.sql:/docker-entrypoint-initdb.d/02-seed_data.sql:ro
+      - ./database/seed_instruments.sql:/docker-entrypoint-initdb.d/03-seed_instruments.sql:ro
     networks:
       - webpdtool-network
     healthcheck:
@@ -61,11 +62,15 @@ services:
     restart: unless-stopped
     environment:
       # Database configuration
+      # 注意: 這些環境變數會覆蓋 volume mount 帶進來的 .env 檔案中的 host.docker.internal 設定
       DB_HOST: db
       DB_PORT: 3306
       DB_USER: ${MYSQL_USER:-pdtool}
       DB_PASSWORD: ${MYSQL_PASSWORD:-pdtool123}
       DB_NAME: ${MYSQL_DATABASE:-webpdtool}
+      # Alembic migration 使用此變數（alembic/env.py 優先讀取 DATABASE_URL）
+      # 避免 alembic 從 .env 讀到 host.docker.internal:33306
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-pdtool}:${MYSQL_PASSWORD:-pdtool123}@db:3306/${MYSQL_DATABASE:-webpdtool}
 
       # Application configuration
       APP_NAME: WebPDTool
@@ -85,6 +90,16 @@ services:
       REDIS_ENABLED: ${REDIS_ENABLED:-true}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_LOG_TTL: ${REDIS_LOG_TTL:-3600}
+
+      # ✅ Added: Alembic migration automation
+      # Set to "true" to skip automatic migrations on container start
+      SKIP_MIGRATIONS: ${SKIP_MIGRATIONS:-false}
+      # Maximum time to wait for database connection (default: 10 seconds)
+      # 說明: depends_on: service_healthy 已確保 db 健康後才啟動 backend
+      # 因此 entrypoint 的等待通常 < 3 秒，10 秒已足夠作為備用保護
+      MIGRATION_TIMEOUT: ${MIGRATION_TIMEOUT:-10}
+      # Additional arguments to pass to alembic (e.g., "--sql")
+      ALEMBIC_ARGS: ${ALEMBIC_ARGS:-}
     ports:
       - "${BACKEND_PORT:-9100}:9100"
     volumes:
@@ -93,6 +108,9 @@ services:
       # - ./PDTool4:/app/PDTool4:ro
       # Uncomment for development hot-reload
       # - ./backend/app:/app/app
+      # 遮蓋 .env 檔案，避免 volume mount 將本機 .env (host.docker.internal:33306) 帶入容器
+      # 容器內應使用 docker-compose environment 區塊中的環境變數
+      - /dev/null:/app/.env:ro
     networks:
       - webpdtool-network
     depends_on:

@@ -282,6 +282,23 @@ def get_instrument_settings() -> InstrumentSettings:
     return _instrument_settings
 
 
+# 修改: 全域 DB-backed provider singleton，供 ConSoleMeasurement 等 lazy-import 使用
+# 原有程式碼: get_instrument_settings() 只回傳 hardcoded InstrumentSettings，無法讀 DB
+# 新增: set_global_instrument_provider() 讓 lifespan / startup 注入 DB provider
+_global_instrument_provider = None  # type: Optional["InstrumentConfigProvider"]
+
+
+def set_global_instrument_provider(provider: "InstrumentConfigProvider") -> None:
+    """Set the global DB-backed instrument provider (called at app startup)."""
+    global _global_instrument_provider
+    _global_instrument_provider = provider
+
+
+def get_global_instrument_provider() -> Optional["InstrumentConfigProvider"]:
+    """Return the global DB-backed provider if set, else None."""
+    return _global_instrument_provider
+
+
 # ============================================================================
 # Configuration Example JSON Format
 # ============================================================================

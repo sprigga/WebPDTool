@@ -63,6 +63,12 @@ const routes = [
     name: 'UserManage',
     component: () => import('@/views/UserManage.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/instruments',
+    name: 'InstrumentManage',
+    component: () => import('@/views/InstrumentManage.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 

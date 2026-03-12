@@ -58,6 +58,7 @@
           <el-button size="default" @click="navigateTo('/results')">測試結果查詢</el-button>
           <el-button size="default" @click="navigateTo('/projects')">專案管理</el-button>
           <el-button size="default" @click="navigateTo('/users')">使用者管理</el-button>
+          <el-button size="default" @click="navigateTo('/instruments')">儀器管理</el-button>
           <el-button size="default" @click="navigateTo('/analysis')">報表分析</el-button>
           <el-button type="danger" size="default" @click="handleLogout">登出</el-button>
         </el-col>

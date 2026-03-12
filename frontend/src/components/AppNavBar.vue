@@ -18,6 +18,9 @@
           <el-button :type="buttonType('users')" size="default" :disabled="isCurrent('users')" @click="navigateTo('/users')">
             使用者管理
           </el-button>
+          <el-button :type="buttonType('instruments')" size="default" :disabled="isCurrent('instruments')" @click="navigateTo('/instruments')">
+            儀器管理
+          </el-button>
           <el-button :type="buttonType('analysis')" size="default" :disabled="isCurrent('analysis')" @click="navigateTo('/analysis')">
             報表分析
           </el-button>

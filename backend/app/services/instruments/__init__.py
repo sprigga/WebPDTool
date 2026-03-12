@@ -94,6 +94,10 @@ INSTRUMENT_DRIVERS = {
     "console": ConSoleCommandDriver,
     "comport": ComPortCommandDriver,
     "tcpip": TCPIPCommandDriver,
+    # Aliases matching instrument_type values stored in DB (via InstrumentManage UI)
+    "ConsoleCommand": ConSoleCommandDriver,
+    "ComPortCommand": ComPortCommandDriver,
+    "TCPIPCommand": TCPIPCommandDriver,
     # Add more as they are migrated
 }
 
