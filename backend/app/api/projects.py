@@ -1,9 +1,14 @@
 """Projects API endpoints"""
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+# from sqlalchemy.orm import Session
+# Migrated to async: use AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List
 
-from app.core.database import get_db
+# from app.core.database import get_db
+# Migrated to async: use get_async_db
+from app.core.database import get_async_db
 from app.core.api_helpers import PermissionChecker
 from app.core.constants import ErrorMessages
 from app.schemas.project import (
@@ -19,12 +24,12 @@ router = APIRouter()
 
 
 @router.get("", response_model=List[Project])
-def get_projects(
+async def get_projects(
     # Original code: skip parameter (inconsistent with tests.py)
     # Modified: Renamed to offset for API consistency across all endpoints
     offset: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -39,14 +44,17 @@ def get_projects(
     Returns:
         List of projects
     """
-    projects = db.query(ProjectModel).offset(offset).limit(limit).all()
+    # projects = db.query(ProjectModel).offset(offset).limit(limit).all()
+    # Migrated to async
+    result = await db.execute(select(ProjectModel).offset(offset).limit(limit))
+    projects = result.scalars().all()
     return projects
 
 
 @router.get("/{project_id}", response_model=ProjectWithStations)
-def get_project(
+async def get_project(
     project_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -60,7 +68,10 @@ def get_project(
     Returns:
         Project details with stations
     """
-    project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
+    # project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
+    # Migrated to async
+    result = await db.execute(select(ProjectModel).where(ProjectModel.id == project_id))
+    project = result.scalar_one_or_none()
     if not project:
         # Original code: Raw string
         # raise HTTPException(status_code=404, detail="Project not found")
@@ -71,9 +82,9 @@ def get_project(
 
 
 @router.post("", response_model=Project, status_code=status.HTTP_201_CREATED)
-def create_project(
+async def create_project(
     project: ProjectCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -97,9 +108,14 @@ def create_project(
     PermissionChecker.check_admin(current_user, "create projects")
 
     # Check if project code already exists
-    existing_project = db.query(ProjectModel).filter(
-        ProjectModel.project_code == project.project_code
-    ).first()
+    # existing_project = db.query(ProjectModel).filter(
+    #     ProjectModel.project_code == project.project_code
+    # ).first()
+    # Migrated to async
+    result = await db.execute(
+        select(ProjectModel).where(ProjectModel.project_code == project.project_code)
+    )
+    existing_project = result.scalar_one_or_none()
     if existing_project:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -112,17 +128,17 @@ def create_project(
     # Refactored: Pydantic v2 syntax
     db_project = ProjectModel(**project.model_dump())
     db.add(db_project)
-    db.commit()
-    db.refresh(db_project)
+    await db.commit()
+    await db.refresh(db_project)
 
     return db_project
 
 
 @router.put("/{project_id}", response_model=Project)
-def update_project(
+async def update_project(
     project_id: int,
     project: ProjectUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -147,7 +163,10 @@ def update_project(
     PermissionChecker.check_admin(current_user, "update projects")
 
     # Get existing project
-    db_project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
+    # db_project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
+    # Migrated to async
+    result = await db.execute(select(ProjectModel).where(ProjectModel.id == project_id))
+    db_project = result.scalar_one_or_none()
     if not db_project:
         # Original code: Raw string
         # raise HTTPException(status_code=404, detail="Project not found")
@@ -162,16 +181,16 @@ def update_project(
     for key, value in update_data.items():
         setattr(db_project, key, value)
 
-    db.commit()
-    db.refresh(db_project)
+    await db.commit()
+    await db.refresh(db_project)
 
     return db_project
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project(
+async def delete_project(
     project_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -192,7 +211,10 @@ def delete_project(
     PermissionChecker.check_admin(current_user, "delete projects")
 
     # Get existing project
-    db_project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
+    # db_project = db.query(ProjectModel).filter(ProjectModel.id == project_id).first()
+    # Migrated to async
+    result = await db.execute(select(ProjectModel).where(ProjectModel.id == project_id))
+    db_project = result.scalar_one_or_none()
     if not db_project:
         # Original code: Raw string
         # raise HTTPException(status_code=404, detail="Project not found")
@@ -200,7 +222,9 @@ def delete_project(
         raise HTTPException(status_code=404, detail=ErrorMessages.PROJECT_NOT_FOUND)
 
     # Delete project (cascade will delete stations)
-    db.delete(db_project)
-    db.commit()
+    # db.delete(db_project)
+    # Migrated to async
+    await db.delete(db_project)
+    await db.commit()
 
     return None

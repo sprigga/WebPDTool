@@ -1,10 +1,17 @@
 """Stations API endpoints"""
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+# from sqlalchemy.orm import Session
+# Migrated to async: use AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List
 
-from app.core.database import get_db
-from app.core.api_helpers import get_entity_or_404, PermissionChecker
+# from app.core.database import get_db
+# Migrated to async: use get_async_db
+from app.core.database import get_async_db
+# from app.core.api_helpers import get_entity_or_404, PermissionChecker
+# Migrated to async: use async_get_entity_or_404
+from app.core.api_helpers import async_get_entity_or_404, PermissionChecker
 from app.core.constants import ErrorMessages
 from app.schemas.project import Station, StationCreate, StationUpdate
 from app.models.station import Station as StationModel
@@ -15,9 +22,9 @@ router = APIRouter()
 
 
 @router.get("/projects/{project_id}/stations", response_model=List[Station])
-def get_project_stations(
+async def get_project_stations(
     project_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -37,16 +44,21 @@ def get_project_stations(
     #     raise HTTPException(status_code=404, detail="Project not found")
     #
     # Refactored: Use get_entity_or_404 helper
-    get_entity_or_404(db, ProjectModel, project_id, ErrorMessages.PROJECT_NOT_FOUND)
+    # get_entity_or_404(db, ProjectModel, project_id, ErrorMessages.PROJECT_NOT_FOUND)
+    # Migrated to async
+    await async_get_entity_or_404(db, ProjectModel, project_id, ErrorMessages.PROJECT_NOT_FOUND)
 
-    stations = db.query(StationModel).filter(StationModel.project_id == project_id).all()
+    # stations = db.query(StationModel).filter(StationModel.project_id == project_id).all()
+    # Migrated to async
+    result = await db.execute(select(StationModel).where(StationModel.project_id == project_id))
+    stations = result.scalars().all()
     return stations
 
 
 @router.get("/stations/{station_id}", response_model=Station)
-def get_station(
+async def get_station(
     station_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -66,13 +78,15 @@ def get_station(
     #     raise HTTPException(status_code=404, detail="Station not found")
     #
     # Refactored: Use get_entity_or_404 helper
-    return get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
+    # return get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
+    # Migrated to async
+    return await async_get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
 
 
 @router.post("/stations", response_model=Station, status_code=status.HTTP_201_CREATED)
-def create_station(
+async def create_station(
     station: StationCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -98,13 +112,22 @@ def create_station(
     PermissionChecker.check_admin_or_engineer(current_user, "create stations")
 
     # Verify project exists
-    get_entity_or_404(db, ProjectModel, station.project_id, ErrorMessages.PROJECT_NOT_FOUND)
+    # get_entity_or_404(db, ProjectModel, station.project_id, ErrorMessages.PROJECT_NOT_FOUND)
+    # Migrated to async
+    await async_get_entity_or_404(db, ProjectModel, station.project_id, ErrorMessages.PROJECT_NOT_FOUND)
 
     # Check if station code already exists in this project
-    existing_station = db.query(StationModel).filter(
-        StationModel.project_id == station.project_id,
-        StationModel.station_code == station.station_code
-    ).first()
+    # existing_station = db.query(StationModel).filter(
+    #     StationModel.project_id == station.project_id,
+    #     StationModel.station_code == station.station_code
+    # ).first()
+    # Migrated to async
+    result = await db.execute(
+        select(StationModel)
+        .where(StationModel.project_id == station.project_id)
+        .where(StationModel.station_code == station.station_code)
+    )
+    existing_station = result.scalar_one_or_none()
     if existing_station:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -114,17 +137,17 @@ def create_station(
     # Create new station
     db_station = StationModel(**station.model_dump())
     db.add(db_station)
-    db.commit()
-    db.refresh(db_station)
+    await db.commit()
+    await db.refresh(db_station)
 
     return db_station
 
 
 @router.put("/stations/{station_id}", response_model=Station)
-def update_station(
+async def update_station(
     station_id: int,
     station: StationUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -157,23 +180,25 @@ def update_station(
     #     raise HTTPException(status_code=404, detail="Station not found")
     #
     # Refactored: Use get_entity_or_404 helper
-    db_station = get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
+    # db_station = get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
+    # Migrated to async
+    db_station = await async_get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
 
     # Update station fields
     update_data = station.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_station, key, value)
 
-    db.commit()
-    db.refresh(db_station)
+    await db.commit()
+    await db.refresh(db_station)
 
     return db_station
 
 
 @router.delete("/stations/{station_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_station(
+async def delete_station(
     station_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -201,10 +226,14 @@ def delete_station(
     #     raise HTTPException(status_code=404, detail="Station not found")
     #
     # Refactored: Use get_entity_or_404 helper
-    db_station = get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
+    # db_station = get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
+    # Migrated to async
+    db_station = await async_get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
 
     # Delete station
-    db.delete(db_station)
-    db.commit()
+    # db.delete(db_station)
+    # Migrated to async
+    await db.delete(db_station)
+    await db.commit()
 
     return None
