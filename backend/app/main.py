@@ -84,11 +84,9 @@ async def startup_event():
     # 讓 ConSoleMeasurement / ComPortMeasurement / TCPIPMeasurement 能讀 instruments 表
     try:
         from app.core.database import SessionLocal as SyncSessionLocal
-        from app.repositories.instrument_repository import InstrumentRepository
         from app.core.instrument_config import InstrumentConfigProvider, set_global_instrument_provider
-        db = SyncSessionLocal()
-        repo = InstrumentRepository(db)
-        provider = InstrumentConfigProvider(repo=repo, cache_ttl=30.0)
+        # Pass session_factory so provider creates its own session per cache refresh
+        provider = InstrumentConfigProvider(session_factory=SyncSessionLocal, cache_ttl=30.0)
         set_global_instrument_provider(provider)
         logger.info("Global DB-backed InstrumentConfigProvider initialized")
     except Exception as e:

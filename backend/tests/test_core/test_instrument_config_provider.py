@@ -1,7 +1,7 @@
 """Tests for DB-backed InstrumentConfigProvider."""
 import time
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from app.core.instrument_config import (
     InstrumentConfigProvider, InstrumentConfig, VISAAddress, SerialAddress
 )
@@ -21,6 +21,14 @@ def _make_db_row(instrument_id="DAQ973A_1", conn_type="VISA",
     return row
 
 
+def _make_session_factory(mock_repo):
+    """Build a session_factory that returns a mock session; patch InstrumentRepository to return mock_repo."""
+    mock_db = MagicMock()
+    mock_db.close = MagicMock()
+    factory = MagicMock(return_value=mock_db)
+    return factory, mock_db
+
+
 @pytest.fixture
 def mock_repo():
     repo = MagicMock()
@@ -30,9 +38,18 @@ def mock_repo():
     return repo
 
 
-def test_get_instrument_returns_instrument_config(mock_repo):
-    provider = InstrumentConfigProvider(repo=mock_repo, cache_ttl=30)
-    config = provider.get_instrument("DAQ973A_1")
+@pytest.fixture
+def provider_and_repo(mock_repo):
+    factory, _ = _make_session_factory(mock_repo)
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=mock_repo):
+        prov = InstrumentConfigProvider(session_factory=factory, cache_ttl=30)
+        yield prov, mock_repo
+
+
+def test_get_instrument_returns_instrument_config(provider_and_repo):
+    provider, mock_repo = provider_and_repo
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=mock_repo):
+        config = provider.get_instrument("DAQ973A_1")
     assert isinstance(config, InstrumentConfig)
     assert config.id == "DAQ973A_1"
     assert config.type == "DAQ973A"
@@ -40,45 +57,57 @@ def test_get_instrument_returns_instrument_config(mock_repo):
 
 def test_get_instrument_not_found(mock_repo):
     mock_repo.get_by_instrument_id.return_value = None
-    provider = InstrumentConfigProvider(repo=mock_repo, cache_ttl=30)
-    assert provider.get_instrument("nonexistent") is None
+    factory, _ = _make_session_factory(mock_repo)
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=mock_repo):
+        provider = InstrumentConfigProvider(session_factory=factory, cache_ttl=30)
+        assert provider.get_instrument("nonexistent") is None
 
 
 def test_list_enabled_instruments(mock_repo):
-    provider = InstrumentConfigProvider(repo=mock_repo, cache_ttl=30)
-    enabled = provider.list_enabled_instruments()
+    factory, _ = _make_session_factory(mock_repo)
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=mock_repo):
+        provider = InstrumentConfigProvider(session_factory=factory, cache_ttl=30)
+        enabled = provider.list_enabled_instruments()
     assert "DAQ973A_1" in enabled
     assert isinstance(enabled["DAQ973A_1"], InstrumentConfig)
 
 
 def test_cache_prevents_repeated_db_calls(mock_repo):
-    provider = InstrumentConfigProvider(repo=mock_repo, cache_ttl=60)
-    provider.list_enabled_instruments()
-    provider.list_enabled_instruments()
+    factory, _ = _make_session_factory(mock_repo)
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=mock_repo):
+        provider = InstrumentConfigProvider(session_factory=factory, cache_ttl=60)
+        provider.list_enabled_instruments()
+        provider.list_enabled_instruments()
     # Should only hit DB once despite two calls
     assert mock_repo.list_enabled.call_count == 1
 
 
 def test_cache_expires_after_ttl(mock_repo):
-    provider = InstrumentConfigProvider(repo=mock_repo, cache_ttl=0.01)  # 10ms TTL
-    provider.list_enabled_instruments()
-    time.sleep(0.02)
-    provider.list_enabled_instruments()
+    factory, _ = _make_session_factory(mock_repo)
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=mock_repo):
+        provider = InstrumentConfigProvider(session_factory=factory, cache_ttl=0.01)  # 10ms TTL
+        provider.list_enabled_instruments()
+        time.sleep(0.02)
+        provider.list_enabled_instruments()
     assert mock_repo.list_enabled.call_count == 2
 
 
 def test_invalidate_cache(mock_repo):
-    provider = InstrumentConfigProvider(repo=mock_repo, cache_ttl=60)
-    provider.list_enabled_instruments()
-    provider.invalidate_cache()
-    provider.list_enabled_instruments()
+    factory, _ = _make_session_factory(mock_repo)
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=mock_repo):
+        provider = InstrumentConfigProvider(session_factory=factory, cache_ttl=60)
+        provider.list_enabled_instruments()
+        provider.invalidate_cache()
+        provider.list_enabled_instruments()
     assert mock_repo.list_enabled.call_count == 2
 
 
 def test_orm_row_to_instrument_config_visa(mock_repo):
     """Verify correct InstrumentAddress subtype is built."""
-    provider = InstrumentConfigProvider(repo=mock_repo, cache_ttl=30)
-    config = provider.get_instrument("DAQ973A_1")
+    factory, _ = _make_session_factory(mock_repo)
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=mock_repo):
+        provider = InstrumentConfigProvider(session_factory=factory, cache_ttl=30)
+        config = provider.get_instrument("DAQ973A_1")
     assert isinstance(config.connection, VISAAddress)
     assert "TCPIP0" in config.connection.address
 
@@ -91,8 +120,10 @@ def test_orm_row_to_instrument_config_serial():
     )
     repo = MagicMock()
     repo.get_by_instrument_id.return_value = row
-    provider = InstrumentConfigProvider(repo=repo, cache_ttl=30)
-    config = provider.get_instrument("MODEL2303_1")
+    factory, _ = _make_session_factory(repo)
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=repo):
+        provider = InstrumentConfigProvider(session_factory=factory, cache_ttl=30)
+        config = provider.get_instrument("MODEL2303_1")
     assert isinstance(config.connection, SerialAddress)
 
 
@@ -105,8 +136,10 @@ def test_orm_row_to_instrument_config_tcpip_socket():
     from app.core.instrument_config import InstrumentConfigProvider, TCPIPSocketAddress
     repo = MagicMock()
     repo.get_by_instrument_id.return_value = row
-    provider = InstrumentConfigProvider(repo=repo, cache_ttl=30)
-    config = provider.get_instrument("tcpip_sock_1")
+    factory, _ = _make_session_factory(repo)
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=repo):
+        provider = InstrumentConfigProvider(session_factory=factory, cache_ttl=30)
+        config = provider.get_instrument("tcpip_sock_1")
     assert isinstance(config.connection, TCPIPSocketAddress)
     assert config.connection.host == "192.168.1.20"
 
@@ -120,8 +153,10 @@ def test_orm_row_to_instrument_config_gpib():
     from app.core.instrument_config import InstrumentConfigProvider, GPIBAddress
     repo = MagicMock()
     repo.get_by_instrument_id.return_value = row
-    provider = InstrumentConfigProvider(repo=repo, cache_ttl=30)
-    config = provider.get_instrument("gpib_1")
+    factory, _ = _make_session_factory(repo)
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=repo):
+        provider = InstrumentConfigProvider(session_factory=factory, cache_ttl=30)
+        config = provider.get_instrument("gpib_1")
     assert isinstance(config.connection, GPIBAddress)
 
 
@@ -134,7 +169,9 @@ def test_orm_row_to_instrument_config_local():
     from app.core.instrument_config import InstrumentConfigProvider, InstrumentAddress
     repo = MagicMock()
     repo.get_by_instrument_id.return_value = row
-    provider = InstrumentConfigProvider(repo=repo, cache_ttl=30)
-    config = provider.get_instrument("console_1")
+    factory, _ = _make_session_factory(repo)
+    with patch("app.repositories.instrument_repository.InstrumentRepository", return_value=repo):
+        provider = InstrumentConfigProvider(session_factory=factory, cache_ttl=30)
+        config = provider.get_instrument("console_1")
     assert isinstance(config.connection, InstrumentAddress)
     assert config.connection.type == "LOCAL"
