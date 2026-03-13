@@ -326,8 +326,9 @@ class InstrumentConfigProvider:
     cache_ttl: seconds until the full list is refreshed from DB (default 30).
     """
 
-    def __init__(self, repo, cache_ttl: float = 30.0):
-        self._repo = repo
+    def __init__(self, session_factory, cache_ttl: float = 30.0):
+        # session_factory: callable returning a new sync Session (e.g. SessionLocal)
+        self._session_factory = session_factory
         self._cache_ttl = cache_ttl
         self._cache: Optional[Dict[str, InstrumentConfig]] = None
         self._cache_time: float = 0.0
@@ -343,8 +344,13 @@ class InstrumentConfigProvider:
         if cached is not None and instrument_id in cached:
             return cached[instrument_id]
         # Direct DB lookup for a single instrument (avoids full-list refresh)
-        row = self._repo.get_by_instrument_id(instrument_id)
-        return self._row_to_config(row) if row else None
+        db = self._session_factory()
+        try:
+            from app.repositories.instrument_repository import InstrumentRepository
+            row = InstrumentRepository(db).get_by_instrument_id(instrument_id)
+            return self._row_to_config(row) if row else None
+        finally:
+            db.close()
 
     def list_instruments(self) -> Dict[str, InstrumentConfig]:
         """Return all instruments (enabled + disabled). Always fetches fresh from DB
@@ -397,22 +403,33 @@ class InstrumentConfigProvider:
         return None
 
     def _refresh_cache(self) -> Dict[str, InstrumentConfig]:
-        """Fetch enabled instruments from DB, populate cache. Thread-safe with double-checked locking."""
+        """Fetch enabled instruments from DB, populate cache."""
         with self._lock:
-            # Double-check: another thread may have refreshed while we waited for the lock
             if (self._cache is not None and
                     (_time.monotonic() - self._cache_time) < self._cache_ttl):
                 return dict(self._cache)
-            # We hold the lock — fetch from DB and update cache
-            rows = self._repo.list_enabled()
+        # Open a short-lived session for this refresh (outside lock to avoid blocking other threads during I/O)
+        db = self._session_factory()
+        try:
+            from app.repositories.instrument_repository import InstrumentRepository
+            rows = InstrumentRepository(db).list_enabled()
             result = {row.instrument_id: self._row_to_config(row) for row in rows}
+        finally:
+            db.close()
+        # Two threads may race here if both passed the TTL check above — last writer wins (harmless)
+        with self._lock:
             self._cache = result
             self._cache_time = _time.monotonic()
             return dict(result)
 
     def _build_all_map(self) -> Dict[str, InstrumentConfig]:
-        rows = self._repo.list_all()
-        return {row.instrument_id: self._row_to_config(row) for row in rows}
+        db = self._session_factory()
+        try:
+            from app.repositories.instrument_repository import InstrumentRepository
+            rows = InstrumentRepository(db).list_all()
+            return {row.instrument_id: self._row_to_config(row) for row in rows}
+        finally:
+            db.close()
 
     @staticmethod
     def _row_to_config(row) -> InstrumentConfig:
@@ -463,28 +480,6 @@ class InstrumentConfigProvider:
             description=row.description,
         )
 
-
-def get_instrument_provider(db) -> "InstrumentConfigProvider":
-    """
-    Create an InstrumentConfigProvider backed by the given DB session.
-    Intended to be called from FastAPI dependency injection.
-
-    Usage in endpoint:
-        from app.core.database import get_db
-        from app.core.instrument_config import get_instrument_provider
-        from app.repositories.instrument_repository import InstrumentRepository
-
-        @router.get("/{id}")
-        def get_instrument(instrument_id: str, db: Session = Depends(get_db)):
-            provider = get_instrument_provider(db)
-            return provider.get_instrument(instrument_id)
-
-    For long-lived services (InstrumentExecutor), use a module-level provider
-    and call invalidate_cache() after mutations.
-    """
-    from app.repositories.instrument_repository import InstrumentRepository
-    repo = InstrumentRepository(db)
-    return InstrumentConfigProvider(repo=repo, cache_ttl=30.0)
 
 
 # ============================================================================
