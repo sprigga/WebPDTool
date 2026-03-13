@@ -108,23 +108,30 @@ WebPDTool 是一個 Web 化的產品測試系統，用於執行自動化測試�
 
 ### 整體系統架構圖
 
+<div style="width:100%; max-width:1500px; margin:0 auto; overflow-x:auto;">
+
 ```mermaid
 %%{init: {
   "theme": "base",
   "themeVariables": {
-    "fontSize": "12px",
-    "fontFamily": "Segoe UI, Arial, sans-serif",
+    "fontSize": "32px",
+    "fontFamily": "'Segoe UI', 'Microsoft YaHei', 'PingFang TC', Arial, sans-serif",
     "primaryTextColor": "#1a1a1a",
     "lineColor": "#666",
     "primaryColor": "#fafafa",
-    "edgeLabelBackground": "#fff"
+    "secondaryColor": "#e9ecef",
+    "tertiaryColor": "#dee2e6",
+    "edgeLabelBackground": "#ffffff",
+    "background": "#ffffff"
   },
   "flowchart": {
-    "padding": 20,
-    "nodeSpacing": 35,
-    "rankSpacing": 55,
-    "curve": "monotoneX",
-    "diagramPadding": 20
+    "useMaxWidth": false,
+    "padding": 80,
+    "nodeSpacing": 80,
+    "rankSpacing": 150,
+    "curve": "basis",
+    "diagramPadding": 80,
+    "wrappingWidth": 220
   }
 }}%%
 graph LR
@@ -220,21 +227,59 @@ graph LR
     BE_MODEL ==> DB
     SV2 -.->|TCP/IP| EXT
 
-    style Client fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000
-    style FE fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#000
-    style BE fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
-    style DB fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000
-    style EXT fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000
+    style Client fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#1a1a1a,stroke-dasharray: 0
+    style FE fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1a1a1a
+    style BE fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#1a1a1a
+    style DB fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#1a1a1a
+    style EXT fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#1a1a1a
 
-    style FE_API fill:#c8e6c9,stroke:#2e7d32
-    style FE_Store fill:#c8e6c9,stroke:#2e7d32
-    style FE_View fill:#c8e6c9,stroke:#2e7d32
-    style BE_API fill:#e1bee7,stroke:#6a1b9a
-    style BE_SVC fill:#e1bee7,stroke:#6a1b9a
-    style BE_MEAS fill:#e1bee7,stroke:#6a1b9a
-    style BE_REPO fill:#e1bee7,stroke:#6a1b9a
-    style BE_MODEL fill:#e1bee7,stroke:#6a1b9a
+    style FE_Nginx fill:#a5d6a7,stroke:#1b5e20,stroke-width:2px
+    style FE_Vue fill:#c8e6c9,stroke:#2e7d32,stroke-width:1px
+    style FE_API fill:#c8e6c9,stroke:#2e7d32,stroke-width:1px
+    style FE_Store fill:#c8e6c9,stroke:#2e7d32,stroke-width:1px
+    style FE_View fill:#c8e6c9,stroke:#2e7d32,stroke-width:1px
+
+    style BE_Fast fill:#e1bee7,stroke:#4a148c,stroke-width:2px
+    style BE_API fill:#d1c4e9,stroke:#4527a0,stroke-width:1px
+    style BE_SVC fill:#d1c4e9,stroke:#4527a0,stroke-width:1px
+    style BE_MEAS fill:#d1c4e9,stroke:#4527a0,stroke-width:1px
+    style BE_REPO fill:#d1c4e9,stroke:#4527a0,stroke-width:1px
+    style BE_MODEL fill:#d1c4e9,stroke:#4527a0,stroke-width:1px
+
+    style FA1 fill:#81c784,stroke:#1b5e20,stroke-width:1px
+    style FA2 fill:#81c784,stroke:#1b5e20,stroke-width:1px
+    style FA3 fill:#81c784,stroke:#1b5e20,stroke-width:1px
+    style FA4 fill:#81c784,stroke:#1b5e20,stroke-width:1px
+    style FA5 fill:#81c784,stroke:#1b5e20,stroke-width:1px
+
+    style FS1 fill:#81c784,stroke:#1b5e20,stroke-width:1px
+    style FS2 fill:#81c784,stroke:#1b5e20,stroke-width:1px
+
+    style FV1 fill:#81c784,stroke:#1b5e20,stroke-width:1px
+    style FV2 fill:#81c784,stroke:#1b5e20,stroke-width:1px
+    style FV3 fill:#81c784,stroke:#1b5e20,stroke-width:1px
+    style FV4 fill:#81c784,stroke:#1b5e20,stroke-width:1px
+
+    style BA1 fill:#9575cd,stroke:#311b92,stroke-width:1px
+    style BA2 fill:#9575cd,stroke:#311b92,stroke-width:1px
+    style BA3 fill:#9575cd,stroke:#311b92,stroke-width:1px
+    style BA4 fill:#9575cd,stroke:#311b92,stroke-width:1px
+    style BA5 fill:#9575cd,stroke:#311b92,stroke-width:1px
+
+    style SV1 fill:#b39ddb,stroke:#311b92,stroke-width:1px
+    style SV2 fill:#b39ddb,stroke:#311b92,stroke-width:1px
+    style SV3 fill:#b39ddb,stroke:#311b92,stroke-width:1px
+    style SV4 fill:#b39ddb,stroke:#311b92,stroke-width:1px
+
+    style MS1 fill:#b39ddb,stroke:#311b92,stroke-width:1px
+    style MS2 fill:#b39ddb,stroke:#311b92,stroke-width:1px
+    style MS3 fill:#b39ddb,stroke:#311b92,stroke-width:1px
+
+    style RP fill:#b39ddb,stroke:#311b92,stroke-width:1px
+    style MD fill:#b39ddb,stroke:#311b92,stroke-width:1px
 ```
+
+</div>
 
 ### API 路由結構
 
