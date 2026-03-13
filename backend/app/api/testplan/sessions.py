@@ -6,9 +6,11 @@ Extracted from testplans.py lines 624-654.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+# from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
+# from app.core.database import get_db
+from app.core.database import get_async_db
 from app.dependencies import get_current_active_user
 from app.services.test_plan_service import test_plan_service
 
@@ -16,9 +18,9 @@ router = APIRouter()
 
 
 @router.get("/sessions/{session_id}/test-results")
-def get_session_test_results(
+async def get_session_test_results(
     session_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -35,7 +37,7 @@ def get_session_test_results(
         List of test results
     """
     try:
-        results = test_plan_service.get_session_test_results(db, session_id)
+        results = await test_plan_service.get_session_test_results(db, session_id)
         return {
             "session_id": session_id,
             "results": results,

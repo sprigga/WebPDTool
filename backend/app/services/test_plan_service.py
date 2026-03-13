@@ -4,7 +4,10 @@ Test Plan Service
 實作測試計畫管理器，提供 TestPointMap 風格的測試計畫操作
 """
 from typing import Dict, List, Optional, Any, Tuple
-from sqlalchemy.orm import Session
+# from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, distinct
+from sqlalchemy import delete as sa_delete
 from decimal import Decimal
 import logging
 from datetime import datetime
@@ -595,9 +598,9 @@ class TestPlanService:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def new_test_plan_map(
+    async def new_test_plan_map(
         self,
-        db: Session,
+        db: AsyncSession,
         project_id: int,
         station_id: int,
         test_plan_name: Optional[str] = None,
@@ -620,19 +623,22 @@ class TestPlanService:
         test_plan_map = TestPlanMap()
 
         # 查詢測試計畫
-        query = db.query(TestPlan).filter(
-            TestPlan.project_id == project_id,
+        # Original: query = db.query(TestPlan).filter(...)
+        stmt = select(TestPlan).where(
+            TestPlan.project_id == project_id
+        ).where(
             TestPlan.station_id == station_id
         )
 
         if test_plan_name:
-            query = query.filter(TestPlan.test_plan_name == test_plan_name)
+            stmt = stmt.where(TestPlan.test_plan_name == test_plan_name)
 
         if enabled_only:
-            query = query.filter(TestPlan.enabled == True)
+            stmt = stmt.where(TestPlan.enabled == True)
 
         # 按順序排序
-        test_plans = query.order_by(TestPlan.sequence_order).all()
+        result = await db.execute(stmt.order_by(TestPlan.sequence_order))
+        test_plans = result.scalars().all()
 
         # 建立 TestPoint 物件並加入映射表
         for plan in test_plans:
@@ -656,20 +662,22 @@ class TestPlanService:
         self.logger.info(f"Created TestPlanMap with {len(test_plan_map)} test points")
         return test_plan_map
 
-    def get_test_plan_by_id(
+    async def get_test_plan_by_id(
         self,
-        db: Session,
+        db: AsyncSession,
         test_plan_id: int
     ) -> Optional[TestPlan]:
         """
         根據 ID 取得測試計畫項目
         對應 PDTool4 test_point_map.py: TestPointMap.get_test_point()
         """
-        return db.query(TestPlan).filter(TestPlan.id == test_plan_id).first()
+        # Original: return db.query(TestPlan).filter(TestPlan.id == test_plan_id).first()
+        result = await db.execute(select(TestPlan).where(TestPlan.id == test_plan_id))
+        return result.scalar_one_or_none()
 
-    def get_test_plans(
+    async def get_test_plans(
         self,
-        db: Session,
+        db: AsyncSession,
         project_id: int,
         station_id: int,
         test_plan_name: Optional[str] = None,
@@ -679,22 +687,25 @@ class TestPlanService:
         取得測試計畫列表
         對應 PDTool4 的多測試點查詢
         """
-        query = db.query(TestPlan).filter(
-            TestPlan.project_id == project_id,
+        # Original: query = db.query(TestPlan).filter(...)
+        stmt = select(TestPlan).where(
+            TestPlan.project_id == project_id
+        ).where(
             TestPlan.station_id == station_id
         )
 
         if test_plan_name:
-            query = query.filter(TestPlan.test_plan_name == test_plan_name)
+            stmt = stmt.where(TestPlan.test_plan_name == test_plan_name)
 
         if enabled_only:
-            query = query.filter(TestPlan.enabled == True)
+            stmt = stmt.where(TestPlan.enabled == True)
 
-        return query.order_by(TestPlan.sequence_order).all()
+        result = await db.execute(stmt.order_by(TestPlan.sequence_order))
+        return result.scalars().all()
 
-    def create_test_plan(
+    async def create_test_plan(
         self,
-        db: Session,
+        db: AsyncSession,
         test_plan_data: Dict[str, Any],
         user_id: Optional[str] = None
     ) -> TestPlan:
@@ -703,11 +714,17 @@ class TestPlanService:
         """
         try:
             # 檢查唯一性
-            existing = db.query(TestPlan).filter(
-                TestPlan.project_id == test_plan_data['project_id'],
-                TestPlan.station_id == test_plan_data['station_id'],
-                TestPlan.item_no == test_plan_data['item_no']
-            ).first()
+            # Original: existing = db.query(TestPlan).filter(...).first()
+            result = await db.execute(
+                select(TestPlan).where(
+                    TestPlan.project_id == test_plan_data['project_id']
+                ).where(
+                    TestPlan.station_id == test_plan_data['station_id']
+                ).where(
+                    TestPlan.item_no == test_plan_data['item_no']
+                )
+            )
+            existing = result.scalar_one_or_none()
 
             if existing:
                 raise ValueError(f"Test plan item with item_no={test_plan_data['item_no']} already exists")
@@ -715,20 +732,20 @@ class TestPlanService:
             # 建立測試計畫
             test_plan = TestPlan(**test_plan_data)
             db.add(test_plan)
-            db.commit()
-            db.refresh(test_plan)
+            await db.commit()
+            await db.refresh(test_plan)
 
             self.logger.info(f"Created test plan: {test_plan.item_name}")
             return test_plan
 
         except Exception as e:
-            db.rollback()
+            await db.rollback()
             self.logger.error(f"Failed to create test plan: {e}")
             raise
 
-    def update_test_plan(
+    async def update_test_plan(
         self,
-        db: Session,
+        db: AsyncSession,
         test_plan_id: int,
         update_data: Dict[str, Any]
     ) -> Optional[TestPlan]:
@@ -736,27 +753,27 @@ class TestPlanService:
         更新測試計畫項目
         """
         try:
-            test_plan = self.get_test_plan_by_id(db, test_plan_id)
+            test_plan = await self.get_test_plan_by_id(db, test_plan_id)
             if not test_plan:
                 return None
 
             for field, value in update_data.items():
                 setattr(test_plan, field, value)
 
-            db.commit()
-            db.refresh(test_plan)
+            await db.commit()
+            await db.refresh(test_plan)
 
             self.logger.info(f"Updated test plan: {test_plan.item_name}")
             return test_plan
 
         except Exception as e:
-            db.rollback()
+            await db.rollback()
             self.logger.error(f"Failed to update test plan: {e}")
             raise
 
-    def delete_test_plan(
+    async def delete_test_plan(
         self,
-        db: Session,
+        db: AsyncSession,
         test_plan_id: int
     ) -> bool:
         """
@@ -767,33 +784,29 @@ class TestPlanService:
         修正: 刪除測試計畫前，先刪除關聯的測試結果記錄
         """
         try:
-            test_plan = self.get_test_plan_by_id(db, test_plan_id)
+            test_plan = await self.get_test_plan_by_id(db, test_plan_id)
             if not test_plan:
                 return False
 
             # 先刪除關聯的測試結果記錄（避免外鍵約束錯誤）
-            deleted_results = db.query(TestResultModel).filter(
-                TestResultModel.test_plan_id == test_plan_id
-            ).delete(synchronize_session=False)
-
-            if deleted_results > 0:
-                self.logger.info(f"Deleted {deleted_results} associated test results for test plan: {test_plan.item_name}")
+            # Original: db.query(TestResultModel).filter(...).delete(synchronize_session=False)
+            await db.execute(sa_delete(TestResultModel).where(TestResultModel.test_plan_id == test_plan_id))
 
             # 再刪除測試計畫
-            db.delete(test_plan)
-            db.commit()
+            await db.delete(test_plan)
+            await db.commit()
 
             self.logger.info(f"Deleted test plan: {test_plan.item_name}")
             return True
 
         except Exception as e:
-            db.rollback()
+            await db.rollback()
             self.logger.error(f"Failed to delete test plan: {e}")
             raise
 
-    def bulk_delete_test_plans(
+    async def bulk_delete_test_plans(
         self,
-        db: Session,
+        db: AsyncSession,
         test_plan_ids: List[int]
     ) -> int:
         """
@@ -805,30 +818,26 @@ class TestPlanService:
         """
         try:
             # 先批次刪除關聯的測試結果記錄（避免外鍵約束錯誤）
-            deleted_results = db.query(TestResultModel).filter(
-                TestResultModel.test_plan_id.in_(test_plan_ids)
-            ).delete(synchronize_session=False)
-
-            if deleted_results > 0:
-                self.logger.info(f"Deleted {deleted_results} associated test results before bulk delete")
+            # Original: db.query(TestResultModel).filter(...).delete(synchronize_session=False)
+            await db.execute(sa_delete(TestResultModel).where(TestResultModel.test_plan_id.in_(test_plan_ids)))
 
             # 再批次刪除測試計畫
-            deleted_count = db.query(TestPlan).filter(
-                TestPlan.id.in_(test_plan_ids)
-            ).delete(synchronize_session=False)
+            # Original: deleted_count = db.query(TestPlan).filter(...).delete(synchronize_session=False)
+            result = await db.execute(sa_delete(TestPlan).where(TestPlan.id.in_(test_plan_ids)))
+            deleted_count = result.rowcount
 
-            db.commit()
+            await db.commit()
             self.logger.info(f"Bulk deleted {deleted_count} test plan items")
             return deleted_count
 
         except Exception as e:
-            db.rollback()
+            await db.rollback()
             self.logger.error(f"Failed to bulk delete test plans: {e}")
             raise
 
-    def reorder_test_plans(
+    async def reorder_test_plans(
         self,
-        db: Session,
+        db: AsyncSession,
         item_orders: Dict[int, int]
     ) -> int:
         """
@@ -837,38 +846,40 @@ class TestPlanService:
         try:
             updated_count = 0
             for testplan_id, new_order in item_orders.items():
-                testplan = db.query(TestPlan).filter(TestPlan.id == testplan_id).first()
+                # Original: testplan = db.query(TestPlan).filter(TestPlan.id == testplan_id).first()
+                testplan = await db.get(TestPlan, testplan_id)
                 if testplan:
                     testplan.sequence_order = new_order
                     updated_count += 1
 
-            db.commit()
+            await db.commit()
             self.logger.info(f"Reordered {updated_count} test plan items")
             return updated_count
 
         except Exception as e:
-            db.rollback()
+            await db.rollback()
             self.logger.error(f"Failed to reorder test plans: {e}")
             raise
 
-    def get_test_plan_names(
+    async def get_test_plan_names(
         self,
-        db: Session,
+        db: AsyncSession,
         project_id: int,
         station_id: int
     ) -> List[str]:
         """
         取得測試計畫名稱列表
         """
-        test_plan_names = db.query(TestPlan.test_plan_name)\
-            .filter(TestPlan.project_id == project_id)\
-            .filter(TestPlan.station_id == station_id)\
-            .filter(TestPlan.test_plan_name.isnot(None))\
-            .filter(TestPlan.test_plan_name != '')\
-            .distinct()\
-            .all()
+        # Original: db.query(TestPlan.test_plan_name).filter(...).distinct().all()
+        result = await db.execute(
+            select(distinct(TestPlan.test_plan_name))
+            .where(TestPlan.project_id == project_id)
+            .where(TestPlan.station_id == station_id)
+            .where(TestPlan.test_plan_name.isnot(None))
+            .where(TestPlan.test_plan_name != '')
+        )
 
-        return [name[0] for name in test_plan_names]
+        return [row[0] for row in result.all()]
 
     def validate_test_point(
         self,
@@ -896,17 +907,19 @@ class TestPlanService:
         except Exception as e:
             return False, str(e)
 
-    def get_session_test_results(
+    async def get_session_test_results(
         self,
-        db: Session,
+        db: AsyncSession,
         session_id: int
     ) -> List[Dict[str, Any]]:
         """
         取得測試會話的測試結果
         """
-        results = db.query(TestResultModel).filter(
-            TestResultModel.session_id == session_id
-        ).all()
+        # Original: results = db.query(TestResultModel).filter(...).all()
+        result = await db.execute(
+            select(TestResultModel).where(TestResultModel.session_id == session_id)
+        )
+        results = result.scalars().all()
 
         return [
             {

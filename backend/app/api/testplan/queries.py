@@ -6,11 +6,14 @@ Extracted from testplans.py lines 29-205.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+# from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
-from app.core.database import get_db
-from app.core.api_helpers import get_entity_or_404
+# from app.core.database import get_db
+from app.core.database import get_async_db
+# from app.core.api_helpers import get_entity_or_404
+from app.core.api_helpers import async_get_entity_or_404
 from app.dependencies import get_current_active_user
 from app.models.station import Station
 from app.schemas.testplan import TestPlan as TestPlanSchema
@@ -20,12 +23,12 @@ router = APIRouter()
 
 
 @router.get("/stations/{station_id}/testplan", response_model=List[TestPlanSchema])
-def get_station_testplan(
+async def get_station_testplan(
     station_id: int,
     project_id: Optional[int] = None,
     enabled_only: bool = True,
     test_plan_name: Optional[str] = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -45,9 +48,8 @@ def get_station_testplan(
     Returns:
         List of test plan items ordered by sequence
     """
-    # Original code: Direct query with 404 check
-    # Refactored: Use get_entity_or_404 helper
-    station = get_entity_or_404(db, Station, station_id, "Station not found")
+    # Original code: station = get_entity_or_404(db, Station, station_id, "Station not found")
+    station = await async_get_entity_or_404(db, Station, station_id, "Station not found")
 
     # 如果未提供 project_id,嘗試從站別獲取預設專案
     if project_id is None and station.project_id:
@@ -61,7 +63,7 @@ def get_station_testplan(
 
     try:
         # 使用 TestPlanService 取得測試計畫列表
-        test_plans = test_plan_service.get_test_plans(
+        test_plans = await test_plan_service.get_test_plans(
             db=db,
             project_id=project_id,
             station_id=station_id,
@@ -77,10 +79,10 @@ def get_station_testplan(
 
 
 @router.get("/stations/{station_id}/testplan-names", response_model=List[str])
-def get_station_testplan_names(
+async def get_station_testplan_names(
     station_id: int,
     project_id: Optional[int] = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -97,9 +99,8 @@ def get_station_testplan_names(
     Returns:
         List of distinct test plan names
     """
-    # Original code: Direct query with 404 check
-    # Refactored: Use get_entity_or_404 helper
-    station = get_entity_or_404(db, Station, station_id, "Station not found")
+    # Original code: station = get_entity_or_404(db, Station, station_id, "Station not found")
+    station = await async_get_entity_or_404(db, Station, station_id, "Station not found")
 
     # 如果未提供 project_id,嘗試從站別獲取預設專案
     if project_id is None and station.project_id:
@@ -113,7 +114,7 @@ def get_station_testplan_names(
 
     try:
         # 使用 TestPlanService 取得測試計畫名稱列表
-        test_plan_names = test_plan_service.get_test_plan_names(
+        test_plan_names = await test_plan_service.get_test_plan_names(
             db=db,
             project_id=project_id,
             station_id=station_id
@@ -127,12 +128,12 @@ def get_station_testplan_names(
 
 
 @router.get("/stations/{station_id}/testplan-map")
-def get_station_testplan_map(
+async def get_station_testplan_map(
     station_id: int,
     project_id: int,
     test_plan_name: Optional[str] = None,
     enabled_only: bool = True,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -151,13 +152,12 @@ def get_station_testplan_map(
     Returns:
         TestPlanMap information including execution statistics
     """
-    # Original code: Direct query with 404 check
-    # Refactored: Use get_entity_or_404 helper
-    station = get_entity_or_404(db, Station, station_id, "Station not found")
+    # Original code: station = get_entity_or_404(db, Station, station_id, "Station not found")
+    station = await async_get_entity_or_404(db, Station, station_id, "Station not found")
 
     try:
         # 使用 TestPlanService 建立 TestPointMap
-        test_plan_map = test_plan_service.new_test_plan_map(
+        test_plan_map = await test_plan_service.new_test_plan_map(
             db=db,
             project_id=project_id,
             station_id=station_id,

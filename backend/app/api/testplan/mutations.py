@@ -6,12 +6,16 @@ Extracted from testplans.py lines 208-543.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
-from sqlalchemy.orm import Session
+# from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_
+from sqlalchemy import delete as sa_delete
 from typing import List
 
-from app.core.database import get_db
-from app.core.api_helpers import get_entity_or_404, PermissionChecker
+# from app.core.database import get_db
+from app.core.database import get_async_db
+# from app.core.api_helpers import get_entity_or_404, PermissionChecker
+from app.core.api_helpers import async_get_entity_or_404, PermissionChecker
 from app.core.constants import ErrorMessages, ResponseMessages
 from app.dependencies import get_current_active_user
 from app.models.testplan import TestPlan
@@ -39,7 +43,7 @@ async def upload_testplan_csv(
     project_id: int = Form(..., description="Project ID this test plan belongs to"),
     test_plan_name: str = Form(None, description="Test plan name"),
     replace_existing: bool = Form(default=True, description="Replace existing test plan"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -60,9 +64,8 @@ async def upload_testplan_csv(
     # Refactored: Use PermissionChecker helper
     PermissionChecker.check_admin_or_engineer(current_user, "upload test plans")
 
-    # Original code: Direct query with 404 check
-    # Refactored: Use get_entity_or_404 helper
-    station = get_entity_or_404(db, Station, station_id)
+    # Original code: station = get_entity_or_404(db, Station, station_id)
+    station = await async_get_entity_or_404(db, Station, station_id)
 
     # Original: if not file.filename.endswith('.csv'):
     # Modified: Use lower() for case-insensitive file type checking
@@ -82,9 +85,9 @@ async def upload_testplan_csv(
 
         # If replace_existing, delete old test plan
         if replace_existing:
-            db.query(TestPlan).filter(
-                and_(TestPlan.project_id == project_id, TestPlan.station_id == station_id)
-            ).delete()
+            # Original: db.query(TestPlan).filter(and_(...)).delete()
+            await db.execute(sa_delete(TestPlan).where(and_(TestPlan.project_id == project_id, TestPlan.station_id == station_id)))
+            await db.commit()
 
         # Insert new test plan items
         created_count = 0
@@ -99,7 +102,7 @@ async def upload_testplan_csv(
                     'station_id': station_id,
                     'test_plan_name': test_plan_name
                 }
-                test_plan_service.create_test_plan(db, test_plan_data)
+                await test_plan_service.create_test_plan(db, test_plan_data)
                 created_count += 1
             except Exception as e:
                 errors.append(f"Error creating item {plan_dict.get('item_name')}: {str(e)}")
@@ -117,7 +120,7 @@ async def upload_testplan_csv(
     except CSVParseError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"CSV parsing error: {str(e)}")
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         # Original code: print(f"Upload error traceback:\n{error_traceback}")
         # Modified: Use logger for production-grade error logging with exc_info=True
         logger.error(f"Upload error: {str(e)}", exc_info=True)
@@ -127,7 +130,7 @@ async def upload_testplan_csv(
 @router.post("/testplans", response_model=TestPlanSchema, status_code=status.HTTP_201_CREATED)
 async def create_testplan_item(
     testplan: TestPlanCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -144,12 +147,12 @@ async def create_testplan_item(
         Created test plan item
     """
     PermissionChecker.check_admin_or_engineer(current_user, "create test plan items")
-    get_entity_or_404(db, Station, testplan.station_id)
+    await async_get_entity_or_404(db, Station, testplan.station_id)
 
     try:
         # 使用 TestPlanService 建立測試計畫項目
         test_plan_data = testplan.dict()
-        db_testplan = test_plan_service.create_test_plan(
+        db_testplan = await test_plan_service.create_test_plan(
             db=db,
             test_plan_data=test_plan_data,
             user_id=current_user.get("sub")
@@ -167,7 +170,7 @@ async def create_testplan_item(
 @router.get("/testplans/{testplan_id}", response_model=TestPlanSchema)
 async def get_testplan_item(
     testplan_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -176,7 +179,7 @@ async def get_testplan_item(
     Uses TestPlanService.get_test_plan_by_id()
     """
     try:
-        testplan = test_plan_service.get_test_plan_by_id(db, testplan_id)
+        testplan = await test_plan_service.get_test_plan_by_id(db, testplan_id)
         if not testplan:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test plan item not found")
         return testplan
@@ -193,7 +196,7 @@ async def get_testplan_item(
 async def update_testplan_item(
     testplan_id: int,
     testplan_update: TestPlanUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -215,7 +218,7 @@ async def update_testplan_item(
     try:
         # Use TestPlanService to update test plan item
         update_data = testplan_update.dict(exclude_unset=True)
-        db_testplan = test_plan_service.update_test_plan(
+        db_testplan = await test_plan_service.update_test_plan(
             db=db,
             test_plan_id=testplan_id,
             update_data=update_data
@@ -237,7 +240,7 @@ async def update_testplan_item(
 @router.delete("/testplans/{testplan_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_testplan_item(
     testplan_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -254,7 +257,7 @@ async def delete_testplan_item(
 
     try:
         # Use TestPlanService to delete test plan item
-        success = test_plan_service.delete_test_plan(db, testplan_id)
+        success = await test_plan_service.delete_test_plan(db, testplan_id)
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test plan item not found")
     except HTTPException:
@@ -269,7 +272,7 @@ async def delete_testplan_item(
 @router.post("/testplans/bulk-delete", status_code=status.HTTP_204_NO_CONTENT)
 async def bulk_delete_testplan_items(
     delete_request: TestPlanBulkDelete,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -286,7 +289,7 @@ async def bulk_delete_testplan_items(
 
     try:
         # Use TestPlanService to batch delete test plan items
-        deleted_count = test_plan_service.bulk_delete_test_plans(
+        deleted_count = await test_plan_service.bulk_delete_test_plans(
             db=db,
             test_plan_ids=delete_request.test_plan_ids
         )
@@ -300,7 +303,7 @@ async def bulk_delete_testplan_items(
 @router.post("/testplans/reorder", response_model=dict)
 async def reorder_testplan_items(
     reorder_request: TestPlanReorder,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -320,7 +323,7 @@ async def reorder_testplan_items(
 
     try:
         # Use TestPlanService to reorder test plan items
-        updated_count = test_plan_service.reorder_test_plans(
+        updated_count = await test_plan_service.reorder_test_plans(
             db=db,
             item_orders=reorder_request.item_orders
         )

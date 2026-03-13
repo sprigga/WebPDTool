@@ -6,10 +6,12 @@ Extracted from testplans.py lines 546-621.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+# from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
-from app.core.database import get_db
+# from app.core.database import get_db
+from app.core.database import get_async_db
 from app.dependencies import get_current_active_user
 from app.services.test_plan_service import test_plan_service
 
@@ -17,13 +19,13 @@ router = APIRouter()
 
 
 @router.post("/testplans/validate-test-point")
-def validate_test_point(
+async def validate_test_point(
     unique_id: str,
     measured_value: str,
     run_all_test: str = "OFF",
     project_id: int = None,
     station_id: int = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -45,7 +47,7 @@ def validate_test_point(
     """
     try:
         # 建立 TestPointMap
-        test_plan_map = test_plan_service.new_test_plan_map(
+        test_plan_map = await test_plan_service.new_test_plan_map(
             db=db,
             project_id=project_id,
             station_id=station_id
