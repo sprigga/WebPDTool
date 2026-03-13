@@ -1,14 +1,16 @@
 """Authentication service"""
 from typing import Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.models.user import User
 from app.schemas.user import UserCreate
 from app.core.security import verify_password, get_password_hash
 
 
-def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
+async def authenticate_user(db: AsyncSession, username: str, password: str) -> Optional[User]:
     """Authenticate user with username and password"""
-    user = db.query(User).filter(User.username == username).first()
+    result = await db.execute(select(User).where(User.username == username))
+    user = result.scalar_one_or_none()
     if not user:
         return None
     if not verify_password(password, user.password_hash):
@@ -18,17 +20,19 @@ def authenticate_user(db: Session, username: str, password: str) -> Optional[Use
     return user
 
 
-def get_user_by_username(db: Session, username: str) -> Optional[User]:
+async def get_user_by_username(db: AsyncSession, username: str) -> Optional[User]:
     """Get user by username"""
-    return db.query(User).filter(User.username == username).first()
+    result = await db.execute(select(User).where(User.username == username))
+    return result.scalar_one_or_none()
 
 
-def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
+async def get_user_by_id(db: AsyncSession, user_id: int) -> Optional[User]:
     """Get user by ID"""
-    return db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
 
 
-def create_user(db: Session, user: UserCreate) -> User:
+async def create_user(db: AsyncSession, user: UserCreate) -> User:
     """Create new user"""
     hashed_password = get_password_hash(user.password)
     db_user = User(
@@ -40,21 +44,19 @@ def create_user(db: Session, user: UserCreate) -> User:
         is_active=True
     )
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    await db.commit()
+    await db.refresh(db_user)
     return db_user
 
 
-def update_user(db: Session, user_id: int, **kwargs) -> Optional[User]:
+async def update_user(db: AsyncSession, user_id: int, **kwargs) -> Optional[User]:
     """Update user information"""
-    user = get_user_by_id(db, user_id)
+    user = await get_user_by_id(db, user_id)   # await intra-function call
     if not user:
         return None
-
     for key, value in kwargs.items():
         if hasattr(user, key) and value is not None:
             setattr(user, key, value)
-
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     return user
