@@ -8,6 +8,8 @@ Original code patterns repeated across multiple files are consolidated here.
 from functools import wraps
 from typing import List, Dict, Any, Optional, TypeVar, Type
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from fastapi import HTTPException, status
 
 from app.models.test_result import TestResult as TestResultModel
@@ -62,6 +64,41 @@ def get_entity_by_field_or_404(
     """
     filter_kwargs = {field_name: field_value}
     entity = db.query(model).filter_by(**filter_kwargs).first()
+    if not entity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=detail or f"{model.__name__} with {field_name}='{field_value}' not found"
+        )
+    return entity
+
+
+async def async_get_entity_or_404(
+    db: AsyncSession,
+    model: Type[T],
+    entity_id: int,
+    detail: Optional[str] = None
+) -> T:
+    """Async version of get_entity_or_404 for use with AsyncSession."""
+    entity = await db.get(model, entity_id)
+    if not entity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=detail or f"{model.__name__} not found"
+        )
+    return entity
+
+
+async def async_get_entity_by_field_or_404(
+    db: AsyncSession,
+    model: Type[T],
+    field_name: str,
+    field_value: Any,
+    detail: Optional[str] = None
+) -> T:
+    """Async version of get_entity_by_field_or_404 for use with AsyncSession."""
+    stmt = select(model).filter_by(**{field_name: field_value})
+    result = await db.execute(stmt)
+    entity = result.scalar_one_or_none()
     if not entity:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
