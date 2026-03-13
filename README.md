@@ -736,33 +736,6 @@ docker-compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} webpdtool
 
 ## 更新日誌
 
-### v0.4.0 (2026-03-12)
-
-**新增功能**
-- 儀器管理 Web UI（`InstrumentManage.vue`）— 管理員可透過瀏覽器進行儀器 CRUD
-- DB-backed `InstrumentConfigProvider`：儀器設定從 MySQL 讀取，含 TTL 快取與 legacy fallback
-- `instruments` 資料表與 Alembic 遷移（`20260312_add_instruments_table.py`）
-- `InstrumentRepository`（`backend/app/repositories/`）資料存取層
-- Docker entrypoint 自動執行 Alembic 遷移
-- Driver registry 別名修正（`ConsoleCommand`/`ComPortCommand`/`TCPIPCommand`）
-
-### v0.3.0 (2026-03-11)
-
-**重構與文件**
-- 重構測試套件，新增完整文檔
-- 統計分析功能（ReportAnalysis 頁面）
-- ECharts 圖表整合（執行時間趨勢圖）
-- 描述統計 API（mean, median, stdev, MAD）
-
-### v0.2.1 (2026-03-06)
-
-**新增功能**
-- lowsheen_lib 遷移 Phase 2 & Phase 3 完成
-- TestResults.vue 測試結果視圖
-- AppNavBar.vue 導航欄組件
-
-## 更新日誌
-
 ### v0.5.0 (2026-03-13)
 
 **重大架構升級**
@@ -775,7 +748,7 @@ docker-compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} webpdtool
 - 修復 MultipleResultsFound 錯誤於測試會話列表端點
 
 **新增功能**
-- TestHistory.vue 測試歷史記錄視圖（2026-03-12）
+- TestHistory.vue 測試歷史記錄視圖
 - 儀器管理 Web UI 完整功能
 
 ### v0.4.0 (2026-03-12)
