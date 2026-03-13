@@ -2,80 +2,105 @@
 import pytest
 import tempfile
 import os
+import asyncio
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from app.main import app
 from app.models.user import User, UserRole
 from app.core.database import Base
+from app.core.security import get_password_hash
 
 
 @pytest.fixture(scope="function")
 def db_session():
-    """Get database session"""
-    # Use a file-based database for tests to avoid thread/connection issues
+    """Get shared SQLite database (sync + async engines on same file)"""
     db_fd, db_path = tempfile.mkstemp(suffix=".db")
     os.close(db_fd)
 
-    # connect_args={"check_same_thread": False} is needed for TestClient
-    test_engine = create_engine(
+    # Sync engine for get_db override (used by auth dependencies)
+    sync_engine = create_engine(
         f"sqlite:///{db_path}",
         connect_args={"check_same_thread": False}
     )
-    TestingSessionLocal = sessionmaker(bind=test_engine)
+    SyncSession = sessionmaker(bind=sync_engine)
 
-    # Create all tables
-    Base.metadata.create_all(bind=test_engine)
+    # Async engine for get_async_db override (used by users endpoints)
+    async_engine = create_async_engine(
+        f"sqlite+aiosqlite:///{db_path}",
+        connect_args={"check_same_thread": False}
+    )
+    AsyncSession_ = async_sessionmaker(bind=async_engine, expire_on_commit=False)
 
-    db = TestingSessionLocal()
+    # Create tables using sync engine
+    Base.metadata.create_all(bind=sync_engine)
+
+    yield {"sync": SyncSession, "async": AsyncSession_}
+
+    async def _dispose():
+        await async_engine.dispose()
+
+    asyncio.get_event_loop().run_until_complete(_dispose())
+    sync_engine.dispose()
     try:
-        yield db
-    finally:
-        db.close()
-        test_engine.dispose()
-        # Clean up the temporary file
-        try:
-            os.unlink(db_path)
-        except FileNotFoundError:
-            # Refactored: Original code used bare except: which catches all exceptions
-            # including SystemExit and KeyboardInterrupt. Now specifically catching
-            # FileNotFoundError for when the temp file has already been removed
-            pass
+        os.unlink(db_path)
+    except FileNotFoundError:
+        pass
 
 
 @pytest.fixture
 def client(db_session):
-    """Get test client with database override"""
-    from app.core.database import get_db
+    """Get test client with both sync and async database overrides"""
+    from app.core.database import get_db, get_async_db
 
     def override_get_db():
+        db = db_session["sync"]()
         try:
-            yield db_session
+            yield db
         finally:
-            pass
+            db.close()
+
+    async def override_get_async_db():
+        async with db_session["async"]() as session:
+            yield session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_async_db] = override_get_async_db
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+def _create_user_sync(session_factory, username, password, role, full_name=None, email=None):
+    """Helper: create a user directly in the sync DB"""
+    db = session_factory()
+    try:
+        user = User(
+            username=username,
+            password_hash=get_password_hash(password),
+            role=role,
+            full_name=full_name or username,
+            email=email,
+            is_active=True
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+    finally:
+        db.close()
 
 
 @pytest.fixture
 def admin_user(db_session):
     """Create admin user"""
     from app.core.security import create_access_token
-    from app.services import auth as auth_service
-    from app.schemas.user import UserCreate
 
-    user_data = UserCreate(
-        username="admin_test",
-        password="admin123",
-        role=UserRole.ADMIN,
-        full_name="Test Admin",
-        email="admin@test.com"
+    user = _create_user_sync(
+        db_session["sync"], "admin_test", "admin123", UserRole.ADMIN,
+        full_name="Test Admin", email="admin@test.com"
     )
-    user = auth_service.create_user(db_session, user_data)
-
     token = create_access_token(
         data={"sub": user.username, "role": user.role.value, "id": user.id}
     )
@@ -86,17 +111,11 @@ def admin_user(db_session):
 def engineer_user(db_session):
     """Create engineer user"""
     from app.core.security import create_access_token
-    from app.services import auth as auth_service
-    from app.schemas.user import UserCreate
 
-    user_data = UserCreate(
-        username="engineer_test",
-        password="eng123",
-        role=UserRole.ENGINEER,
+    user = _create_user_sync(
+        db_session["sync"], "engineer_test", "eng123", UserRole.ENGINEER,
         full_name="Test Engineer"
     )
-    user = auth_service.create_user(db_session, user_data)
-
     token = create_access_token(
         data={"sub": user.username, "role": user.role.value, "id": user.id}
     )

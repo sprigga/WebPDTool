@@ -1,11 +1,11 @@
 """Users API endpoints for user management"""
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, or_
 from typing import List, Optional, Set
 
-from app.core.database import get_db
-from app.core.api_helpers import PermissionChecker, get_entity_or_404
+from app.core.database import get_async_db
+from app.core.api_helpers import PermissionChecker, async_get_entity_or_404
 from app.core.constants import ErrorMessages
 from app.schemas.user import UserCreate, UserUpdate, UserInDB, PasswordChange
 from app.models.user import User as UserModel, UserRole
@@ -22,23 +22,23 @@ USER_UPDATE_WHITELIST: Set[str] = {"full_name", "email", "is_active"}
 
 
 @router.get("", response_model=List[UserInDB])
-def get_users(
+async def get_users(
     offset: int = Query(0, ge=0, description="Number of records to skip (pagination)"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
     search: Optional[str] = None,
     role: Optional[UserRole] = None,
     is_active: Optional[bool] = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """Get list of all users with optional search and filtering"""
-    query = db.query(UserModel)
+    stmt = select(UserModel)
 
     # Original code: Basic query with no filtering
     # Enhanced: Added search across username, full_name, and email fields
     if search:
         search_pattern = f"%{search}%"
-        query = query.filter(
+        stmt = stmt.where(
             or_(
                 UserModel.username.like(search_pattern),
                 UserModel.full_name.like(search_pattern),
@@ -49,37 +49,38 @@ def get_users(
     # Original code: No role filtering
     # Enhanced: Added role filter using UserRole enum
     if role is not None:
-        query = query.filter(UserModel.role == role)
+        stmt = stmt.where(UserModel.role == role)
 
     # Original code: No is_active filtering
     # Enhanced: Added is_active status filter
     if is_active is not None:
-        query = query.filter(UserModel.is_active == is_active)
+        stmt = stmt.where(UserModel.is_active == is_active)
 
     # Original code: No ordering
     # Enhanced: Order results by username ascending for consistent pagination
-    query = query.order_by(UserModel.username.asc())
+    stmt = stmt.order_by(UserModel.username.asc())
 
-    users = query.offset(offset).limit(limit).all()
+    result = await db.execute(stmt.offset(offset).limit(limit))
+    users = result.scalars().all()
     return users
 
 
 @router.get("/{user_id}", response_model=UserInDB)
-def get_user(
+async def get_user(
     user_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """Get user by ID"""
     # Refactored: Original code had manual query + if-not-found pattern (lines 36-42)
-    # Now using centralized get_entity_or_404 helper from app/core/api_helpers.py
-    return get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
+    # Now using centralized async_get_entity_or_404 helper from app/core/api_helpers.py
+    return await async_get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
 
 
 @router.post("", response_model=UserInDB, status_code=status.HTTP_201_CREATED)
-def create_user(
+async def create_user(
     user: UserCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """Create new user (Admin only)"""
@@ -87,9 +88,8 @@ def create_user(
     PermissionChecker.check_admin(current_user, "create users")
 
     # Check if username already exists
-    existing_user = db.query(UserModel).filter(
-        UserModel.username == user.username
-    ).first()
+    result = await db.execute(select(UserModel).where(UserModel.username == user.username))
+    existing_user = result.scalar_one_or_none()
     if existing_user:
         # Refactored: Now using ErrorMessages.USERNAME_ALREADY_EXISTS constant
         raise HTTPException(
@@ -98,15 +98,15 @@ def create_user(
         )
 
     # Create user using service layer
-    db_user = auth_service.create_user(db, user)
+    db_user = await auth_service.create_user(db, user)
     return db_user
 
 
 @router.put("/{user_id}", response_model=UserInDB)
-def update_user(
+async def update_user(
     user_id: int,
     user: UserUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """Update user (Admin only)"""
@@ -114,8 +114,8 @@ def update_user(
     PermissionChecker.check_admin(current_user, "update users")
 
     # Refactored: Original code had manual query + if-not-found pattern (lines 81-87)
-    # Now using centralized get_entity_or_404 helper from app/core/api_helpers.py
-    db_user = get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
+    # Now using centralized async_get_entity_or_404 helper from app/core/api_helpers.py
+    db_user = await async_get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
 
     # Security fix: Original code allowed any field from model_dump() to be updated (lines 89-92)
     # This could lead to unintended updates like {"id": 999} or {"username": "hacked"}
@@ -127,16 +127,16 @@ def update_user(
             continue
         setattr(db_user, key, value)
 
-    db.commit()
-    db.refresh(db_user)
+    await db.commit()
+    await db.refresh(db_user)
     return db_user
 
 
 @router.put("/{user_id}/password", response_model=UserInDB)
-def change_user_password(
+async def change_user_password(
     user_id: int,
     password_data: PasswordChange,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -156,19 +156,19 @@ def change_user_password(
         )
 
     # Refactored: Original code had manual query + if-not-found pattern (lines 115-121)
-    # Now using centralized get_entity_or_404 helper from app/core/api_helpers.py
-    db_user = get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
+    # Now using centralized async_get_entity_or_404 helper from app/core/api_helpers.py
+    db_user = await async_get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
 
     db_user.password_hash = get_password_hash(password_data.new_password)
-    db.commit()
-    db.refresh(db_user)
+    await db.commit()
+    await db.refresh(db_user)
     return db_user
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(
+async def delete_user(
     user_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """Delete user (Admin only) - prevents self-deletion"""
@@ -184,9 +184,9 @@ def delete_user(
         )
 
     # Refactored: Original code had manual query + if-not-found pattern (lines 147-153)
-    # Now using centralized get_entity_or_404 helper from app/core/api_helpers.py
-    db_user = get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
+    # Now using centralized async_get_entity_or_404 helper from app/core/api_helpers.py
+    db_user = await async_get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
 
-    db.delete(db_user)
-    db.commit()
+    await db.delete(db_user)
+    await db.commit()
     return None
