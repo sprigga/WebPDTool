@@ -1,23 +1,23 @@
 """Authentication API endpoints"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import timedelta
 
-from app.core.database import get_db
+from app.core.database import get_async_db
 from app.core.security import create_access_token
 from app.config import settings
 from app.schemas.user import LoginRequest, LoginResponse, Token, User as UserSchema
 from app.services import auth as auth_service
 from app.dependencies import get_current_active_user
-from app.core.api_helpers import get_entity_by_field_or_404
+from app.core.api_helpers import async_get_entity_by_field_or_404
 from app.models.user import User as UserModel
 
 router = APIRouter()
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(login_data: LoginRequest, db: Session = Depends(get_db)):
+async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_async_db)):
     """
     User login endpoint
 
@@ -28,7 +28,7 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     Returns:
         LoginResponse with access token and user info
     """
-    user = auth_service.authenticate_user(db, login_data.username, login_data.password)
+    user = await auth_service.authenticate_user(db, login_data.username, login_data.password)
 
     if not user:
         raise HTTPException(
@@ -53,14 +53,14 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login-form", response_model=Token)
-def login_form(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+async def login_form(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_async_db)
 ):
     """
     Login endpoint for OAuth2 password flow
     (for Swagger UI authentication)
     """
-    user = auth_service.authenticate_user(db, form_data.username, form_data.password)
+    user = await auth_service.authenticate_user(db, form_data.username, form_data.password)
 
     if not user:
         raise HTTPException(
@@ -91,8 +91,8 @@ def logout(current_user: dict = Depends(get_current_active_user)):
 
 
 @router.get("/me", response_model=UserSchema)
-def get_current_user_info(
-    current_user: dict = Depends(get_current_active_user), db: Session = Depends(get_db)
+async def get_current_user_info(
+    current_user: dict = Depends(get_current_active_user), db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get current authenticated user information
@@ -102,9 +102,9 @@ def get_current_user_info(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    Refactored: Use get_entity_by_field_or_404 helper
+    Refactored: Use async_get_entity_by_field_or_404 helper
     """
-    user = get_entity_by_field_or_404(
+    user = await async_get_entity_by_field_or_404(
         db, UserModel, "username", current_user["username"], "User not found"
     )
     return UserSchema.from_orm(user)
