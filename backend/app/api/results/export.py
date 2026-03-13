@@ -7,11 +7,16 @@ Extracted from measurement_results.py lines 402-478.
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use async session for async DB migration (Wave 5)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 import csv
 import io
 
-from app.core.database import get_db
+# Original code: from app.core.database import get_db
+# Modified: Use async DB dependency
+from app.core.database import get_async_db
 from app.dependencies import get_current_active_user
 from app.models.test_result import TestResult as TestResultModel
 from app.models.test_session import TestSession as TestSessionModel
@@ -22,9 +27,9 @@ router = APIRouter()
 
 
 @router.get("/export/csv/{session_id}")
-def export_session_csv(
+async def export_session_csv(
     session_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -34,11 +39,15 @@ def export_session_csv(
     """
     try:
         # Get session and results
-        session = db.query(TestSessionModel)\
-                   .join(ProjectModel)\
-                   .join(StationModel)\
-                   .filter(TestSessionModel.id == session_id)\
-                   .first()
+        # Original code: session = db.query(TestSessionModel).join(...).filter(...).first()
+        # Modified: Use select() with await for async
+        result = await db.execute(
+            select(TestSessionModel)
+            .join(ProjectModel)
+            .join(StationModel)
+            .where(TestSessionModel.id == session_id)
+        )
+        session = result.scalar_one_or_none()
 
         if not session:
             raise HTTPException(
@@ -46,10 +55,14 @@ def export_session_csv(
                 detail=f"Test session {session_id} not found"
             )
 
-        results = db.query(TestResultModel)\
-                   .filter(TestResultModel.test_session_id == session_id)\
-                   .order_by(TestResultModel.item_no)\
-                   .all()
+        # Original code: results = db.query(TestResultModel).filter(...).order_by(...).all()
+        # Modified: Use select() with await
+        result = await db.execute(
+            select(TestResultModel)
+            .where(TestResultModel.test_session_id == session_id)
+            .order_by(TestResultModel.item_no)
+        )
+        results = result.scalars().all()
 
         # Create CSV content
         output = io.StringIO()

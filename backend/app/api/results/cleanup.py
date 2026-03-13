@@ -6,10 +6,15 @@ Extracted from measurement_results.py lines 481-614.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use async session for async DB migration (Wave 5)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete as sa_delete
 from datetime import datetime, timedelta
 
-from app.core.database import get_db
+# Original code: from app.core.database import get_db
+# Modified: Use async DB dependency
+from app.core.database import get_async_db
 from app.core.api_helpers import PermissionChecker
 from app.dependencies import get_current_active_user
 from app.models.test_result import TestResult as TestResultModel
@@ -19,9 +24,9 @@ router = APIRouter()
 
 
 @router.delete("/sessions/{session_id}")
-def delete_test_session(
+async def delete_test_session(
     session_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -32,9 +37,12 @@ def delete_test_session(
     """
     try:
         # Check if session exists
-        session = db.query(TestSessionModel)\
-                   .filter(TestSessionModel.id == session_id)\
-                   .first()
+        # Original code: session = db.query(TestSessionModel).filter(...).first()
+        # Modified: Use select() with await for async
+        result = await db.execute(
+            select(TestSessionModel).where(TestSessionModel.id == session_id)
+        )
+        session = result.scalar_one_or_none()
 
         if not session:
             raise HTTPException(
@@ -47,13 +55,15 @@ def delete_test_session(
         PermissionChecker.check_admin_or_engineer(current_user, "delete test sessions")
 
         # Delete associated results first (cascade)
-        db.query(TestResultModel)\
-          .filter(TestResultModel.test_session_id == session_id)\
-          .delete(synchronize_session=False)
+        # Original code: db.query(TestResultModel).filter(...).delete(synchronize_session=False)
+        # Modified: Use sa_delete() with await for async
+        await db.execute(
+            sa_delete(TestResultModel).where(TestResultModel.test_session_id == session_id)
+        )
 
         # Delete session
-        db.delete(session)
-        db.commit()
+        await db.delete(session)
+        await db.commit()
 
         return {
             "message": f"Test session {session_id} and associated results deleted successfully",
@@ -63,7 +73,7 @@ def delete_test_session(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete test session: {str(e)}"
@@ -71,10 +81,10 @@ def delete_test_session(
 
 
 @router.post("/cleanup")
-def cleanup_old_results(
+async def cleanup_old_results(
     days_to_keep: int = Query(30, ge=1, le=365),
     dry_run: bool = Query(True),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -92,9 +102,12 @@ def cleanup_old_results(
         cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
 
         # Find sessions to be deleted
-        old_sessions = db.query(TestSessionModel)\
-                        .filter(TestSessionModel.started_at < cutoff_date)\
-                        .all()
+        # Original code: old_sessions = db.query(TestSessionModel).filter(...).all()
+        # Modified: Use select() with await for async
+        result = await db.execute(
+            select(TestSessionModel).where(TestSessionModel.started_at < cutoff_date)
+        )
+        old_sessions = result.scalars().all()
 
         if dry_run:
             # Just return what would be deleted
@@ -118,15 +131,17 @@ def cleanup_old_results(
             deleted_count = 0
             for session in old_sessions:
                 # Delete results first
-                db.query(TestResultModel)\
-                  .filter(TestResultModel.test_session_id == session.id)\
-                  .delete(synchronize_session=False)
+                # Original code: db.query(TestResultModel).filter(...).delete(synchronize_session=False)
+                # Modified: Use sa_delete() with await
+                await db.execute(
+                    sa_delete(TestResultModel).where(TestResultModel.test_session_id == session.id)
+                )
 
                 # Delete session
-                db.delete(session)
+                await db.delete(session)
                 deleted_count += 1
 
-            db.commit()
+            await db.commit()
 
             return {
                 "dry_run": False,
@@ -137,7 +152,7 @@ def cleanup_old_results(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Cleanup operation failed: {str(e)}"

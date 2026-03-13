@@ -417,7 +417,7 @@ class ComPortMeasurement(BaseMeasurement):
             from app.core.instrument_config import get_global_instrument_provider
             _db_provider = get_global_instrument_provider()
             if _db_provider is not None:
-                config = _db_provider.get_instrument(instrument_name)
+                config = await _db_provider.get_instrument(instrument_name)
             else:
                 instrument_settings = _gis()
                 config = instrument_settings.get_instrument(instrument_name)
@@ -510,7 +510,7 @@ class ConSoleMeasurement(BaseMeasurement):
             from app.core.instrument_config import get_global_instrument_provider
             _db_provider = get_global_instrument_provider()
             if _db_provider is not None:
-                config = _db_provider.get_instrument(instrument_name)
+                config = await _db_provider.get_instrument(instrument_name)
             else:
                 instrument_settings = _gis()
                 config = instrument_settings.get_instrument(instrument_name)
@@ -600,7 +600,7 @@ class TCPIPMeasurement(BaseMeasurement):
             from app.core.instrument_config import get_global_instrument_provider
             _db_provider = get_global_instrument_provider()
             if _db_provider is not None:
-                config = _db_provider.get_instrument(instrument_name)
+                config = await _db_provider.get_instrument(instrument_name)
             else:
                 instrument_settings = _gis()
                 config = instrument_settings.get_instrument(instrument_name)

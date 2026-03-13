@@ -6,13 +6,17 @@ Extracted from measurement_results.py lines 261-317.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use async session for async DB migration (Wave 5)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
 from typing import List
 from pydantic import BaseModel
 from datetime import datetime
 
-from app.core.database import get_db
+# Original code: from app.core.database import get_db
+# Modified: Use async DB dependency
+from app.core.database import get_async_db
 from app.dependencies import get_current_active_user
 from app.models.test_result import TestResult as TestResultModel
 
@@ -38,7 +42,7 @@ class MeasurementResultResponse(BaseModel):
 
 
 @router.get("/results", response_model=List[MeasurementResultResponse])
-def get_measurement_results(
+async def get_measurement_results(
     # Original code: skip parameter (inconsistent with tests.py which uses offset)
     # Modified: Renamed to offset for API consistency
     offset: int = Query(0, ge=0, description="Number of records to skip (pagination)"),
@@ -46,7 +50,7 @@ def get_measurement_results(
     session_id: int | None = Query(None),
     test_item_name: str | None = Query(None),
     result_status: str | None = Query(None),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -56,23 +60,27 @@ def get_measurement_results(
     result analysis capabilities.
     """
     try:
-        query = db.query(TestResultModel)
+        # Original code: query = db.query(TestResultModel)
+        # Modified: Use select() with await for async
+        stmt = select(TestResultModel)
 
         # Apply filters
         if session_id:
-            query = query.filter(TestResultModel.test_session_id == session_id)
+            stmt = stmt.where(TestResultModel.test_session_id == session_id)
 
         if test_item_name:
-            query = query.filter(TestResultModel.item_name.ilike(f"%{test_item_name}%"))
+            stmt = stmt.where(TestResultModel.item_name.ilike(f"%{test_item_name}%"))
 
         if result_status:
-            query = query.filter(TestResultModel.result == result_status)
+            stmt = stmt.where(TestResultModel.result == result_status)
 
         # Order by creation time
-        results = query.order_by(desc(TestResultModel.created_at))\
-                      .offset(offset)\
-                      .limit(limit)\
-                      .all()
+        result = await db.execute(
+            stmt.order_by(desc(TestResultModel.created_at))
+                .offset(offset)
+                .limit(limit)
+        )
+        results = result.scalars().all()
 
         return [
             MeasurementResultResponse(

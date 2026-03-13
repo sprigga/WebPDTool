@@ -7,12 +7,16 @@ Complements the automatic report generation in test_engine.py.
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use async session for async DB migration (Wave 5)
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import date
 from pydantic import BaseModel
 
-from app.core.database import get_db
+# Original code: from app.core.database import get_db
+# Modified: Use async DB dependency
+from app.core.database import get_async_db
 from app.dependencies import get_current_active_user
 from app.services.report_service import report_service
 
@@ -31,13 +35,13 @@ class SavedReportInfo(BaseModel):
 
 
 @router.get("/reports/list", response_model=List[SavedReportInfo])
-def list_saved_reports(
+async def list_saved_reports(
     project_name: Optional[str] = Query(None, description="Filter by project name"),
     station_name: Optional[str] = Query(None, description="Filter by station name"),
     date_from: Optional[date] = Query(None, description="Filter from date (YYYY-MM-DD)"),
     date_to: Optional[date] = Query(None, description="Filter to date (YYYY-MM-DD)"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of reports to return"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -117,9 +121,9 @@ def list_saved_reports(
 
 
 @router.get("/reports/download/{session_id}")
-def download_saved_report(
+async def download_saved_report(
     session_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -135,7 +139,9 @@ def download_saved_report(
     """
     try:
         # Get report path
-        report_path = report_service.get_report_path(session_id, db)
+        # Original code: report_service.get_report_path() was sync
+        # Modified: await the async version (Wave 6 - Task 11)
+        report_path = await report_service.get_report_path(session_id, db)
 
         if not report_path or not report_path.exists():
             raise HTTPException(
@@ -163,9 +169,9 @@ def download_saved_report(
 
 
 @router.get("/reports/download-by-path")
-def download_report_by_path(
+async def download_report_by_path(
     filepath: str = Query(..., description="Full path to the report file"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -227,12 +233,12 @@ def download_report_by_path(
 
 
 @router.delete("/reports/cleanup")
-def cleanup_old_reports(
+async def cleanup_old_reports(
     days_to_keep: int = Query(90, ge=1, le=3650, description="Number of days to keep reports"),
     project_name: Optional[str] = Query(None, description="Limit cleanup to specific project"),
     station_name: Optional[str] = Query(None, description="Limit cleanup to specific station"),
     dry_run: bool = Query(True, description="Preview without actually deleting"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """

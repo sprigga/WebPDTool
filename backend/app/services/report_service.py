@@ -10,7 +10,11 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy.orm import Session
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use AsyncSession for async DB migration (Wave 6 - Task 11)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.models.test_session import TestSession as TestSessionModel
 from app.models.test_result import TestResult as TestResultModel
@@ -107,10 +111,12 @@ class ReportService:
         safe_serial = serial_number.replace(" ", "_").replace("/", "_")
         return f"{safe_serial}_{time_str}.csv"
 
-    def save_session_report(
+    # Original code: def save_session_report(self, session_id: int, db: Session) -> Optional[Path]:
+    # Modified: async def with AsyncSession (Wave 6 - Task 11)
+    async def save_session_report(
         self,
         session_id: int,
-        db: Session
+        db: AsyncSession
     ) -> Optional[Path]:
         """
         Generate and save test session report to local storage
@@ -121,26 +127,40 @@ class ReportService:
 
         Args:
             session_id: Test session ID
-            db: Database session
+            db: Async database session
 
         Returns:
             Path to the saved report file, or None if failed
         """
         try:
-            # Fetch session data with related information
-            session = db.query(TestSessionModel)\
-                       .filter(TestSessionModel.id == session_id)\
-                       .first()
+            # Original code: session = db.query(TestSessionModel).filter(...).first()
+            # Modified: Use select() with await for async
+            # 修改 (2026-03-13): 加入 selectinload 避免 lazy loading 在 async SQLAlchemy 中的 MissingGreenlet 錯誤
+            # session.station.project 需要預先載入，否則會在存取時觸發 sync lazy loading
+            from app.models.station import Station
+            from app.models.project import Project
+            result = await db.execute(
+                select(TestSessionModel)
+                .options(
+                    selectinload(TestSessionModel.station)
+                    .selectinload(Station.project)
+                )
+                .where(TestSessionModel.id == session_id)
+            )
+            session = result.scalar_one_or_none()
 
             if not session:
                 self.logger.error(f"Session {session_id} not found")
                 return None
 
-            # Fetch all test results for this session
-            results = db.query(TestResultModel)\
-                       .filter(TestResultModel.session_id == session_id)\
-                       .order_by(TestResultModel.item_no)\
-                       .all()
+            # Original code: results = db.query(TestResultModel).filter(...).order_by(...).all()
+            # Modified: Use select() with await for async
+            result = await db.execute(
+                select(TestResultModel)
+                .where(TestResultModel.session_id == session_id)
+                .order_by(TestResultModel.item_no)
+            )
+            results = result.scalars().all()
 
             if not results:
                 self.logger.warning(f"No results found for session {session_id}")
@@ -226,25 +246,39 @@ class ReportService:
                     result.test_time.isoformat() if result.test_time else ''
                 ])
 
-    def get_report_path(
+    # Original code: def get_report_path(self, session_id: int, db: Session) -> Optional[Path]:
+    # Modified: async def with AsyncSession (Wave 6 - Task 11)
+    async def get_report_path(
         self,
         session_id: int,
-        db: Session
+        db: AsyncSession
     ) -> Optional[Path]:
         """
         Get the path to a saved report for a given session
 
         Args:
             session_id: Test session ID
-            db: Database session
+            db: Async database session
 
         Returns:
             Path to the report file if it exists, None otherwise
         """
         try:
-            session = db.query(TestSessionModel)\
-                       .filter(TestSessionModel.id == session_id)\
-                       .first()
+            # Original code: session = db.query(TestSessionModel).filter(...).first()
+            # Modified: Use select() with await for async
+            # 修改 (2026-03-13): 加入 selectinload 避免 lazy loading 在 async SQLAlchemy 中的 MissingGreenlet 錯誤
+            # session.station.project 需要預先載入，否則會在存取時觸發 sync lazy loading
+            from app.models.station import Station
+            from app.models.project import Project
+            result = await db.execute(
+                select(TestSessionModel)
+                .options(
+                    selectinload(TestSessionModel.station)
+                    .selectinload(Station.project)
+                )
+                .where(TestSessionModel.id == session_id)
+            )
+            session = result.scalar_one_or_none()
 
             if not session:
                 return None

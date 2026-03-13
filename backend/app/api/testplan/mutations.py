@@ -15,7 +15,7 @@ from typing import List
 # from app.core.database import get_db
 from app.core.database import get_async_db
 # from app.core.api_helpers import get_entity_or_404, PermissionChecker
-from app.core.api_helpers import async_get_entity_or_404, PermissionChecker
+from app.core.api_helpers import get_entity_or_404, PermissionChecker
 from app.core.constants import ErrorMessages, ResponseMessages
 from app.dependencies import get_current_active_user
 from app.models.testplan import TestPlan
@@ -65,7 +65,7 @@ async def upload_testplan_csv(
     PermissionChecker.check_admin_or_engineer(current_user, "upload test plans")
 
     # Original code: station = get_entity_or_404(db, Station, station_id)
-    station = await async_get_entity_or_404(db, Station, station_id)
+    station = await get_entity_or_404(db, Station, station_id)
 
     # Original: if not file.filename.endswith('.csv'):
     # Modified: Use lower() for case-insensitive file type checking
@@ -147,7 +147,7 @@ async def create_testplan_item(
         Created test plan item
     """
     PermissionChecker.check_admin_or_engineer(current_user, "create test plan items")
-    await async_get_entity_or_404(db, Station, testplan.station_id)
+    await get_entity_or_404(db, Station, testplan.station_id)
 
     try:
         # 使用 TestPlanService 建立測試計畫項目

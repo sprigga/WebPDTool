@@ -3,8 +3,13 @@
 from typing import Optional
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-from app.core.database import get_db
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use AsyncSession for async DB migration (Wave 6 - Task 14)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+# Original code: from app.core.database import get_db
+# Modified: Use async DB dependency
+from app.core.database import get_async_db
 from app.core.security import decode_access_token
 
 security = HTTPBearer()
@@ -13,7 +18,7 @@ security = HTTPBearer()
 async def set_user_context(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     ✅ Added: Set user context for logging
@@ -33,7 +38,7 @@ async def set_user_context(
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """Get current authenticated user from JWT token"""
     token = credentials.credentials
@@ -57,7 +62,12 @@ async def get_current_user(
     # Fetch user from database to ensure user still exists
     from app.models.user import User
 
-    user = db.query(User).filter(User.username == username).first()
+    # Original code: user = db.query(User).filter(User.username == username).first()
+    # Modified: Use select() with await for async
+    result = await db.execute(
+        select(User).where(User.username == username)
+    )
+    user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -70,13 +80,18 @@ async def get_current_user(
 
 
 async def get_current_active_user(
-    current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
+    current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_async_db)
 ):
     """Get current active user"""
     # Check if user is active in database
     from app.models.user import User
 
-    user = db.query(User).filter(User.id == current_user["id"]).first()
+    # Original code: user = db.query(User).filter(User.id == current_user["id"]).first()
+    # Modified: Use select() with await for async
+    result = await db.execute(
+        select(User).where(User.id == current_user["id"])
+    )
+    user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"

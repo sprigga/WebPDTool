@@ -121,7 +121,7 @@ class VISAInstrumentConnection(BaseInstrumentConnection):
             import pyvisa
 
             # Run blocking VISA operations in thread pool
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             def _connect():
                 rm = pyvisa.ResourceManager()
@@ -154,7 +154,7 @@ class VISAInstrumentConnection(BaseInstrumentConnection):
         """Disconnect from VISA instrument"""
         try:
             if self._resource:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, self._resource.close)
                 self._resource = None
 
@@ -175,7 +175,7 @@ class VISAInstrumentConnection(BaseInstrumentConnection):
             raise InstrumentConnectionError(f"Not connected to {self.config.id}")
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self._resource.write, command)
             self.logger.debug(f"Wrote to {self.config.id}: {command}")
         except Exception as e:
@@ -187,7 +187,7 @@ class VISAInstrumentConnection(BaseInstrumentConnection):
             raise InstrumentConnectionError(f"Not connected to {self.config.id}")
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(None, self._resource.query, command)
             self.logger.debug(f"Queried {self.config.id}: {command} -> {response}")
             return response.strip()
@@ -200,7 +200,7 @@ class VISAInstrumentConnection(BaseInstrumentConnection):
             raise InstrumentConnectionError(f"Not connected to {self.config.id}")
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(None, self._resource.read)
             return response.strip()
         except Exception as e:
@@ -249,7 +249,7 @@ class SerialInstrumentConnection(BaseInstrumentConnection):
             if not isinstance(config, SerialAddress):
                 raise InstrumentConnectionError("Invalid configuration for serial connection")
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             def _connect():
                 return serial.Serial(
@@ -278,7 +278,7 @@ class SerialInstrumentConnection(BaseInstrumentConnection):
         """Disconnect from serial instrument"""
         try:
             if self._resource:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, self._resource.close)
                 self._resource = None
 
@@ -296,7 +296,7 @@ class SerialInstrumentConnection(BaseInstrumentConnection):
             raise InstrumentConnectionError(f"Not connected to {self.config.id}")
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             data = command.encode() + b'\n'
             await loop.run_in_executor(None, self._resource.write, data)
             self.logger.debug(f"Wrote to {self.config.id}: {command}")
@@ -314,7 +314,7 @@ class SerialInstrumentConnection(BaseInstrumentConnection):
             raise InstrumentConnectionError(f"Not connected to {self.config.id}")
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(None, self._resource.readline)
             return response.decode().strip()
         except Exception as e:
@@ -434,10 +434,11 @@ class InstrumentConnectionPool:
             if instrument_id not in self._connections:
                 # 修改: 優先使用全域 DB-backed provider，回退到 hardcoded singleton
                 # 原有程式碼: settings = get_instrument_settings()
+                # 修改 (2026-03-13): get_instrument() 是 async method，必須 await
                 from app.core.instrument_config import get_global_instrument_provider
                 _db_provider = get_global_instrument_provider()
                 if _db_provider is not None:
-                    config = _db_provider.get_instrument(instrument_id)
+                    config = await _db_provider.get_instrument(instrument_id)
                 else:
                     settings = get_instrument_settings()
                     config = settings.get_instrument(instrument_id)

@@ -5,7 +5,7 @@ from sqlalchemy import select, or_
 from typing import List, Optional, Set
 
 from app.core.database import get_async_db
-from app.core.api_helpers import PermissionChecker, async_get_entity_or_404
+from app.core.api_helpers import PermissionChecker, get_entity_or_404
 from app.core.constants import ErrorMessages
 from app.schemas.user import UserCreate, UserUpdate, UserInDB, PasswordChange
 from app.models.user import User as UserModel, UserRole
@@ -73,8 +73,8 @@ async def get_user(
 ):
     """Get user by ID"""
     # Refactored: Original code had manual query + if-not-found pattern (lines 36-42)
-    # Now using centralized async_get_entity_or_404 helper from app/core/api_helpers.py
-    return await async_get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
+    # Now using centralized get_entity_or_404 helper from app/core/api_helpers.py
+    return await get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
 
 
 @router.post("", response_model=UserInDB, status_code=status.HTTP_201_CREATED)
@@ -114,8 +114,8 @@ async def update_user(
     PermissionChecker.check_admin(current_user, "update users")
 
     # Refactored: Original code had manual query + if-not-found pattern (lines 81-87)
-    # Now using centralized async_get_entity_or_404 helper from app/core/api_helpers.py
-    db_user = await async_get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
+    # Now using centralized get_entity_or_404 helper from app/core/api_helpers.py
+    db_user = await get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
 
     # Security fix: Original code allowed any field from model_dump() to be updated (lines 89-92)
     # This could lead to unintended updates like {"id": 999} or {"username": "hacked"}
@@ -156,8 +156,8 @@ async def change_user_password(
         )
 
     # Refactored: Original code had manual query + if-not-found pattern (lines 115-121)
-    # Now using centralized async_get_entity_or_404 helper from app/core/api_helpers.py
-    db_user = await async_get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
+    # Now using centralized get_entity_or_404 helper from app/core/api_helpers.py
+    db_user = await get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
 
     db_user.password_hash = get_password_hash(password_data.new_password)
     await db.commit()
@@ -184,8 +184,8 @@ async def delete_user(
         )
 
     # Refactored: Original code had manual query + if-not-found pattern (lines 147-153)
-    # Now using centralized async_get_entity_or_404 helper from app/core/api_helpers.py
-    db_user = await async_get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
+    # Now using centralized get_entity_or_404 helper from app/core/api_helpers.py
+    db_user = await get_entity_or_404(db, UserModel, user_id, ErrorMessages.USER_NOT_FOUND)
 
     await db.delete(db_user)
     await db.commit()

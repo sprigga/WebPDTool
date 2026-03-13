@@ -10,8 +10,8 @@ from typing import List
 # Migrated to async: use get_async_db
 from app.core.database import get_async_db
 # from app.core.api_helpers import get_entity_or_404, PermissionChecker
-# Migrated to async: use async_get_entity_or_404
-from app.core.api_helpers import async_get_entity_or_404, PermissionChecker
+# Migrated to async: use get_entity_or_404
+from app.core.api_helpers import get_entity_or_404, PermissionChecker
 from app.core.constants import ErrorMessages
 from app.schemas.project import Station, StationCreate, StationUpdate
 from app.models.station import Station as StationModel
@@ -46,7 +46,7 @@ async def get_project_stations(
     # Refactored: Use get_entity_or_404 helper
     # get_entity_or_404(db, ProjectModel, project_id, ErrorMessages.PROJECT_NOT_FOUND)
     # Migrated to async
-    await async_get_entity_or_404(db, ProjectModel, project_id, ErrorMessages.PROJECT_NOT_FOUND)
+    await get_entity_or_404(db, ProjectModel, project_id, ErrorMessages.PROJECT_NOT_FOUND)
 
     # stations = db.query(StationModel).filter(StationModel.project_id == project_id).all()
     # Migrated to async
@@ -80,7 +80,7 @@ async def get_station(
     # Refactored: Use get_entity_or_404 helper
     # return get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
     # Migrated to async
-    return await async_get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
+    return await get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
 
 
 @router.post("/stations", response_model=Station, status_code=status.HTTP_201_CREATED)
@@ -114,7 +114,7 @@ async def create_station(
     # Verify project exists
     # get_entity_or_404(db, ProjectModel, station.project_id, ErrorMessages.PROJECT_NOT_FOUND)
     # Migrated to async
-    await async_get_entity_or_404(db, ProjectModel, station.project_id, ErrorMessages.PROJECT_NOT_FOUND)
+    await get_entity_or_404(db, ProjectModel, station.project_id, ErrorMessages.PROJECT_NOT_FOUND)
 
     # Check if station code already exists in this project
     # existing_station = db.query(StationModel).filter(
@@ -182,7 +182,7 @@ async def update_station(
     # Refactored: Use get_entity_or_404 helper
     # db_station = get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
     # Migrated to async
-    db_station = await async_get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
+    db_station = await get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
 
     # Update station fields
     update_data = station.model_dump(exclude_unset=True)
@@ -228,7 +228,7 @@ async def delete_station(
     # Refactored: Use get_entity_or_404 helper
     # db_station = get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
     # Migrated to async
-    db_station = await async_get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
+    db_station = await get_entity_or_404(db, StationModel, station_id, ErrorMessages.STATION_NOT_FOUND)
 
     # Delete station
     # db.delete(db_station)

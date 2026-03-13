@@ -540,8 +540,12 @@ const formatDateTime = (dateStr) => {
   if (!dateStr) {
     return '-'
   }
-  const date = new Date(dateStr)
+  // Append 'Z' if no timezone info, so the browser treats it as UTC
+  // then display in Asia/Taipei timezone
+  const normalized = /[Zz]|[+-]\d{2}:?\d{2}$/.test(dateStr) ? dateStr : dateStr + 'Z'
+  const date = new Date(normalized)
   return date.toLocaleString('zh-TW', {
+    timeZone: 'Asia/Taipei',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

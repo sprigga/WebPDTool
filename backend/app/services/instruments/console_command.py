@@ -6,9 +6,11 @@ Enables execution of external commands, scripts, and system utilities
 """
 import asyncio
 import logging
+import os
 import re
 import shlex
-from typing import Dict, Any, Optional, List
+import sys
+from typing import Dict, Any, Optional, List, Union
 
 # Shell metacharacters that require shell=True to work correctly
 # e.g. $((expr)), $(cmd), ${var}, |, &&, ||, >, >>, <, ;, *, ?, ~
@@ -72,7 +74,7 @@ class ConSoleCommandDriver(BaseInstrumentDriver):
         self.logger.debug("Console command reset: no action needed")
 
     async def _execute_command(self,
-                               command: str or List[str],
+                               command: Union[str, List[str]],
                                timeout: float,
                                shell: bool = None,
                                working_dir: str = None,
@@ -118,7 +120,6 @@ class ConSoleCommandDriver(BaseInstrumentDriver):
             cmd_list = command
 
         # Prepare environment
-        import os
         proc_env = os.environ.copy()
         if env_vars:
             proc_env.update(env_vars)
@@ -286,7 +287,6 @@ class ConSoleCommandDriver(BaseInstrumentDriver):
         Returns:
             Script output
         """
-        import sys
         command = [sys.executable, script_path]
         if args:
             command.extend(args)

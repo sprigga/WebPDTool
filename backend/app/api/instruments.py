@@ -10,20 +10,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_async_db
-from app.repositories.instrument_repository import AsyncInstrumentRepository
+from app.repositories.instrument_repository import InstrumentRepository
 from app.schemas.instrument import InstrumentCreate, InstrumentResponse, InstrumentUpdate
 
 router = APIRouter()
 
 
-async def _get_repo(db: AsyncSession = Depends(get_async_db)) -> AsyncInstrumentRepository:
-    return AsyncInstrumentRepository(db)
+async def _get_repo(db: AsyncSession = Depends(get_async_db)) -> InstrumentRepository:
+    return InstrumentRepository(db)
 
 
 @router.get("", response_model=List[InstrumentResponse])
 async def list_instruments(
     enabled_only: bool = Query(False, description="Return only enabled instruments"),
-    repo: AsyncInstrumentRepository = Depends(_get_repo),
+    repo: InstrumentRepository = Depends(_get_repo),
 ):
     """List all instruments (or only enabled ones)."""
     rows = await repo.list_enabled() if enabled_only else await repo.list_all()
@@ -33,7 +33,7 @@ async def list_instruments(
 @router.post("", response_model=InstrumentResponse, status_code=status.HTTP_201_CREATED)
 async def create_instrument(
     data: InstrumentCreate,
-    repo: AsyncInstrumentRepository = Depends(_get_repo),
+    repo: InstrumentRepository = Depends(_get_repo),
 ):
     """Create a new instrument configuration."""
     existing = await repo.get_by_instrument_id(data.instrument_id)
@@ -54,7 +54,7 @@ async def create_instrument(
 @router.get("/{instrument_id}", response_model=InstrumentResponse)
 async def get_instrument(
     instrument_id: str,
-    repo: AsyncInstrumentRepository = Depends(_get_repo),
+    repo: InstrumentRepository = Depends(_get_repo),
 ):
     """Get instrument by logical ID (e.g. 'DAQ973A_1')."""
     inst = await repo.get_by_instrument_id(instrument_id)
@@ -70,7 +70,7 @@ async def get_instrument(
 async def update_instrument(
     instrument_id: str,
     data: InstrumentUpdate,
-    repo: AsyncInstrumentRepository = Depends(_get_repo),
+    repo: InstrumentRepository = Depends(_get_repo),
 ):
     """Partially update an instrument configuration."""
     inst = await repo.get_by_instrument_id(instrument_id)
@@ -86,7 +86,7 @@ async def update_instrument(
 @router.delete("/{instrument_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_instrument(
     instrument_id: str,
-    repo: AsyncInstrumentRepository = Depends(_get_repo),
+    repo: InstrumentRepository = Depends(_get_repo),
 ):
     """Delete an instrument configuration."""
     inst = await repo.get_by_instrument_id(instrument_id)

@@ -10,7 +10,7 @@ from app.config import settings
 from app.schemas.user import LoginRequest, LoginResponse, Token, User as UserSchema
 from app.services import auth as auth_service
 from app.dependencies import get_current_active_user
-from app.core.api_helpers import async_get_entity_by_field_or_404
+from app.core.api_helpers import get_entity_by_field_or_404
 from app.models.user import User as UserModel
 
 router = APIRouter()
@@ -102,9 +102,9 @@ async def get_current_user_info(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    Refactored: Use async_get_entity_by_field_or_404 helper
+    Refactored: Use get_entity_by_field_or_404 helper
     """
-    user = await async_get_entity_by_field_or_404(
+    user = await get_entity_by_field_or_404(
         db, UserModel, "username", current_user["username"], "User not found"
     )
     return UserSchema.from_orm(user)

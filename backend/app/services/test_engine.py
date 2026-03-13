@@ -3,7 +3,10 @@ Test Execution Engine Service
 Core service for orchestrating test execution
 """
 from typing import Dict, Any, List, Optional
-from sqlalchemy.orm import Session
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use AsyncSession for async DB migration (Wave 6 - Task 12)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from datetime import datetime
 from decimal import Decimal
 import asyncio
@@ -18,6 +21,9 @@ from app.measurements.base import BaseMeasurement, MeasurementResult
 from app.measurements.implementations import get_measurement_class
 from app.services.instrument_manager import instrument_manager
 from app.services.report_service import report_service
+# Original code: from app.core.database import SessionLocal
+# Modified: Use AsyncSessionLocal for async DB migration (Wave 6 - Task 12)
+from app.core.database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -46,22 +52,22 @@ class TestEngine:
         self.logger = logging.getLogger(self.__class__.__name__)
         self._lock = asyncio.Lock()
     
+    # Original code: async def start_test_session(self, session_id: int, serial_number: str, station_id: int, db: Session)
+    # Modified: Removed db parameter (Wave 6 - Task 12) - background task creates its own async session
     async def start_test_session(
         self,
         session_id: int,
         serial_number: str,
-        station_id: int,
-        db: Session
+        station_id: int
     ) -> Dict[str, Any]:
         """
         Start a test session
-        
+
         Args:
             session_id: Test session ID
             serial_number: Product serial number
             station_id: Station ID
-            db: Database session
-            
+
         Returns:
             Dictionary with execution status
         """
@@ -69,18 +75,18 @@ class TestEngine:
             # Check if test already running
             if session_id in self.active_tests:
                 raise ValueError(f"Test session {session_id} is already running")
-            
+
             # Initialize test state
             test_state = TestExecutionState(session_id)
             test_state.status = "RUNNING"
             test_state.start_time = datetime.utcnow()
             self.active_tests[session_id] = test_state
-        
-        # Start test execution in background
+
+        # Background task creates its own AsyncSession
         asyncio.create_task(
-            self._execute_test_session(session_id, station_id, db)
+            self._execute_test_session(session_id, station_id)
         )
-        
+
         return {
             "session_id": session_id,
             "status": "RUNNING",
@@ -91,33 +97,46 @@ class TestEngine:
         self,
         session_id: int,
         station_id: int,
-        db: Session
     ):
         """
         Execute test session (runs in background)
-        
+
+        Creates its own AsyncSession so it is not bound to the request lifecycle.
+
         Args:
             session_id: Test session ID
             station_id: Station ID
-            db: Database session
         """
+        # Original code: db: Session = SessionLocal()
+        # Modified: Use AsyncSessionLocal for async (Wave 6 - Task 12)
+        db: AsyncSession = AsyncSessionLocal()
         test_state = self.active_tests[session_id]
-        
+
         try:
-            # Get test plan items for station
-            test_plan_items = db.query(TestPlan).filter(
-                TestPlan.station_id == station_id
-            ).order_by(TestPlan.sequence_order).all()
-            
+            # Original code: test_plan_items = db.query(TestPlan).filter(...).order_by(...).all()
+            # Modified: Use select() with await for async
+            result = await db.execute(
+                select(TestPlan)
+                .where(TestPlan.station_id == station_id)
+                .order_by(TestPlan.sequence_order)
+            )
+            test_plan_items = result.scalars().all()
+
             if not test_plan_items:
                 raise ValueError(f"No test plan found for station {station_id}")
-            
+
             self.logger.info(
                 f"Starting test session {session_id} with {len(test_plan_items)} items"
             )
-            
-            # Get station configuration
-            station = db.query(Station).filter(Station.id == station_id).first()
+
+            # Original code: station = db.query(Station).filter(...).first()
+            # Modified: Use select() with await for async
+            result = await db.execute(
+                select(Station).where(Station.id == station_id)
+            )
+            station = result.scalar_one_or_none()
+            if not station:
+                raise ValueError(f"Station {station_id} not found")
             config = self._load_configuration(station)
             
             # Execute each test item
@@ -169,19 +188,25 @@ class TestEngine:
                 await self._finalize_test_session(session_id, test_state, db)
             except Exception as finalize_error:
                 self.logger.error(f"Error finalizing failed session: {finalize_error}")
-        
+
         finally:
-            # Cleanup
+            # Close the background-owned async DB session
+            # Original code: db.close()
+            # Modified: Use await for async session close (Wave 6 - Task 12)
+            await db.close()
+            # Cleanup active test state
             async with self._lock:
                 if session_id in self.active_tests:
                     del self.active_tests[session_id]
     
+    # Original code: async def _execute_measurement(self, session_id: int, test_plan_item: TestPlan, config: Dict[str, Any], db: Session)
+    # Modified: Change db parameter to AsyncSession (Wave 6 - Task 12)
     async def _execute_measurement(
         self,
         session_id: int,
         test_plan_item: TestPlan,
         config: Dict[str, Any],
-        db: Session
+        db: AsyncSession
     ) -> MeasurementResult:
         """
         Execute a single measurement
@@ -190,7 +215,7 @@ class TestEngine:
             session_id: Test session ID
             test_plan_item: Test plan item to execute
             config: Configuration dictionary
-            db: Database session
+            db: Async database session
 
         Returns:
             MeasurementResult
@@ -327,21 +352,23 @@ class TestEngine:
         # Use the measurement registry from implementations module
         return get_measurement_class(test_command)
     
+    # Original code: async def _save_test_result(self, session_id: int, test_plan_id: int, result: MeasurementResult, db: Session)
+    # Modified: Change db parameter to AsyncSession (Wave 6 - Task 12)
     async def _save_test_result(
         self,
         session_id: int,
         test_plan_id: int,
         result: MeasurementResult,
-        db: Session
+        db: AsyncSession
     ):
         """
         Save test result to database
-        
+
         Args:
             session_id: Test session ID
             test_plan_id: Test plan item ID
             result: Measurement result
-            db: Database session
+            db: Async database session
         """
         try:
             db_result = TestResultModel(
@@ -357,42 +384,51 @@ class TestEngine:
                 error_message=result.error_message,
                 execution_duration_ms=result.execution_duration_ms
             )
-            
+
+            # Original code: db.add(db_result); db.commit()
+            # Modified: Use await for async operations (Wave 6 - Task 12)
             db.add(db_result)
-            db.commit()
-            
+            await db.commit()
+
         except Exception as e:
             self.logger.error(f"Error saving test result: {e}", exc_info=True)
-            db.rollback()
+            # Original code: db.rollback()
+            # Modified: Use await for async rollback (Wave 6 - Task 12)
+            await db.rollback()
     
+    # Original code: async def _finalize_test_session(self, session_id: int, test_state: TestExecutionState, db: Session)
+    # Modified: Change db parameter to AsyncSession (Wave 6 - Task 12)
     async def _finalize_test_session(
         self,
         session_id: int,
         test_state: TestExecutionState,
-        db: Session
+        db: AsyncSession
     ):
         """
         Finalize test session and update database
-        
+
         Args:
             session_id: Test session ID
             test_state: Test execution state
-            db: Database session
+            db: Async database session
         """
         try:
-            session = db.query(TestSessionModel).filter(
-                TestSessionModel.id == session_id
-            ).first()
-            
+            # Original code: session = db.query(TestSessionModel).filter(...).first()
+            # Modified: Use select() with await for async
+            result = await db.execute(
+                select(TestSessionModel).where(TestSessionModel.id == session_id)
+            )
+            session = result.scalar_one_or_none()
+
             if not session:
                 self.logger.error(f"Session {session_id} not found in database")
                 return
-            
+
             # Calculate statistics
             total_items = len(test_state.results)
             pass_items = sum(1 for r in test_state.results if r.result == "PASS")
             fail_items = sum(1 for r in test_state.results if r.result == "FAIL")
-            
+
             # Determine final result
             if test_state.status == "ABORTED":
                 final_result = TestResultEnum.ABORT
@@ -400,13 +436,13 @@ class TestEngine:
                 final_result = TestResultEnum.FAIL
             else:
                 final_result = TestResultEnum.PASS
-            
+
             # Calculate duration
             if test_state.start_time:
                 duration_seconds = round((datetime.utcnow() - test_state.start_time).total_seconds(), 6)
             else:
                 duration_seconds = 0
-            
+
             # Update session
             session.end_time = datetime.utcnow()
             session.final_result = final_result
@@ -414,8 +450,10 @@ class TestEngine:
             session.pass_items = pass_items
             session.fail_items = fail_items
             session.test_duration_seconds = duration_seconds
-            
-            db.commit()
+
+            # Original code: db.commit()
+            # Modified: Use await for async commit (Wave 6 - Task 12)
+            await db.commit()
 
             self.logger.info(
                 f"Test session {session_id} finalized: {final_result} "
@@ -424,7 +462,9 @@ class TestEngine:
 
             # Automatically generate and save CSV report
             try:
-                report_path = report_service.save_session_report(session_id, db)
+                # Original code: report_path = report_service.save_session_report(session_id, db)
+                # Modified: Use await for async call (Wave 6 - Task 12)
+                report_path = await report_service.save_session_report(session_id, db)
                 if report_path:
                     self.logger.info(f"Test report saved: {report_path}")
                 else:
@@ -435,7 +475,9 @@ class TestEngine:
 
         except Exception as e:
             self.logger.error(f"Error finalizing test session: {e}", exc_info=True)
-            db.rollback()
+            # Original code: db.rollback()
+            # Modified: Use await for async rollback (Wave 6 - Task 12)
+            await db.rollback()
     
     def _load_configuration(self, station: Station) -> Dict[str, Any]:
         """

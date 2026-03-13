@@ -13,7 +13,7 @@ from typing import List, Optional
 # from app.core.database import get_db
 from app.core.database import get_async_db
 # from app.core.api_helpers import get_entity_or_404
-from app.core.api_helpers import async_get_entity_or_404
+from app.core.api_helpers import get_entity_or_404
 from app.dependencies import get_current_active_user
 from app.models.station import Station
 from app.schemas.testplan import TestPlan as TestPlanSchema
@@ -49,7 +49,7 @@ async def get_station_testplan(
         List of test plan items ordered by sequence
     """
     # Original code: station = get_entity_or_404(db, Station, station_id, "Station not found")
-    station = await async_get_entity_or_404(db, Station, station_id, "Station not found")
+    station = await get_entity_or_404(db, Station, station_id, "Station not found")
 
     # 如果未提供 project_id,嘗試從站別獲取預設專案
     if project_id is None and station.project_id:
@@ -100,7 +100,7 @@ async def get_station_testplan_names(
         List of distinct test plan names
     """
     # Original code: station = get_entity_or_404(db, Station, station_id, "Station not found")
-    station = await async_get_entity_or_404(db, Station, station_id, "Station not found")
+    station = await get_entity_or_404(db, Station, station_id, "Station not found")
 
     # 如果未提供 project_id,嘗試從站別獲取預設專案
     if project_id is None and station.project_id:
@@ -153,7 +153,7 @@ async def get_station_testplan_map(
         TestPlanMap information including execution statistics
     """
     # Original code: station = get_entity_or_404(db, Station, station_id, "Station not found")
-    station = await async_get_entity_or_404(db, Station, station_id, "Station not found")
+    station = await get_entity_or_404(db, Station, station_id, "Station not found")
 
     try:
         # 使用 TestPlanService 建立 TestPointMap

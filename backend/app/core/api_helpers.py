@@ -7,7 +7,8 @@ Original code patterns repeated across multiple files are consolidated here.
 
 from functools import wraps
 from typing import List, Dict, Any, Optional, TypeVar, Type
-from sqlalchemy.orm import Session
+# Original code: from sqlalchemy.orm import Session (removed)
+# Modified: Async only now (Wave 6 - Task 14)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
@@ -18,67 +19,16 @@ T = TypeVar('T')
 
 
 # =============================================================================
-# Entity Existence Checker
+# Entity Existence Checker (Async)
 # =============================================================================
 
-def get_entity_or_404(
-    db: Session,
-    model: Type[T],
-    entity_id: int,
-    detail: Optional[str] = None
-) -> T:
-    """
-    Get entity by ID or raise 404
-
-    Original pattern (repeated 15+ times across codebase):
-    ```python
-    station = db.query(Station).filter(Station.id == station_id).first()
-    if not station:
-        raise HTTPException(status_code=404, detail="Station not found")
-    ```
-
-    Usage:
-        get_entity_or_404(db, Station, station_id, "Station not found")
-    """
-    entity = db.query(model).filter(model.id == entity_id).first()
-    if not entity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=detail or f"{model.__name__} not found"
-        )
-    return entity
-
-
-def get_entity_by_field_or_404(
-    db: Session,
-    model: Type[T],
-    field_name: str,
-    field_value: Any,
-    detail: Optional[str] = None
-) -> T:
-    """
-    Get entity by field value or raise 404
-
-    Usage:
-        get_entity_by_field_or_404(db, User, "username", username, "User not found")
-    """
-    filter_kwargs = {field_name: field_value}
-    entity = db.query(model).filter_by(**filter_kwargs).first()
-    if not entity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=detail or f"{model.__name__} with {field_name}='{field_value}' not found"
-        )
-    return entity
-
-
-async def async_get_entity_or_404(
+async def get_entity_or_404(
     db: AsyncSession,
     model: Type[T],
     entity_id: int,
     detail: Optional[str] = None
 ) -> T:
-    """Async version of get_entity_or_404 for use with AsyncSession."""
+    """Get entity by ID or raise 404"""
     entity = await db.get(model, entity_id)
     if not entity:
         raise HTTPException(
@@ -88,14 +38,14 @@ async def async_get_entity_or_404(
     return entity
 
 
-async def async_get_entity_by_field_or_404(
+async def get_entity_by_field_or_404(
     db: AsyncSession,
     model: Type[T],
     field_name: str,
     field_value: Any,
     detail: Optional[str] = None
 ) -> T:
-    """Async version of get_entity_by_field_or_404 for use with AsyncSession."""
+    """Get entity by field value or raise 404"""
     stmt = select(model).filter_by(**{field_name: field_value})
     result = await db.execute(stmt)
     entity = result.scalar_one_or_none()

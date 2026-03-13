@@ -61,7 +61,7 @@ class ComPortCommandDriver(BaseInstrumentDriver):
 
         try:
             # Open serial port in thread pool to avoid blocking
-            self.serial_port = await asyncio.get_event_loop().run_in_executor(
+            self.serial_port = await asyncio.get_running_loop().run_in_executor(
                 None,
                 lambda: serial.Serial(
                     port=port,
@@ -117,13 +117,13 @@ class ComPortCommandDriver(BaseInstrumentDriver):
 
         try:
             # Encode and send command in thread pool
-            await asyncio.get_event_loop().run_in_executor(
+            await asyncio.get_running_loop().run_in_executor(
                 None,
                 lambda: self.serial_port.write(command.encode('utf-8'))
             )
 
             # Flush output buffer
-            await asyncio.get_event_loop().run_in_executor(
+            await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.serial_port.flush
             )
@@ -157,16 +157,16 @@ class ComPortCommandDriver(BaseInstrumentDriver):
             self.serial_port.timeout = timeout
 
             response_lines = []
-            start_time = asyncio.get_event_loop().time()
+            start_time = asyncio.get_running_loop().time()
 
             if line_count is not None:
                 # Fixed line count mode
                 for i in range(line_count):
-                    if asyncio.get_event_loop().time() - start_time > timeout:
+                    if asyncio.get_running_loop().time() - start_time > timeout:
                         self.logger.warning(f"Timeout reading line {i+1}/{line_count}")
                         break
 
-                    line = await asyncio.get_event_loop().run_in_executor(
+                    line = await asyncio.get_running_loop().run_in_executor(
                         None,
                         self.serial_port.readline
                     )
@@ -179,10 +179,10 @@ class ComPortCommandDriver(BaseInstrumentDriver):
                 max_empty_reads = 3
 
                 while empty_read_count < max_empty_reads:
-                    if asyncio.get_event_loop().time() - start_time > timeout:
+                    if asyncio.get_running_loop().time() - start_time > timeout:
                         break
 
-                    line = await asyncio.get_event_loop().run_in_executor(
+                    line = await asyncio.get_running_loop().run_in_executor(
                         None,
                         self.serial_port.readline
                     )
@@ -285,7 +285,7 @@ class ComPortCommandDriver(BaseInstrumentDriver):
         """Close serial port connection"""
         if self.serial_port and self.serial_port.is_open:
             try:
-                await asyncio.get_event_loop().run_in_executor(
+                await asyncio.get_running_loop().run_in_executor(
                     None,
                     self.serial_port.close
                 )
@@ -298,5 +298,5 @@ class ComPortCommandDriver(BaseInstrumentDriver):
         if self.serial_port and self.serial_port.is_open:
             try:
                 self.serial_port.close()
-            except:
+            except Exception:
                 pass

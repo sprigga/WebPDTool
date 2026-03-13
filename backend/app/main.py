@@ -82,11 +82,13 @@ async def startup_event():
 
     # 新增: 初始化全域 DB-backed InstrumentConfigProvider
     # 讓 ConSoleMeasurement / ComPortMeasurement / TCPIPMeasurement 能讀 instruments 表
+    # Original code: from app.core.database import SessionLocal as SyncSessionLocal
+    # Modified: Use AsyncSessionLocal (Wave 6 - Task 14)
     try:
-        from app.core.database import SessionLocal as SyncSessionLocal
+        from app.core.database import AsyncSessionLocal
         from app.core.instrument_config import InstrumentConfigProvider, set_global_instrument_provider
         # Pass session_factory so provider creates its own session per cache refresh
-        provider = InstrumentConfigProvider(session_factory=SyncSessionLocal, cache_ttl=30.0)
+        provider = InstrumentConfigProvider(session_factory=AsyncSessionLocal, cache_ttl=30.0)
         set_global_instrument_provider(provider)
         logger.info("Global DB-backed InstrumentConfigProvider initialized")
     except Exception as e:

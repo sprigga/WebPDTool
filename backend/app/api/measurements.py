@@ -3,12 +3,17 @@ Measurement API Endpoints
 Based on PDTool4 measurement module architecture
 """
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from sqlalchemy.orm import Session
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use AsyncSession for async DB migration (Wave 6 - Task 13)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from datetime import datetime
 
-from app.core.database import get_db
+# Original code: from app.core.database import get_db
+# Modified: Use async DB dependency
+from app.core.database import get_async_db
 from app.dependencies import get_current_active_user
 from app.services.measurement_service import measurement_service
 from app.models.test_session import TestSession as TestSessionModel
@@ -50,15 +55,15 @@ class InstrumentStatus(BaseModel):
 @router.post("/execute", response_model=MeasurementResponse)
 async def execute_measurement(
     request: MeasurementRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
     Execute a single measurement
-    
+
     Based on PDTool4's measurement dispatch mechanism:
     - PowerSet: For setting power supply voltages/currents
-    - PowerRead: For reading voltage/current measurements  
+    - PowerRead: For reading voltage/current measurements
     - CommandTest: For serial/network command testing
     - SFCtest: For SFC integration testing
     """
@@ -84,7 +89,7 @@ async def execute_measurement(
             test_time=result.test_time,
             execution_duration_ms=result.execution_duration_ms
         )
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -96,27 +101,29 @@ async def execute_measurement(
 async def execute_batch_measurements(
     request: BatchMeasurementRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
     Execute batch measurements asynchronously
-    
+
     Mimics PDTool4's CSV-driven test execution where multiple measurements
     are executed sequentially with dependency management.
     """
     try:
-        # Validate session exists
-        session = db.query(TestSessionModel).filter(
-            TestSessionModel.id == request.session_id
-        ).first()
-        
+        # Original code: session = db.query(TestSessionModel).filter(...).first()
+        # Modified: Use select() with await for async
+        result = await db.execute(
+            select(TestSessionModel).where(TestSessionModel.id == request.session_id)
+        )
+        session = result.scalar_one_or_none()
+
         if not session:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Test session not found"
             )
-        
+
         # Start batch execution in background
         background_tasks.add_task(
             measurement_service.execute_batch_measurements,
@@ -126,13 +133,13 @@ async def execute_batch_measurements(
             user_id=current_user.get("sub"),
             db=db
         )
-        
+
         return {
             "message": "Batch measurement execution started",
             "session_id": request.session_id,
             "measurement_count": len(request.measurements)
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -221,12 +228,12 @@ async def reset_instrument(
 @router.get("/session/{session_id}/results")
 async def get_session_measurement_results(
     session_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
     Get measurement results for a specific session
-    
+
     Returns detailed measurement results similar to PDTool4's
     test result collection and reporting.
     """
@@ -418,7 +425,7 @@ async def get_validation_types():
 async def execute_measurement_with_dependencies(
     request: MeasurementRequest,
     dependencies: List[str] = [],
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """

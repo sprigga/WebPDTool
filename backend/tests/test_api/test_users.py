@@ -4,45 +4,33 @@ import tempfile
 import os
 import asyncio
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from app.main import app
 from app.models.user import User, UserRole
-from app.core.database import Base
+from app.core.database import Base, get_async_db
 from app.core.security import get_password_hash
 
 
 @pytest.fixture(scope="function")
-def db_session():
-    """Get shared SQLite database (sync + async engines on same file)"""
+async def db_session():
+    """Get shared SQLite database (async-only, Wave 6 migration)"""
     db_fd, db_path = tempfile.mkstemp(suffix=".db")
     os.close(db_fd)
 
-    # Sync engine for get_db override (used by auth dependencies)
-    sync_engine = create_engine(
-        f"sqlite:///{db_path}",
-        connect_args={"check_same_thread": False}
-    )
-    SyncSession = sessionmaker(bind=sync_engine)
-
-    # Async engine for get_async_db override (used by users endpoints)
+    # Async engine for get_async_db override (used by all endpoints now)
     async_engine = create_async_engine(
         f"sqlite+aiosqlite:///{db_path}",
         connect_args={"check_same_thread": False}
     )
     AsyncSession_ = async_sessionmaker(bind=async_engine, expire_on_commit=False)
 
-    # Create tables using sync engine
-    Base.metadata.create_all(bind=sync_engine)
+    # Create tables using async engine
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-    yield {"sync": SyncSession, "async": AsyncSession_}
+    yield AsyncSession_
 
-    async def _dispose():
-        await async_engine.dispose()
-
-    asyncio.get_event_loop().run_until_complete(_dispose())
-    sync_engine.dispose()
+    await async_engine.dispose()
     try:
         os.unlink(db_path)
     except FileNotFoundError:
@@ -51,31 +39,20 @@ def db_session():
 
 @pytest.fixture
 def client(db_session):
-    """Get test client with both sync and async database overrides"""
-    from app.core.database import get_db, get_async_db
-
-    def override_get_db():
-        db = db_session["sync"]()
-        try:
-            yield db
-        finally:
-            db.close()
-
+    """Get test client with async database override"""
     async def override_get_async_db():
-        async with db_session["async"]() as session:
+        async with db_session() as session:
             yield session
 
-    app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_async_db] = override_get_async_db
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
 
 
-def _create_user_sync(session_factory, username, password, role, full_name=None, email=None):
-    """Helper: create a user directly in the sync DB"""
-    db = session_factory()
-    try:
+async def _create_user_async(session_factory, username, password, role, full_name=None, email=None):
+    """Helper: create a user directly in the async DB (Wave 6 migration)"""
+    async with session_factory() as db:
         user = User(
             username=username,
             password_hash=get_password_hash(password),
@@ -85,20 +62,18 @@ def _create_user_sync(session_factory, username, password, role, full_name=None,
             is_active=True
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
         return user
-    finally:
-        db.close()
 
 
 @pytest.fixture
-def admin_user(db_session):
-    """Create admin user"""
+async def admin_user(db_session):
+    """Create admin user (async)"""
     from app.core.security import create_access_token
 
-    user = _create_user_sync(
-        db_session["sync"], "admin_test", "admin123", UserRole.ADMIN,
+    user = await _create_user_async(
+        db_session, "admin_test", "admin123", UserRole.ADMIN,
         full_name="Test Admin", email="admin@test.com"
     )
     token = create_access_token(
@@ -108,12 +83,12 @@ def admin_user(db_session):
 
 
 @pytest.fixture
-def engineer_user(db_session):
-    """Create engineer user"""
+async def engineer_user(db_session):
+    """Create engineer user (async)"""
     from app.core.security import create_access_token
 
-    user = _create_user_sync(
-        db_session["sync"], "engineer_test", "eng123", UserRole.ENGINEER,
+    user = await _create_user_async(
+        db_session, "engineer_test", "eng123", UserRole.ENGINEER,
         full_name="Test Engineer"
     )
     token = create_access_token(

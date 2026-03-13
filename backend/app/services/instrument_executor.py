@@ -8,6 +8,7 @@ while using new async instrument drivers internally
 from typing import Dict, Any, Optional
 from decimal import Decimal
 import logging
+import asyncio
 
 from app.services.instrument_connection import get_connection_pool, InstrumentNotFoundError
 from app.services.instruments import get_driver_class
@@ -42,9 +43,18 @@ class InstrumentExecutor:
         self.instrument_settings = self._config_provider
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def get_instrument_config(self, instrument_id: str):
-        """Retrieve InstrumentConfig from the injected provider."""
-        return self._config_provider.get_instrument(instrument_id)
+    async def get_instrument_config(self, instrument_id: str):
+        """
+        Retrieve InstrumentConfig from the injected provider.
+
+        Modified to async (Wave 6 - Task 14): InstrumentConfigProvider.get_instrument() is now async.
+        Handles both async (InstrumentConfigProvider) and sync (InstrumentSettings) providers.
+        """
+        result = self._config_provider.get_instrument(instrument_id)
+        # Check if result is a coroutine (async provider)
+        if asyncio.iscoroutine(result):
+            return await result
+        return result
 
     # ========================================================================
     # Modern Execution (using async drivers)

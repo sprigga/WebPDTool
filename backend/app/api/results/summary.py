@@ -6,12 +6,17 @@ Extracted from measurement_results.py lines 320-399.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use async session for async DB migration (Wave 5)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Dict, Any
 from datetime import date, timedelta, datetime as dt
 from pydantic import BaseModel
 
-from app.core.database import get_db
+# Original code: from app.core.database import get_db
+# Modified: Use async DB dependency
+from app.core.database import get_async_db
 from app.dependencies import get_current_active_user
 from app.models.test_result import TestResult as TestResultModel
 from app.models.test_session import TestSession as TestSessionModel
@@ -31,12 +36,12 @@ class ResultSummary(BaseModel):
 
 
 @router.get("/summary", response_model=ResultSummary)
-def get_result_summary(
+async def get_result_summary(
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
     project_id: int | None = Query(None),
     station_id: int | None = Query(None),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -47,36 +52,41 @@ def get_result_summary(
     """
     try:
         # Base queries
-        session_query = db.query(TestSessionModel)
-        result_query = db.query(TestResultModel).join(TestSessionModel)
+        # Original code: session_query = db.query(TestSessionModel)
+        # Original code: result_query = db.query(TestResultModel).join(TestSessionModel)
+        # Modified: Use select() for async
+        stmt_sessions = select(TestSessionModel)
+        stmt_results = select(TestResultModel).join(TestSessionModel)
 
         # Apply date filters
         if date_from:
-            session_query = session_query.filter(TestSessionModel.started_at >= date_from)
-            result_query = result_query.filter(TestSessionModel.started_at >= date_from)
+            stmt_sessions = stmt_sessions.where(TestSessionModel.started_at >= date_from)
+            stmt_results = stmt_results.where(TestSessionModel.started_at >= date_from)
 
         if date_to:
-            session_query = session_query.filter(TestSessionModel.started_at <= date_to)
-            result_query = result_query.filter(TestSessionModel.started_at <= date_to)
+            stmt_sessions = stmt_sessions.where(TestSessionModel.started_at <= date_to)
+            stmt_results = stmt_results.where(TestSessionModel.started_at <= date_to)
 
         # Apply project/station filters
         if project_id:
-            session_query = session_query.filter(TestSessionModel.project_id == project_id)
-            result_query = result_query.filter(TestSessionModel.project_id == project_id)
+            stmt_sessions = stmt_sessions.where(TestSessionModel.project_id == project_id)
+            stmt_results = stmt_results.where(TestSessionModel.project_id == project_id)
 
         if station_id:
-            session_query = session_query.filter(TestSessionModel.station_id == station_id)
-            result_query = result_query.filter(TestSessionModel.station_id == station_id)
+            stmt_sessions = stmt_sessions.where(TestSessionModel.station_id == station_id)
+            stmt_results = stmt_results.where(TestSessionModel.station_id == station_id)
 
         # Calculate session statistics
-        all_sessions = session_query.all()
+        result_sessions = await db.execute(stmt_sessions)
+        all_sessions = result_sessions.scalars().all()
         total_sessions = len(all_sessions)
         passed_sessions = sum(1 for s in all_sessions if s.status == "PASSED")
         failed_sessions = sum(1 for s in all_sessions if s.status == "FAILED")
         pass_rate = (passed_sessions / total_sessions * 100) if total_sessions > 0 else 0
 
         # Calculate measurement statistics
-        all_results = result_query.all()
+        result_items = await db.execute(stmt_results)
+        all_results = result_items.scalars().all()
         total_measurements = len(all_results)
 
         # Calculate average execution time

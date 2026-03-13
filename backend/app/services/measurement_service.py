@@ -11,7 +11,10 @@ ARCHITECTURE UPDATE (2026-02-06):
 """
 
 from typing import Dict, Any, List, Optional
-from sqlalchemy.orm import Session
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use AsyncSession for async DB migration (Wave 6 - Task 14)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from datetime import datetime
 import asyncio
 import logging
@@ -130,6 +133,8 @@ class MeasurementService:
                 execution_duration_ms=int(execution_time),
             )
 
+    # Original code: db: Optional[Session] = None
+    # Modified: Use AsyncSession for async DB migration (Wave 6 - Task 14)
     async def execute_batch_measurements(
         self,
         session_id: int,
@@ -137,7 +142,7 @@ class MeasurementService:
         stop_on_fail: bool = True,
         run_all_test: bool = False,
         user_id: Optional[str] = None,
-        db: Optional[Session] = None,
+        db: Optional[AsyncSession] = None,
     ):
         """
         Execute batch measurements asynchronously
@@ -673,8 +678,10 @@ class MeasurementService:
         await executor.reset_instrument(instrument_id)
         return {"status": "IDLE"}
 
+    # Original code: async def get_session_results(self, session_id: int, db: Session)
+    # Modified: Use AsyncSession for async DB migration (Wave 6 - Task 14)
     async def get_session_results(
-        self, session_id: int, db: Session
+        self, session_id: int, db: AsyncSession
     ) -> List[Dict[str, Any]]:
         """
         Get measurement results for a session
@@ -684,11 +691,13 @@ class MeasurementService:
             return [result.to_dict() for result in session_data["results"]]
 
         # Fallback to database query if session not in memory
-        results = (
-            db.query(TestResultModel)
-            .filter(TestResultModel.test_session_id == session_id)
-            .all()
+        # Original code: results = db.query(TestResultModel).filter(...).all()
+        # Modified: Use select() with await for async
+        result = await db.execute(
+            select(TestResultModel)
+            .where(TestResultModel.test_session_id == session_id)
         )
+        results = result.scalars().all()
 
         return [
             {
@@ -700,8 +709,10 @@ class MeasurementService:
             for result in results
         ]
 
+    # Original code: async def _save_measurement_result(self, db: Session, session_id: int, result: MeasurementResult)
+    # Modified: Use AsyncSession for async DB migration (Wave 6 - Task 14)
     async def _save_measurement_result(
-        self, db: Session, session_id: int, result: MeasurementResult
+        self, db: AsyncSession, session_id: int, result: MeasurementResult
     ):
         """
         Save measurement result to database
@@ -730,12 +741,16 @@ class MeasurementService:
                 execution_duration_ms=result.execution_duration_ms,
             )
 
+            # Original code: db.add(db_result); db.commit()
+            # Modified: Use await for async operations (Wave 6 - Task 14)
             db.add(db_result)
-            db.commit()
+            await db.commit()
 
         except Exception as e:
             self.logger.error(f"Failed to save measurement result: {e}")
-            db.rollback()
+            # Original code: db.rollback()
+            # Modified: Use await for async rollback (Wave 6 - Task 14)
+            await db.rollback()
 
 
 # Global service instance

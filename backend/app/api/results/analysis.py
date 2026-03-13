@@ -15,9 +15,14 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use async session for async DB migration (Wave 5)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
-from app.core.database import get_db
+# Original code: from app.core.database import get_db
+# Modified: Use async DB dependency
+from app.core.database import get_async_db
 from app.dependencies import get_current_active_user
 from app.models.test_result import TestResult as TestResultModel
 from app.models.test_session import TestSession as TestSessionModel
@@ -81,12 +86,12 @@ class AnalysisResponse(BaseModel):
 
 
 @router.get("/analysis", response_model=AnalysisResponse)
-def get_analysis(
+async def get_analysis(
     station_id: int = Query(..., description="Station ID (required)"),
     test_plan_name: str = Query(..., description="Test plan name / script name (required)"),
     date_from: Optional[date] = Query(None, description="Filter sessions from this date (inclusive)"),
     date_to: Optional[date] = Query(None, description="Filter sessions to this date (inclusive)"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user),
 ):
     """
@@ -97,16 +102,19 @@ def get_analysis(
     - item_series: per-item time-series data (session_id, start_time, duration_ms) sorted by time
     """
     # --- Build session query ---
-    session_q = db.query(TestSessionModel).filter(
+    # Original code: session_q = db.query(TestSessionModel).filter(...)
+    # Modified: Use select() with await for async
+    stmt_sessions = select(TestSessionModel).where(
         TestSessionModel.station_id == station_id
     )
     if date_from:
-        session_q = session_q.filter(TestSessionModel.start_time >= date_from)
+        stmt_sessions = stmt_sessions.where(TestSessionModel.start_time >= date_from)
     if date_to:
         date_to_end = datetime.combine(date_to, datetime.max.time())
-        session_q = session_q.filter(TestSessionModel.start_time <= date_to_end)
+        stmt_sessions = stmt_sessions.where(TestSessionModel.start_time <= date_to_end)
 
-    sessions = session_q.all()
+    result = await db.execute(stmt_sessions)
+    sessions = result.scalars().all()
     if not sessions:
         return AnalysisResponse(
             item_stats=[],
@@ -134,28 +142,29 @@ def get_analysis(
     )
 
     # --- Get test_plan_ids matching the requested test_plan_name ---
-    plan_ids = [
-        tp.id
-        for tp in db.query(TestPlanModel.id)
-        .filter(
+    # Original code: plan_ids = [tp.id for tp in db.query(TestPlanModel.id).filter(...).all()]
+    # Modified: Use select() with await; result.all() returns rows with single column
+    result = await db.execute(
+        select(TestPlanModel.id).where(
             TestPlanModel.station_id == station_id,
             TestPlanModel.test_plan_name == test_plan_name,
         )
-        .all()
-    ]
+    )
+    plan_ids = [row[0] for row in result.all()]
 
     if not plan_ids:
         return AnalysisResponse(item_stats=[], session_stats=session_stats, item_series=[])
 
     # --- Per-item stats (execution_duration_ms) ---
-    results = (
-        db.query(TestResultModel)
-        .filter(
+    # Original code: results = db.query(TestResultModel).filter(...).all()
+    # Modified: Use select() with await
+    result = await db.execute(
+        select(TestResultModel).where(
             TestResultModel.session_id.in_(session_ids),
             TestResultModel.test_plan_id.in_(plan_ids),
         )
-        .all()
     )
+    results = result.scalars().all()
 
     # Group by item_no for aggregate stats
     item_groups: dict = defaultdict(lambda: {"item_name": "", "durations": []})

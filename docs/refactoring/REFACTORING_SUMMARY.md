@@ -323,3 +323,118 @@ if "Error: " in measured_value:
 - **Refactoring 測試**: 9 個測試類別 ✅ (測量驗證)
 - **總計**: 38+ 個測試全部通過
 
+---
+
+### Commit 5: Async SQLAlchemy Migration（2026-03-13）
+
+**新增文件:**
+- `docs/refactoring/Async_SQLAlchemy_Migration_Complete.md` ⭐ **新增**
+- `backend/pytest.ini` ⭐ **新增**
+
+**更新文件（共 40+ 個）:**
+
+**Core Infrastructure:**
+- `app/core/database.py` - 完全重寫為 async
+- `app/core/api_helpers.py` - 移除 sync helpers
+- `app/dependencies.py` - async get_current_user
+
+**API Routers (10+ 個):**
+- `app/api/auth.py` - async endpoints
+- `app/api/users.py` - async CRUD
+- `app/api/projects.py` - async operations
+- `app/api/stations.py` - async operations
+- `app/api/instruments.py` - async CRUD
+- `app/api/tests.py` - async test session management
+- `app/api/measurements.py` - async measurement execution
+- `app/api/results/*.py` (7 個子路由器) - async results operations
+
+**Services (5+ 個):**
+- `app/services/auth.py` - async user authentication
+- `app/services/test_engine.py` - async test execution
+- `app/services/report_service.py` - async report generation
+- `app/services/instrument_executor.py` - async instrument config lookup
+
+**Repositories:**
+- `app/repositories/instrument_repository.py` - 完全 async
+
+**Configuration:**
+- `app/core/instrument_config.py` - InstrumentConfigProvider async methods
+- `pyproject.toml` - 更新依賴（asyncmy, pytest-asyncio, aiosqlite）
+
+**Tests (15+ 個):**
+- `tests/test_api/test_users.py` - async fixtures
+- `tests/test_repositories/test_instrument_repository.py` - async tests
+- `tests/test_core/test_instrument_config_provider.py` - async tests
+
+**主要改進:**
+
+1. **數據庫驅動升級**
+   ```python
+   # Before: mysql+pymysql://...
+   # After:  mysql+asyncmy://...
+   ```
+
+2. **Session 管理重構**
+   ```python
+   # Before: Session, sessionmaker, get_db()
+   # After:  AsyncSession, async_sessionmaker, get_async_db()
+   ```
+
+3. **查詢語法現代化**
+   ```python
+   # Before: db.query(Model).filter_by(field=value).first()
+   # After:  (await db.execute(sa_select(Model).where(Model.field == value)))
+   #         .scalar_one_or_none()
+   ```
+
+4. **批量刪除更新**
+   ```python
+   # Before: db.query(Model).filter(...).delete()
+   # After:  await db.execute(sa_delete(Model).where(...))
+   ```
+
+5. **測試框架改進**
+   - pytest-asyncio 配置（asyncio_mode = auto）
+   - aiosqlite 用於測試
+   - AsyncMock 用於 mock 對象
+
+**測試結果:**
+- **206+ 個核心測試通過** ✅
+- API、Repository、Core 測試全部通過
+- 硬體相關測試單獨排除（非 migration 範圍）
+
+**技術亮點:**
+
+| 功能 | Before (Sync) | After (Async) | 改進 |
+|------|--------------|--------------|------|
+| DB 驅動 | pymysql | asyncmy | 非阻塞 I/O |
+| Session 類型 | Session | AsyncSession | async/await |
+| 查詢語法 | db.query() | await db.execute(select()) | SQLAlchemy 2.0 |
+| 測試框架 | 同步 fixtures | async fixtures | pytest-asyncio |
+| 並發能力 | 阻塞 | 非阻塞 | 更高吞吐量 |
+
+**故障排除關鍵點:**
+
+1. **Import Error**: `cannot import name 'get_db'` → 移除 sync 依賴
+2. **Pytest Config**: `Unknown config option: asyncio_mode` → 添加 pytest.ini
+3. **Fixture Errors**: Sync Session in async context → 使用 AsyncSession + aiosqlite
+4. **Coroutine Not Awaited**: RuntimeWarning → 添加 @pytest.mark.asyncio + await
+5. **Mock Return Values**: MagicMock can't be awaited → 使用 AsyncMock
+6. **Mixed Async/Sync**: Provider 方法變 async → 更新調用者或使用 asyncio.iscoroutine()
+
+**依賴更新:**
+```toml
+[project]
+dependencies = [
+    "asyncmy>=0.2.7",  # Async MySQL (replaces pymysql)
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest-asyncio>=0.21.0",  # Async test support
+    "aiosqlite>=0.22.1",  # Async SQLite for tests
+]
+```
+
+**文檔詳情:** 請參閱 [Async_SQLAlchemy_Migration_Complete.md](./Async_SQLAlchemy_Migration_Complete.md)
+

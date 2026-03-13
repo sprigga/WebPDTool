@@ -91,6 +91,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_LOG_TTL: ${REDIS_LOG_TTL:-3600}
 
+      # Timezone
+      TZ: Asia/Taipei
+
       # ✅ Added: Alembic migration automation
       # Set to "true" to skip automatic migrations on container start
       SKIP_MIGRATIONS: ${SKIP_MIGRATIONS:-false}

@@ -36,6 +36,7 @@ docs/bugfix/
 |---------|------|------|------|------|
 | Issue #1 | 登入 API 返回 500 錯誤（bcrypt 密碼驗證） | ✅ 已修正 | 2025-12-17 | [ISSUE.md](./ISSUE.md) |
 | Issue #7 | 資料庫架構不匹配 | ✅ 已修正 | 2026-02-09 | [ISSUE7_database_schema_mismatch.md](./ISSUE7_database_schema_mismatch.md) |
+| - | asyncio.get_event_loop() 棄用（18 處）、無效型別標注、Lock 鎖內 DB 查詢等 6 項程式碼品質問題 | ✅ 已修正 | 2026-03-13 | [code-quality-simplify-2026-03-13.md](./code-quality-simplify-2026-03-13.md) |
 
 ### 🟡 重要問題（High）
 
@@ -79,6 +80,16 @@ docs/bugfix/
 | - | 無效參數錯誤 | ✅ 已修正 | - | [BUGFIX_INVALID_PARAMETERS.md](./BUGFIX_INVALID_PARAMETERS.md) |
 
 ## 最近修正的問題
+
+### 2026-03-13
+- **程式碼品質精簡（/simplify 審查）**：三個並行代理發現 6 項問題，全數修正：
+  - `asyncio.get_event_loop()` → `get_running_loop()`（18 處，Python 3.10+ 棄用）
+  - 無效型別標注 `str or List[str]` → `Union[str, List[str]]`
+  - 函式內部 `import os/sys` 移至模組頂層
+  - 裸 `except:` → `except Exception:` in `__del__`
+  - `_refresh_cache` DB 查詢移至 Lock 外部
+  - Pinia Store 中的死碼 mutation 方法移除
+  - 詳細文檔: [code-quality-simplify-2026-03-13.md](./code-quality-simplify-2026-03-13.md)
 
 ### 2026-03-12
 - **ComPortCommand 串列埠不存在導致測試 ERROR**：`ComPortCommandDriver.initialize()` 在串列埠無法開啟時（如 Windows `COM1` 在 Linux 容器中），改為進入 simulation mode 而非拋出 `ConnectionError`。新增 `sim_response` 可配置回傳值，預設空字串。

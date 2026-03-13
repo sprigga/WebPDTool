@@ -326,8 +326,10 @@ class InstrumentConfigProvider:
     cache_ttl: seconds until the full list is refreshed from DB (default 30).
     """
 
+    # Original code: session_factory returning sync Session
+    # Modified: Use InstrumentRepository directly (Wave 6 - Task 14)
     def __init__(self, session_factory, cache_ttl: float = 30.0):
-        # session_factory: callable returning a new sync Session (e.g. SessionLocal)
+        # session_factory: callable returning a new AsyncSession (e.g. AsyncSessionLocal)
         self._session_factory = session_factory
         self._cache_ttl = cache_ttl
         self._cache: Optional[Dict[str, InstrumentConfig]] = None
@@ -338,7 +340,7 @@ class InstrumentConfigProvider:
     # Public interface (same as InstrumentSettings)
     # ------------------------------------------------------------------
 
-    def get_instrument(self, instrument_id: str) -> Optional[InstrumentConfig]:
+    async def get_instrument(self, instrument_id: str) -> Optional[InstrumentConfig]:
         """Lookup by logical ID. Uses cache; falls back to direct DB query on miss."""
         cached = self._get_cache()
         if cached is not None and instrument_id in cached:
@@ -347,22 +349,23 @@ class InstrumentConfigProvider:
         db = self._session_factory()
         try:
             from app.repositories.instrument_repository import InstrumentRepository
-            row = InstrumentRepository(db).get_by_instrument_id(instrument_id)
+            repo = InstrumentRepository(db)
+            row = await repo.get_by_instrument_id(instrument_id)
             return self._row_to_config(row) if row else None
         finally:
-            db.close()
+            await db.close()
 
-    def list_instruments(self) -> Dict[str, InstrumentConfig]:
+    async def list_instruments(self) -> Dict[str, InstrumentConfig]:
         """Return all instruments (enabled + disabled). Always fetches fresh from DB
         (intentional — used by admin interfaces that need current state)."""
-        return self._build_all_map()
+        return await self._build_all_map()
 
-    def list_enabled_instruments(self) -> Dict[str, InstrumentConfig]:
+    async def list_enabled_instruments(self) -> Dict[str, InstrumentConfig]:
         """Return only enabled instruments, using cache."""
         cache = self._get_cache()
         if cache is not None:
             return cache
-        return self._refresh_cache()
+        return await self._refresh_cache()
 
     def invalidate_cache(self):
         """Force next call to re-fetch from DB. Call after any CRUD mutation."""
@@ -374,26 +377,6 @@ class InstrumentConfigProvider:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    # def _get_cache(self) -> Optional[Dict[str, InstrumentConfig]]:
-    #     # Old implementation: returned internal reference (not a copy), allowing
-    #     # callers to mutate cache state. Also had TOCTOU race: lock was released
-    #     # before caller used the returned value.
-    #     with self._lock:
-    #         if self._cache is not None and (_time.monotonic() - self._cache_time) < self._cache_ttl:
-    #             return self._cache
-    #     return None
-    #
-    # def _refresh_cache(self) -> Dict[str, InstrumentConfig]:
-    #     # Old implementation: fetched from DB outside the lock, then acquired lock
-    #     # to write. Two threads could both see expired cache, both fetch from DB,
-    #     # and both write — wasting DB calls. No double-check after acquiring lock.
-    #     rows = self._repo.list_enabled()
-    #     result = {row.instrument_id: self._row_to_config(row) for row in rows}
-    #     with self._lock:
-    #         self._cache = result
-    #         self._cache_time = _time.monotonic()
-    #     return result
-
     def _get_cache(self) -> Optional[Dict[str, InstrumentConfig]]:
         """Return cache copy if still valid, else None. Thread-safe (returns copy while holding lock)."""
         with self._lock:
@@ -402,7 +385,7 @@ class InstrumentConfigProvider:
                 return dict(self._cache)  # return a copy while holding lock
         return None
 
-    def _refresh_cache(self) -> Dict[str, InstrumentConfig]:
+    async def _refresh_cache(self) -> Dict[str, InstrumentConfig]:
         """Fetch enabled instruments from DB, populate cache."""
         with self._lock:
             if (self._cache is not None and
@@ -412,24 +395,26 @@ class InstrumentConfigProvider:
         db = self._session_factory()
         try:
             from app.repositories.instrument_repository import InstrumentRepository
-            rows = InstrumentRepository(db).list_enabled()
+            repo = InstrumentRepository(db)
+            rows = await repo.list_enabled()
             result = {row.instrument_id: self._row_to_config(row) for row in rows}
         finally:
-            db.close()
+            await db.close()
         # Two threads may race here if both passed the TTL check above — last writer wins (harmless)
         with self._lock:
             self._cache = result
             self._cache_time = _time.monotonic()
             return dict(result)
 
-    def _build_all_map(self) -> Dict[str, InstrumentConfig]:
+    async def _build_all_map(self) -> Dict[str, InstrumentConfig]:
         db = self._session_factory()
         try:
             from app.repositories.instrument_repository import InstrumentRepository
-            rows = InstrumentRepository(db).list_all()
+            repo = InstrumentRepository(db)
+            rows = await repo.list_all()
             return {row.instrument_id: self._row_to_config(row) for row in rows}
         finally:
-            db.close()
+            await db.close()
 
     @staticmethod
     def _row_to_config(row) -> InstrumentConfig:

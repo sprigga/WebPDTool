@@ -6,13 +6,17 @@ Extracted from measurement_results.py lines 81-258.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
+# Original code: from sqlalchemy.orm import Session
+# Modified: Use async session for async DB migration (Wave 5)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
 from typing import List
 from datetime import date, datetime
 from pydantic import BaseModel
 
-from app.core.database import get_db
+# Original code: from app.core.database import get_db
+# Modified: Use async DB dependency
+from app.core.database import get_async_db
 from app.core.api_helpers import calculate_test_statistics
 from app.core.constants import VALID_SESSION_STATUSES
 from app.dependencies import get_current_active_user
@@ -90,7 +94,7 @@ class TestSessionResponse(BaseModel):
 
 
 @router.get("/sessions", response_model=List[TestSessionResponse])
-def get_test_sessions(
+async def get_test_sessions(
     # Original code: skip parameter (inconsistent with tests.py which uses offset)
     # Modified: Renamed to offset for API consistency - FastAPI convention uses offset
     offset: int = Query(0, ge=0, description="Number of records to skip (pagination)"),
@@ -109,7 +113,7 @@ def get_test_sessions(
     ),
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -119,37 +123,44 @@ def get_test_sessions(
     functionality where users can view test history and results.
     """
     try:
-        query = db.query(TestSessionModel).join(ProjectModel).join(StationModel)
+        # Original code: query = db.query(TestSessionModel).join(ProjectModel).join(StationModel)
+        # Modified: Use select() with await db.execute() for async
+        stmt = select(TestSessionModel).join(ProjectModel).join(StationModel)
 
         # Apply filters
         if project_id:
-            query = query.filter(TestSessionModel.project_id == project_id)
+            stmt = stmt.where(TestSessionModel.project_id == project_id)
 
         if station_id:
-            query = query.filter(TestSessionModel.station_id == station_id)
+            stmt = stmt.where(TestSessionModel.station_id == station_id)
 
         if status:
-            query = query.filter(TestSessionModel.status == status)
+            stmt = stmt.where(TestSessionModel.status == status)
 
         if date_from:
-            query = query.filter(TestSessionModel.started_at >= date_from)
+            stmt = stmt.where(TestSessionModel.started_at >= date_from)
 
         if date_to:
-            query = query.filter(TestSessionModel.started_at <= date_to)
+            stmt = stmt.where(TestSessionModel.started_at <= date_to)
 
         # Order by most recent first
-        sessions = query.order_by(desc(TestSessionModel.started_at))\
-                      .offset(offset)\
-                      .limit(limit)\
-                      .all()
+        result = await db.execute(
+            stmt.order_by(desc(TestSessionModel.started_at))
+                .offset(offset)
+                .limit(limit)
+        )
+        sessions = result.scalars().all()
 
         # Build response with session statistics
         response = []
         for session in sessions:
             # Get test results for this session
-            results = db.query(TestResultModel)\
-                       .filter(TestResultModel.test_session_id == session.id)\
-                       .all()
+            # Original code: results = db.query(TestResultModel).filter(...).all()
+            # Modified: Use select() with await
+            result = await db.execute(
+                select(TestResultModel).where(TestResultModel.test_session_id == session.id)
+            )
+            results = result.scalars().all()
 
             # Original code: Duplicated statistics calculation
             # Refactored: Use calculate_test_statistics helper
@@ -182,9 +193,9 @@ def get_test_sessions(
 
 
 @router.get("/sessions/{session_id}", response_model=TestSessionResponse)
-def get_test_session(
+async def get_test_session(
     session_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
@@ -194,11 +205,15 @@ def get_test_session(
     examine all test points and their results for a specific session.
     """
     try:
-        session = db.query(TestSessionModel)\
-                   .join(ProjectModel)\
-                   .join(StationModel)\
-                   .filter(TestSessionModel.id == session_id)\
-                   .first()
+        # Original code: session = db.query(TestSessionModel).join(...).filter(...).first()
+        # Modified: Use select() with await
+        result = await db.execute(
+            select(TestSessionModel)
+            .join(ProjectModel)
+            .join(StationModel)
+            .where(TestSessionModel.id == session_id)
+        )
+        session = result.scalar_one_or_none()
 
         if not session:
             raise HTTPException(
@@ -207,10 +222,14 @@ def get_test_session(
             )
 
         # Get all measurement results for this session
-        results = db.query(TestResultModel)\
-                   .filter(TestResultModel.test_session_id == session_id)\
-                   .order_by(TestResultModel.item_no)\
-                   .all()
+        # Original code: results = db.query(TestResultModel).filter(...).order_by(...).all()
+        # Modified: Use select() with await
+        result = await db.execute(
+            select(TestResultModel)
+            .where(TestResultModel.test_session_id == session_id)
+            .order_by(TestResultModel.item_no)
+        )
+        results = result.scalars().all()
 
         # Original code: Duplicated statistics calculation
         # Refactored: Use calculate_test_statistics helper
