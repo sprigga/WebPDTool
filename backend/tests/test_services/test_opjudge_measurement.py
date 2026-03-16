@@ -319,13 +319,23 @@ class TestOPjudgeValidation:
 
     @pytest.mark.asyncio
     async def test_validation_confirm_mode(self):
-        """Test validation accepts confirm mode with TestParams"""
+        """Test validation accepts confirm mode with flat ImagePath/content params (Option A format)"""
 
+        # 原有程式碼: 使用 TestParams key 格式 (舊版 PDTool4 格式)
+        # validation = await measurement_service.validate_params(
+        #     measurement_type="OPjudge",
+        #     switch_mode="confirm",
+        #     test_params={
+        #         "TestParams": ["ImagePath=/test.jpg", "content=Test"]
+        #     }
+        # )
+        # 修正: 使用展開格式（對應新的 MEASUREMENT_TEMPLATES confirm mode）
         validation = await measurement_service.validate_params(
             measurement_type="OPjudge",
             switch_mode="confirm",
             test_params={
-                "TestParams": ["ImagePath=/test.jpg", "content=Test"]
+                "ImagePath": "/test.jpg",
+                "content": "Test"
             }
         )
 
@@ -334,13 +344,23 @@ class TestOPjudgeValidation:
 
     @pytest.mark.asyncio
     async def test_validation_yorn_mode(self):
-        """Test validation accepts YorN mode with TestParams"""
+        """Test validation accepts YorN mode with flat ImagePath/content params (Option A format)"""
 
+        # 原有程式碼: 使用 TestParams key 格式
+        # validation = await measurement_service.validate_params(
+        #     measurement_type="OPjudge",
+        #     switch_mode="YorN",
+        #     test_params={
+        #         "TestParams": ["ImagePath=/test.jpg", "content=Test"]
+        #     }
+        # )
+        # 修正: 使用展開格式（對應新的 MEASUREMENT_TEMPLATES YorN mode）
         validation = await measurement_service.validate_params(
             measurement_type="OPjudge",
             switch_mode="YorN",
             test_params={
-                "TestParams": ["ImagePath=/test.jpg", "content=Test"]
+                "ImagePath": "/test.jpg",
+                "content": "Test"
             }
         )
 
@@ -349,7 +369,7 @@ class TestOPjudgeValidation:
 
     @pytest.mark.asyncio
     async def test_validation_missing_test_params(self):
-        """Test validation rejects missing TestParams"""
+        """Test validation rejects missing required params (ImagePath and content)"""
 
         validation = await measurement_service.validate_params(
             measurement_type="OPjudge",
@@ -358,7 +378,9 @@ class TestOPjudgeValidation:
         )
 
         assert validation["valid"] is False
-        assert "TestParams" in validation["missing_params"]
+        # 原有程式碼: assert "TestParams" in validation["missing_params"]
+        # 修正: 新格式下 missing_params 回傳 ImagePath 和/或 content
+        assert "ImagePath" in validation["missing_params"] or "content" in validation["missing_params"]
 
     @pytest.mark.asyncio
     async def test_validation_invalid_switch_mode(self):
