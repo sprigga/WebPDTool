@@ -119,6 +119,15 @@ MEASUREMENT_TEMPLATES = {
                 "Instrument": "keithley2015_1",
                 "Command": "SOURCE:VOLTAGE 5.0"
             }
+        },
+        "34970A": {
+            "required": ["Instrument", "Channel", "Item"],
+            "optional": ["Range", "NPLC"],
+            "example": {
+                "Instrument": "34970a_1",
+                "Channel": "101",
+                "Item": "clos"
+            }
         }
     },
     "PowerRead": {
