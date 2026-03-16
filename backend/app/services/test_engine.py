@@ -21,6 +21,7 @@ from app.measurements.base import BaseMeasurement, MeasurementResult
 from app.measurements.implementations import get_measurement_class
 from app.services.instrument_manager import instrument_manager
 from app.services.report_service import report_service
+from app.services.modbus.modbus_manager import modbus_manager
 # Original code: from app.core.database import SessionLocal
 # Modified: Use AsyncSessionLocal for async DB migration (Wave 6 - Task 12)
 from app.core.database import AsyncSessionLocal
@@ -460,6 +461,9 @@ class TestEngine:
                 f"({pass_items}/{total_items} passed)"
             )
 
+            # Write result to Modbus device if a listener is active for this station
+            await self._write_modbus_result(session.station_id, final_result == TestResultEnum.PASS)
+
             # Automatically generate and save CSV report
             try:
                 # Original code: report_path = report_service.save_session_report(session_id, db)
@@ -479,6 +483,19 @@ class TestEngine:
             # Modified: Use await for async rollback (Wave 6 - Task 12)
             await db.rollback()
     
+    async def _write_modbus_result(self, station_id: int, passed: bool) -> None:
+        """
+        Write test result to Modbus device if a listener is active for this station.
+        Silently skips if no Modbus listener is running.
+        """
+        try:
+            written = await modbus_manager.write_test_result(station_id, passed)
+            if written:
+                self.logger.info(f"Wrote Modbus result: {'PASS' if passed else 'FAIL'} for station {station_id}")
+        except Exception as e:
+            # Do not fail the session if Modbus write fails
+            self.logger.error(f"Failed to write Modbus result for station {station_id}: {e}")
+
     def _load_configuration(self, station: Station) -> Dict[str, Any]:
         """
         Load configuration for test execution
