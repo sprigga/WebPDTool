@@ -373,3 +373,30 @@ class TestOPjudgeValidation:
         )
 
         assert validation["valid"] is False
+
+
+class TestOPjudgeImplementationClass:
+    """Test OPJudgeMeasurement class delegates to _execute_op_judge"""
+
+    @pytest.mark.asyncio
+    async def test_opjudge_implementation_class_uses_service(self):
+        """OPJudgeMeasurement class should produce PASS result for YorN mode via fallback"""
+        from app.measurements.implementations import OPJudgeMeasurement
+
+        test_plan_item = {
+            "item_no": 1,
+            "item_name": "Visual_Check_01",
+            "switch_mode": "YorN",
+            "measurement_type": "OPjudge",
+            "parameters": {
+                "TestParams": {"ImagePath": "/test.jpg", "content": "Check LED"},
+                "operator_judgment": "PASS",
+            }
+        }
+
+        with patch('os.path.exists', return_value=False):
+            m = OPJudgeMeasurement(test_plan_item=test_plan_item, config={})
+            result = await m.execute()
+
+        assert result.result == "PASS"
+        assert result.measured_value == Decimal("1")

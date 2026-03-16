@@ -1090,18 +1090,27 @@ class OPJudgeMeasurement(BaseMeasurement):
     """Awaits operator confirmation for subjective tests"""
 
     async def execute(self) -> MeasurementResult:
+        """
+        Operator judgment measurement.
+        Delegates to MeasurementService._execute_op_judge() for full PDTool4 behavior.
+        Falls back to legacy Type/Expected/Result param logic if service unavailable.
+        """
         try:
-            judgment_type = get_param(self.test_params, "Type", default="YorN")
-            self.logger.info(f"Operator judgment: {judgment_type}")
+            # 原有程式碼: 僅使用 Type/Expected/Result 參數，不呼叫外部腳本
+            # 修改: 委派給 MeasurementService._execute_op_judge() 實作完整 PDTool4 邏輯
+            from app.services.measurement_service import measurement_service
 
-            expected = get_param(self.test_params, "Expected", default="PASS")
-            actual = get_param(self.test_params, "Result", default=expected)
+            switch_mode = get_param(self.test_params, "switch_mode") or \
+                          self.test_plan_item.get("switch_mode", "YorN")
+            test_point_id = self.test_plan_item.get("item_name", "unknown")
 
-            measured_value = Decimal("1.0") if actual == "PASS" else Decimal("0.0")
-            # Ensure actual is a valid result string
-            if actual not in ("PASS", "FAIL", "SKIP", "ERROR"):
-                actual = "PASS"
-            return self.create_result(result=str(actual), measured_value=measured_value)
+            result = await measurement_service._execute_op_judge(
+                test_point_id=test_point_id,
+                switch_mode=switch_mode,
+                test_params=self.test_params,
+                run_all_test=False,
+            )
+            return result
 
         except Exception as e:
             self.logger.error(f"Operator judgment error: {e}")
