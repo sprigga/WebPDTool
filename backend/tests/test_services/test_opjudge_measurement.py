@@ -400,3 +400,44 @@ class TestOPjudgeImplementationClass:
 
         assert result.result == "PASS"
         assert result.measured_value == Decimal("1")
+
+    @pytest.mark.asyncio
+    async def test_opjudge_flat_format_primary(self):
+        """Test _execute_op_judge accepts flat ImagePath/content as primary format (Option A)"""
+
+        mock_process = AsyncMock()
+        mock_process.returncode = 0
+        mock_process.communicate = AsyncMock(return_value=(b"PASS\n", b""))
+
+        with patch('asyncio.create_subprocess_exec', return_value=mock_process):
+            with patch('os.path.exists', return_value=True):
+                result = await measurement_service._execute_op_judge(
+                    test_point_id="Flat_Primary_Test",
+                    switch_mode="confirm",
+                    test_params={
+                        "ImagePath": "/images/led.jpg",
+                        "content": "Confirm LED is green",
+                    },
+                    run_all_test=False
+                )
+
+        assert result.result == "PASS"
+        assert result.error_message is None
+
+    @pytest.mark.asyncio
+    async def test_opjudge_no_valid_params_returns_error(self):
+        """Test _execute_op_judge returns ERROR when neither flat keys nor TestParams present"""
+
+        result = await measurement_service._execute_op_judge(
+            test_point_id="No_Params_Test",
+            switch_mode="confirm",
+            test_params={
+                "WaitmSec": 0,
+                "Timeout": 5000,
+                # No ImagePath, no content, no TestParams
+            },
+            run_all_test=False
+        )
+
+        assert result.result == "ERROR"
+        assert "Missing required parameters" in result.error_message

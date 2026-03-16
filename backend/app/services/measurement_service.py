@@ -176,44 +176,55 @@ class MeasurementService:
                 ),
             )
 
-        # --- Extract TestParams (case-insensitive key lookup) ---
-        raw_test_params = None
-        for key in test_params:
-            if key.lower() == "testparams":
-                raw_test_params = test_params[key]
-                break
+        # --- Extract params: primary = flat top-level keys, legacy = TestParams key ---
+        # 修正 (Option A): 前端展開格式（ImagePath/content 為頂層欄位）為主要格式
+        # PDTool4 CSV 匯入的 TestParams key 格式為向後相容的舊式格式
 
-        if raw_test_params is None:
-            return MeasurementResult(
-                item_no=0,
-                item_name=test_point_id,
-                result="ERROR",
-                error_message=(
-                    "Missing required parameters: TestParams "
-                    "(must contain ImagePath and/or content)"
-                ),
-            )
+        parsed_params: Dict[str, Any] = {}
 
-        # --- Normalize TestParams to dict ---
-        # PDTool4 passes as list ["ImagePath=/path", "content=text"] or dict {"ImagePath": "...", "content": "..."}
-        if isinstance(raw_test_params, list):
-            parsed_params: Dict[str, Any] = {}
-            for item in raw_test_params:
-                if isinstance(item, str) and "=" in item:
-                    k, v = item.split("=", 1)
-                    parsed_params[k.strip()] = v.strip()
-        elif isinstance(raw_test_params, dict):
-            parsed_params = raw_test_params
-        else:
-            parsed_params = {}
+        # 1. 主要格式: 嘗試從頂層欄位直接取 ImagePath / content
+        for flat_key in ["ImagePath", "content"]:
+            for key in test_params:
+                if key.lower() == flat_key.lower():
+                    parsed_params[flat_key] = test_params[key]
+                    break
 
+        # 2. 舊式格式後備: 若頂層未找到，嘗試 TestParams key（PDTool4 CSV 匯入格式）
+        # 原有程式碼: 以 TestParams key 為唯一格式
+        # raw_test_params = None
+        # for key in test_params:
+        #     if key.lower() == "testparams":
+        #         raw_test_params = test_params[key]
+        #         break
+        if not parsed_params:
+            raw_test_params = None
+            for key in test_params:
+                if key.lower() == "testparams":
+                    raw_test_params = test_params[key]
+                    break
+
+            if raw_test_params is not None:
+                # PDTool4 passes list ["ImagePath=/path", "content=text"] or dict
+                if isinstance(raw_test_params, list):
+                    for item in raw_test_params:
+                        if isinstance(item, str) and "=" in item:
+                            k, v = item.split("=", 1)
+                            parsed_params[k.strip()] = v.strip()
+                elif isinstance(raw_test_params, dict):
+                    parsed_params = dict(raw_test_params)
+
+        # 3. 若兩種格式均無有效資料，回傳 ERROR
+        # 注意: any() — 提供 ImagePath 或 content 任一即可 (image-only 和 text-only 均合法)
         required_args = ["ImagePath", "content"]
         if not any(arg in parsed_params for arg in required_args):
             return MeasurementResult(
                 item_no=0,
                 item_name=test_point_id,
                 result="ERROR",
-                error_message="Missing required parameters: ImagePath or content in TestParams",
+                error_message=(
+                    "Missing required parameters: provide 'ImagePath' and/or 'content' as top-level keys, "
+                    "or provide a 'TestParams' key (dict or list format) containing ImagePath and/or content."
+                ),
             )
 
         # --- Extract optional WaitmSec (case-insensitive) ---
