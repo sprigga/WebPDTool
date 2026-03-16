@@ -133,6 +133,228 @@ class MeasurementService:
                 execution_duration_ms=int(execution_time),
             )
 
+    async def _execute_op_judge(
+        self,
+        test_point_id: str,
+        switch_mode: str,
+        test_params: Dict[str, Any],
+        run_all_test: bool = False,
+    ) -> MeasurementResult:
+        """
+        Execute OPjudge measurement - operator visual judgment test.
+
+        Maps to PDTool4's OPjudgeMeasurement with two modes:
+        - 'confirm': Single confirm button (operator acknowledges). Script prints "Yes" on confirm.
+        - 'YorN': Yes/No buttons (operator judges pass/fail). Script prints "Yes"/"No".
+
+        Primary path: calls external Qt script via asyncio subprocess
+        Fallback path: uses 'operator_judgment' param when script not found (headless/web mode)
+
+        Args:
+            test_point_id: Test point identifier (e.g. "LED_Color_Check")
+            switch_mode: 'confirm' or 'YorN'
+            test_params: Must contain 'TestParams' (list or dict) with ImagePath and/or content.
+                         Optional: 'Timeout' (ms, default 60000), 'WaitmSec' (pre-wait ms),
+                                   'operator_judgment' (fallback: "PASS"/"FAIL")
+            run_all_test: Whether to continue on failure (informational only for this method)
+
+        Returns:
+            MeasurementResult with result='PASS'/'FAIL'/'ERROR'
+        """
+        import os
+
+        # --- Validate switch_mode ---
+        valid_modes = ["confirm", "YorN"]
+        if switch_mode not in valid_modes:
+            return MeasurementResult(
+                item_no=0,
+                item_name=test_point_id,
+                result="ERROR",
+                error_message=(
+                    f"Invalid OPjudge mode '{switch_mode}'. "
+                    f"Expected 'confirm' or 'YorN'"
+                ),
+            )
+
+        # --- Extract TestParams (case-insensitive key lookup) ---
+        raw_test_params = None
+        for key in test_params:
+            if key.lower() == "testparams":
+                raw_test_params = test_params[key]
+                break
+
+        if raw_test_params is None:
+            return MeasurementResult(
+                item_no=0,
+                item_name=test_point_id,
+                result="ERROR",
+                error_message=(
+                    "Missing required parameters: TestParams "
+                    "(must contain ImagePath and/or content)"
+                ),
+            )
+
+        # --- Normalize TestParams to dict ---
+        # PDTool4 passes as list ["ImagePath=/path", "content=text"] or dict {"ImagePath": "...", "content": "..."}
+        if isinstance(raw_test_params, list):
+            parsed_params: Dict[str, Any] = {}
+            for item in raw_test_params:
+                if isinstance(item, str) and "=" in item:
+                    k, v = item.split("=", 1)
+                    parsed_params[k.strip()] = v.strip()
+        elif isinstance(raw_test_params, dict):
+            parsed_params = raw_test_params
+        else:
+            parsed_params = {}
+
+        required_args = ["ImagePath", "content"]
+        if not any(arg in parsed_params for arg in required_args):
+            return MeasurementResult(
+                item_no=0,
+                item_name=test_point_id,
+                result="ERROR",
+                error_message="Missing required parameters: ImagePath or content in TestParams",
+            )
+
+        # --- Extract optional WaitmSec (case-insensitive) ---
+        wait_msec = 0
+        for key in test_params:
+            if key.lower() == "waitmSec".lower():
+                try:
+                    wait_msec = int(test_params[key])
+                except (ValueError, TypeError):
+                    wait_msec = 0
+                break
+
+        if wait_msec > 0:
+            await asyncio.sleep(wait_msec / 1000.0)
+
+        # --- Determine script path (relative to backend working directory) ---
+        script_map = {
+            "confirm": "./src/lowsheen_lib/OPjudge_confirm.py",
+            "YorN": "./src/lowsheen_lib/OPjudge_YorN.py",
+        }
+        script_path = script_map[switch_mode]
+
+        # --- Extract timeout (case-insensitive, default 60s) ---
+        timeout_ms = 60000
+        for key in test_params:
+            if key.lower() == "timeout":
+                try:
+                    timeout_ms = int(test_params[key])
+                except (ValueError, TypeError):
+                    timeout_ms = 60000
+                break
+        timeout_sec = timeout_ms / 1000.0
+
+        # --- Fallback path: script not found (headless/web mode) ---
+        if not os.path.exists(script_path):
+            fallback_judgment = None
+            for key in test_params:
+                if key.lower() == "operator_judgment":
+                    fallback_judgment = str(test_params[key]).upper()
+                    break
+
+            fallback_msg = f"Script {script_path} not found - fallback to operator_judgment param"
+            if fallback_judgment in ("PASS", "1", "YES", "Y"):
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="PASS",
+                    measured_value=Decimal("1"),
+                    error_message=fallback_msg,
+                )
+            else:
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="FAIL",
+                    measured_value=Decimal("0"),
+                    error_message=fallback_msg,
+                )
+
+        # --- Primary path: run Qt script via subprocess ---
+        try:
+            test_uid_str = f"('{test_point_id}',)"
+            params_str = str(parsed_params)
+
+            process = await asyncio.create_subprocess_exec(
+                "python",
+                script_path,
+                test_uid_str,
+                params_str,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(), timeout=timeout_sec
+                )
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    error_message=f"OPjudge script timeout after {timeout_ms}ms",
+                )
+
+            if process.returncode != 0:
+                stderr_str = stderr.decode("utf-8", errors="replace").strip()
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    error_message=stderr_str or f"Script exited with code {process.returncode}",
+                )
+
+            response = stdout.decode("utf-8", errors="replace").strip().upper()
+
+            if not response:
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    error_message="Empty response from OPjudge script",
+                )
+
+            # PDTool4 OPjudge_confirm prints "Yes" on confirm button click
+            # PDTool4 OPjudge_YorN prints "Yes"/"No" on button click
+            # Both are normalized to PASS/FAIL
+            if response == "PASS" or response == "YES":
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="PASS",
+                    measured_value=Decimal("1"),
+                )
+            elif response in ("FAIL", "NO"):
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="FAIL",
+                    measured_value=Decimal("0"),
+                )
+            else:
+                return MeasurementResult(
+                    item_no=0,
+                    item_name=test_point_id,
+                    result="ERROR",
+                    measured_value=None,
+                    error_message=f"Unexpected OPjudge response: {response}",
+                )
+
+        except Exception as e:
+            self.logger.error(f"OPjudge execution error: {e}", exc_info=True)
+            return MeasurementResult(
+                item_no=0,
+                item_name=test_point_id,
+                result="ERROR",
+                error_message=str(e),
+            )
+
     # Original code: db: Optional[Session] = None
     # Modified: Use AsyncSession for async DB migration (Wave 6 - Task 14)
     async def execute_batch_measurements(
