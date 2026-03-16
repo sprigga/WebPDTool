@@ -24,6 +24,9 @@
           <el-button :type="buttonType('analysis')" size="default" :disabled="isCurrent('analysis')" @click="navigateTo('/analysis')">
             報表分析
           </el-button>
+          <el-button :type="buttonType('modbus-config')" size="default" :disabled="isCurrent('modbus-config')" @click="navigateTo('/modbus-config')">
+            Modbus 設定
+          </el-button>
         </div>
       </el-col>
       <el-col :span="6" style="text-align: right">

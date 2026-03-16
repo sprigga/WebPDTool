@@ -69,6 +69,12 @@ const routes = [
     name: 'InstrumentManage',
     component: () => import('@/views/InstrumentManage.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/modbus-config',
+    name: 'ModbusConfig',
+    component: () => import('@/views/ModbusConfig.vue'),
+    meta: { requiresAuth: true, title: 'Modbus Configuration' }
   }
 ]
 

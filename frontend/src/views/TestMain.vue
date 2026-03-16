@@ -105,6 +105,12 @@
           <div class="loop-counter">
             <span class="loop-label">Loop:</span>
             <div class="loop-display">{{ loopCount }}</div>
+            <!-- Modbus connection status indicator -->
+            <ModbusStatusIndicator
+              v-if="currentStation"
+              :station-id="currentStation.id"
+              style="margin-left: 8px; vertical-align: middle"
+            />
           </div>
         </el-col>
         <el-col :span="8">
@@ -414,6 +420,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectStore } from '@/stores/project'
+import ModbusStatusIndicator from '@/components/ModbusStatusIndicator.vue'
 // 原有程式碼: 導入測試相關 API
 // 修改: 新增 createTestResult 和 completeTestSession API，用於保存測試結果到資料庫
 import {
