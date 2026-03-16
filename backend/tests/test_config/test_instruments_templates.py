@@ -39,9 +39,15 @@ class TestCommandTestTemplates:
         assert tmpl["required"] == [] or "command" not in tmpl["required"]
 
     def test_command_alias_same_as_commandtest(self):
+        """'command' measurement_type must mirror CommandTest: same modes and same required params."""
         assert "command" in MEASUREMENT_TEMPLATES
         for mode in ["comport", "tcpip", "console", "android_adb", "PEAK", "custom"]:
             assert mode in MEASUREMENT_TEMPLATES["command"], f"Missing mode: {mode}"
+            ct_required = MEASUREMENT_TEMPLATES["CommandTest"][mode]["required"]
+            cmd_required = MEASUREMENT_TEMPLATES["command"][mode]["required"]
+            assert ct_required == cmd_required, (
+                f"Mode '{mode}' required params differ: CommandTest={ct_required}, command={cmd_required}"
+            )
 
     def test_validate_params_commandtest_comport_valid(self):
         result = validate_params("CommandTest", "comport", {
@@ -89,6 +95,12 @@ class TestAndroidAdbPeakTopLevel:
     def test_peak_validate_valid(self):
         result = validate_params("PEAK", "PEAK", {"Command": "send:0x01"})
         assert result["valid"] is True
+
+    def test_android_adb_custom_mode_exists(self):
+        assert "custom" in MEASUREMENT_TEMPLATES["android_adb"]
+
+    def test_peak_custom_mode_exists(self):
+        assert "custom" in MEASUREMENT_TEMPLATES["PEAK"]
 
 
 class TestSFCtestGetSNModes:
