@@ -220,13 +220,24 @@
           </el-select>
         </el-form-item>
 
-        <!-- 新增: 測試計劃名稱 -->
+        <!-- 新增: 測試計劃名稱 - 可選擇現有名稱或輸入新名稱 -->
         <el-form-item label="測試計劃名稱">
-          <el-input
+          <el-select
             v-model="uploadForm.testPlanName"
-            placeholder="請輸入測試計劃名稱(選填)"
+            placeholder="請選擇或輸入測試計劃名稱(選填)"
             style="width: 100%"
-          />
+            filterable
+            allow-create
+            clearable
+            default-first-option
+          >
+            <el-option
+              v-for="name in testPlanNames"
+              :key="name"
+              :label="name"
+              :value="name"
+            />
+          </el-select>
         </el-form-item>
 
         <el-form-item label="CSV 檔案">
@@ -282,12 +293,24 @@
       >
         <el-divider content-position="left">基本資訊</el-divider>
 
-        <!-- 新增: 測試計劃名稱欄位 -->
+        <!-- 新增: 測試計劃名稱欄位 - 可選擇現有名稱或輸入新名稱 -->
         <el-form-item label="測試計劃名稱">
-          <el-input
+          <el-select
             v-model="editingItem.test_plan_name"
-            placeholder="請輸入測試計劃名稱(選填)"
-          />
+            placeholder="請選擇或輸入測試計劃名稱(選填)"
+            style="width: 100%"
+            filterable
+            allow-create
+            clearable
+            default-first-option
+          >
+            <el-option
+              v-for="name in testPlanNames"
+              :key="name"
+              :label="name"
+              :value="name"
+            />
+          </el-select>
         </el-form-item>
 
         <el-row :gutter="20">
@@ -509,6 +532,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Plus, Delete, QuestionFilled } from '@element-plus/icons-vue'  // 新增: QuestionFilled icon 用於提示
 import {
   getStationTestPlan,
+  getStationTestPlanNames,
   uploadTestPlanCSV,
   createTestPlanItem,
   updateTestPlanItem,
@@ -613,6 +637,9 @@ const limitTypes = ref([])
 // 新增: 參數驗證狀態
 const paramValidation = ref(true)
 
+// 新增: 現有測試計劃名稱清單（供 combobox 選擇）
+const testPlanNames = ref([])
+
 const editFormRules = {
   item_name: [{ required: true, message: '請輸入測試項目名稱', trigger: 'blur' }],
   test_type: [{ required: true, message: '請輸入測試類型', trigger: 'blur' }],
@@ -660,6 +687,7 @@ const handleStationSelected = async (station) => {
   selectedStationId.value = station.id
   selectedProjectId.value = station.project_id
   await loadTestPlan()
+  await loadTestPlanNames()
 }
 
 // Load test plan
@@ -690,6 +718,20 @@ const loadTestPlan = async () => {
     ElMessage.error('載入測試計劃失敗')
   } finally {
     loading.value = false
+  }
+}
+
+// 新增: 載入現有測試計劃名稱（供 combobox 使用）
+const loadTestPlanNames = async () => {
+  if (!selectedStationId.value || !selectedProjectId.value) {
+    testPlanNames.value = []
+    return
+  }
+  try {
+    testPlanNames.value = await getStationTestPlanNames(selectedStationId.value, selectedProjectId.value)
+  } catch (error) {
+    console.error('Failed to load test plan names:', error)
+    testPlanNames.value = []
   }
 }
 
@@ -790,8 +832,9 @@ const handleUpload = async () => {
     selectedProjectId.value = uploadedProjectId
     selectedStationId.value = uploadedStationId
 
-    // 重新載入測試計劃
+    // 重新載入測試計劃和計劃名稱清單
     await loadTestPlan()
+    await loadTestPlanNames()
 
     // 清空上傳表單的選擇
     uploadForm.projectId = null
@@ -1055,6 +1098,7 @@ onMounted(async () => {
     selectedStationId.value = projectStore.currentStation.id
     // 載入測試計劃(如果有選擇專案和站別)
     await loadTestPlan()
+    await loadTestPlanNames()
   }
 })
 </script>

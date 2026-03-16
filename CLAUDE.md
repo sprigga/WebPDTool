@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-WebPDTool is a web-based automated testing system refactored from the desktop application PDTool4. It executes hardware tests on manufactured products, validates results against test plans, and records outcomes. The system uses a 3-tier architecture: Vue 3 frontend, FastAPI backend, and MySQL database.
+WebPDTool is a web-based automated testing system refactored from the desktop application PDTool4. It executes hardware tests on manufactured products, validates results against test plans, and records outcomes using a 3-tier architecture: Vue 3 frontend, FastAPI backend, and MySQL database.
 
 **Key Architecture:** Complete PDTool4 compatibility layer with measurement abstraction, supporting 7 limit types (lower/upper/both/equality/inequality/partial/none) and 3 value types (string/integer/float). The `runAllTest` mode continues executing tests after failures, matching PDTool4 behavior exactly.
 
@@ -13,44 +13,32 @@ WebPDTool is a web-based automated testing system refactored from the desktop ap
 ### Docker Environment (Primary)
 
 ```bash
-# Start all services (recommended)
-docker-compose up -d
-
-# View logs
-docker-compose logs -f backend  # Backend logs
-docker-compose logs -f frontend # Frontend logs
-
-# Stop services
-docker-compose down
-
-# Rebuild after code changes
-docker-compose build --no-cache
-docker-compose up -d
+docker-compose up -d                   # Start all services
+docker-compose logs -f backend         # Backend logs
+docker-compose down                    # Stop services
+docker-compose build --no-cache && docker-compose up -d  # Rebuild after code changes
 
 # Database initialization (first time only)
 docker-compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} webpdtool < database/schema.sql
 docker-compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} webpdtool < database/seed_data.sql
-docker-compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} webpdtool < database/seed_instruments.sql  # NEW: Instrument config seed data
+docker-compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} webpdtool < database/seed_instruments.sql
 ```
 
 ### Local Development
 
 ```bash
-# Backend (requires Python 3.11+)
+# Backend (Python 3.11+) — use uv, not pip directly
 cd backend
-python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-pip install -e .
-uvicorn app.main:app --reload --host 0.0.0.0 --port 9100
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 9100
 
-# Frontend (requires Node.js 16+)
+# Frontend (Node.js 16+)
 cd frontend
 npm install
-npm run dev  # Runs on http://localhost:5173
+npm run dev  # Runs on http://localhost:5678 (NOT 5173)
+             # /api proxy target: http://localhost:8765
 
 # Database access
-mysql -h localhost -P 33306 -u pdtool -p webpdtool
-# Default password: pdtool123
+mysql -h localhost -P 33306 -u pdtool -p webpdtool  # password: pdtool123
 ```
 
 ### Testing
@@ -58,31 +46,13 @@ mysql -h localhost -P 33306 -u pdtool -p webpdtool
 ```bash
 cd backend
 
-# Preferred: use uv to run in the managed environment
+# Preferred: use uv
 uv run pytest
-
-# Run all tests
-pytest
-
-# Run specific test file
-pytest tests/test_api/test_auth.py
-
-# Run with coverage
-pytest --cov=app tests/
-
-# Run refactoring validation suite
-python scripts/test_refactoring.py
-
-# Use convenience script (from project root)
-./scripts/run_tests.sh              # Run all tests
-./scripts/run_tests.sh unit         # Run unit tests only
-./scripts/run_tests.sh -k "test_instrument_model2306"  # Run specific test
-
-# Using pytest markers
-pytest -m unit                       # Fast unit tests only
-pytest -m "not slow"                # Skip slow tests
-pytest -m "not hardware"            # Skip tests requiring physical hardware
-pytest -m instrument_34970a         # Run tests for specific instrument
+uv run pytest tests/test_api/test_auth.py      # Single file
+uv run pytest --cov=app tests/                  # Coverage
+uv run pytest -m unit                           # Fast unit tests only
+uv run pytest -m "not hardware"                 # Skip tests requiring hardware
+uv run pytest -k "test_instrument_model2306"    # Filter by name
 ```
 
 **Available pytest markers:**
@@ -96,152 +66,124 @@ pytest -m instrument_34970a         # Run tests for specific instrument
 
 ```bash
 cd backend
-
-# Import single CSV file
 python scripts/import_testplan.py \
   --project "PROJECT_CODE" \
   --station "STATION_CODE" \
   --csv-file "/path/to/testplan.csv"
-
-# Batch import all test plans
-bash scripts/batch_import.sh
 ```
 
 ## Architecture Overview
 
-### Core Components
+### Service Ports
 
-**Frontend (Vue 3 + Element Plus)**
-- `frontend/src/views/TestMain.vue` - Main test execution interface (PDTool4 UI clone)
-- `frontend/src/views/ReportAnalysis.vue` - Statistics analysis with charts
-- `frontend/src/views/TestPlanManage.vue` - Test plan CRUD interface
-- `frontend/src/views/ProjectManage.vue` - Project and station management
-- `frontend/src/views/UserManage.vue` - User management interface (admin only)
-- `frontend/src/views/InstrumentManage.vue` - Instrument configuration CRUD (admin only)
-- `frontend/src/views/TestResults.vue` - Test results query and export
-- `frontend/src/views/TestExecution.vue` - Test execution monitoring
-- `frontend/src/views/SystemConfig.vue` - System configuration
-- `frontend/src/stores/` - Pinia stores: auth, project, users, instruments
-- `frontend/src/api/` - Axios clients: auth, tests, testplans, projects, users, instruments, measurements, analysis
+| Service | Port | Notes |
+|---------|------|-------|
+| Frontend (Docker) | 9080 | Nginx serving Vue SPA |
+| Frontend (dev) | 5678 | Vite dev server |
+| Backend | 9100 | uvicorn FastAPI |
+| Database | 33306 | MySQL container (internal 3306) |
+| API Docs | 9100/docs | Swagger UI |
 
-**Backend (FastAPI + SQLAlchemy 2.0)**
-- `backend/app/main.py` - FastAPI application entry point, router registration
-- `backend/app/api/` - Router modules: auth, users, projects, stations, instruments, tests, measurements, dut_control
-  - `results/` - 7 sub-routers (sessions, measurements, summary, export, cleanup, reports, analysis)
-  - `testplan/` - 4 sub-routers (queries, mutations, sessions, validation)
-- `backend/app/services/` - Business logic layer
-- `backend/app/models/` - SQLAlchemy ORM models (8 tables: users, projects, stations, test_plans, test_sessions, test_results, sfc_logs, instruments)
-- `backend/app/repositories/` - Data access layer (currently: `instrument_repository.py`)
-- `backend/app/measurements/` - Measurement abstraction layer
-- `backend/app/core/` - Database, logging, security, instrument_config core modules
+### Backend Structure (`backend/app/`)
 
-**Database (MySQL 8.0)**
-- `database/schema.sql` - Complete database schema with indexes
-- `database/seed_data.sql` - Initial data (users, test projects)
+- `main.py` — FastAPI app entry, middleware, router registration
+- `api/` — Route handlers: `auth`, `users`, `projects`, `stations`, `instruments`, `tests`, `measurements`, `dut_control`
+  - `results/` — 7 sub-routers: sessions, measurements, summary, export, cleanup, reports, analysis
+  - `testplan/` — 4 sub-routers: queries, mutations, sessions, validation
+- `services/` — Business logic: `test_engine.py`, `measurement_service.py` (critical, ~46KB), `instrument_manager.py`, `instrument_connection.py`
+  - `instruments/` — Driver registry (`INSTRUMENT_DRIVERS` dict) with 20+ hardware drivers
+- `measurements/` — PDTool4 measurement abstraction layer (see below)
+- `models/` — SQLAlchemy ORM: users, projects, stations, test_plans, test_sessions, test_results, sfc_logs, instruments
+- `repositories/` — Data access layer (currently: `instrument_repository.py`)
+- `core/` — `database.py`, `security.py`, `instrument_config.py`, `logging_v2.py`, `constants.py`
+- `config/instruments.py` — `MEASUREMENT_TEMPLATES` and `AVAILABLE_INSTRUMENTS` (see below)
+- `schemas/` — Pydantic v2 request/response models
 
-### Critical Architecture Patterns
+### Frontend Structure (`frontend/src/`)
 
-#### Measurement Abstraction Layer
+- `views/` — Vue 3 single-file components (TestMain, TestPlanManage, TestResults, ReportAnalysis, ProjectManage, UserManage, InstrumentManage, SystemConfig, TestExecution)
+- `stores/` — Pinia: `auth.js`, `project.js`, `users.js`, `instruments.js`
+- `api/` — Axios clients per domain; `client.js` base with auth interceptor that **unwraps `response.data`** (callers receive payload directly, not the full Axios response)
+- `router/index.js` — Vue Router with auth guard; unauthenticated → `/login`
 
-The measurement system is the heart of PDTool4 compatibility:
+## Critical Architecture Patterns
 
-**Base Class:** `backend/app/measurements/base.py`
-- `BaseMeasurement` abstract class defines the measurement interface
+### Measurement Abstraction Layer
+
+**`backend/app/measurements/base.py`** — `BaseMeasurement` abstract class:
 - Three-phase execution: `prepare()` → `execute()` → `cleanup()`
-- `validate_result()` implements PDTool4's complete validation logic:
-  - 7 limit types: lower, upper, both, equality, inequality, partial, none
-  - 3 value types: string, integer, float
-  - Auto-detects instrument errors ("No instrument found", "Error:")
-- `MeasurementResult` dataclass for standardized results
+- `validate_result()` replicates PDTool4's exact rules:
+  - `none` → always pass
+  - `lower` → value ≥ lower_limit
+  - `upper` → value ≤ upper_limit
+  - `both` → lower_limit ≤ value ≤ upper_limit
+  - `equality` → value == eq_limit
+  - `inequality` → value != eq_limit
+  - `partial` → eq_limit in value (substring)
+- Auto-detects instrument errors: strings starting with `"No instrument found"` or `"Error:"`
+- `MeasurementResult` dataclass: result (PASS/FAIL/SKIP/ERROR), measured_value, limits, unit, error_message, execution_duration_ms
 
-**Registry:** `backend/app/measurements/registry.py`
-- `MEASUREMENT_REGISTRY` maps test types to measurement classes
-- Runtime registration system for extensibility
+**`backend/app/measurements/registry.py`** — `MEASUREMENT_REGISTRY` maps test type strings → classes.
 
-**Implementations:** `backend/app/measurements/implementations.py`
-- PowerSet, PowerRead, CommandTest, SFCtest, getSN, OPjudge, Other
-- Each inherits from `BaseMeasurement` and implements specific hardware logic
+**`backend/app/measurements/implementations.py`** (~2300 lines) — Concrete classes: PowerSet, PowerRead, CommandTest, SFCtest, getSN, OPjudge, Other, ConSole, ComPort, TCPIP, Wait. Uses lazy imports to avoid circular dependencies. Parameter extraction via `get_param(params, *keys, default=None)`.
 
-#### Test Execution Engine
+### MEASUREMENT_TEMPLATES (config/instruments.py)
 
-**TestEngine:** `backend/app/services/test_engine.py`
-- Orchestrates async test execution using asyncio
-- Manages test session lifecycle (PENDING → RUNNING → COMPLETED/FAILED/ABORTED)
-- Coordinates with InstrumentManager for hardware access
-- Implements `runAllTest` mode: continues execution after failures, collects error summary
+`MEASUREMENT_TEMPLATES` is the authoritative source for per-instrument required/optional parameters per measurement type. It was migrated from hardcoded dicts inside `implementations.py` to improve maintainability and power the `/types` API dynamically. When adding support for a new instrument+measurement combination, update this dict — **do not add hardcoded parameter lists inside implementations**.
 
-**InstrumentManager:** `backend/app/services/instrument_manager.py`
-- Singleton pattern ensures single connection pool
-- Tracks instrument states (IDLE/BUSY/ERROR/OFFLINE)
-- Handles connection pooling and reset logic
-
-**MeasurementService:** `backend/app/services/measurement_service.py` (81KB, critical)
-- Bridges TestEngine and measurement implementations
-- Implements runAllTest error collection logic
-- Validates parameters and handles measurement execution
-
-#### PDTool4 Compatibility
-
-**Validation Logic:**
 ```python
-# From base.py, integrated from PDTool4's test_point_runAllTest.py
-def validate_result(self, measured_value, lower_limit, upper_limit,
-                   limit_type='both', value_type='float') -> Tuple[bool, str]
+MEASUREMENT_TEMPLATES = {
+    "PowerSet": {
+        "DAQ973A": {"required": ["Instrument", "Channel", "Item"], "optional": [...], "example": {...}},
+        "MODEL2306": {...},
+        ...
+    },
+    "PowerRead": {...},
+    ...
+}
 ```
 
-This method replicates PDTool4's exact validation rules:
-- `limit_type='lower'` - Only lower bound check
-- `limit_type='upper'` - Only upper bound check
-- `limit_type='both'` - Range check (lower ≤ value ≤ upper)
-- `limit_type='equality'` - Exact match (value == expected)
-- `limit_type='inequality'` - Not equal (value != expected)
-- `limit_type='partial'` - Substring match for strings
-- `limit_type='none'` - Always passes
+### Test Execution Flow
 
-**runAllTest Mode:**
-- Frontend: `TestMain.vue` UI toggle and error display
-- Backend: `measurement_service.py` continues execution on failures
-- Behavior: Identical to PDTool4 - collects all failures, reports at end
+```
+TestMain.vue → POST /api/tests/sessions/start
+→ TestEngine.execute_test_session() [asyncio background task]
+→ MeasurementService.execute_measurement()
+→ BaseMeasurement subclass.prepare/execute/cleanup()
+→ InstrumentManager (hardware access, singleton connection pool)
+→ validate_result() (PDTool4 logic)
+→ Save TestResult → DB
+→ Poll: GET /api/tests/sessions/{id}/status
+```
 
-### Data Flow
+`runAllTest` mode: continues execution on failures, collects all errors, reports at end. Toggle in `TestMain.vue`, handled in `measurement_service.py`.
 
-1. **Test Execution Flow:**
-   ```
-   User (TestMain.vue)
-   → POST /api/tests/sessions/start
-   → TestEngine.execute_test_session()
-   → MeasurementService.execute_measurement()
-   → BaseMeasurement subclass.prepare/execute/cleanup()
-   → InstrumentManager (hardware interaction)
-   → validate_result() (PDTool4 logic)
-   → Save TestResult to database
-   → Return status to frontend
-   ```
+### Instrument Driver Registry
 
-2. **Test Plan Import Flow:**
-   ```
-   CSV file
-   → scripts/import_testplan.py
-   → Parse CSV with app/utils/csv_parser.py
-   → Create/update Project, Station, TestPlan models
-   → Commit to database
-   ```
+**`backend/app/services/instruments/__init__.py`** — `INSTRUMENT_DRIVERS` dict maps type string → driver class.
 
-3. **Authentication Flow:**
-   ```
-   Login (Login.vue)
-   → POST /api/auth/login
-   → Validate credentials (services/auth.py)
-   → Generate JWT token
-   → Store in Pinia auth store + localStorage
-   → Axios interceptor adds Authorization header to all requests
-   ```
+**Critical naming trap:** The DB stores PDTool4 display names (`ConsoleCommand`, `ComPortCommand`, `TCPIPCommand`) while runtime keys are lowercase (`console`, `comport`, `tcpip`). **Both aliases must be registered:**
+
+```python
+"console": ConSoleCommandDriver,
+"ConsoleCommand": ConSoleCommandDriver,  # DB-stored name from InstrumentManage.vue
+```
+
+Missing an alias → `"No driver for instrument type 'X'"` at runtime.
+
+### InstrumentConfig Provider
+
+`backend/app/core/instrument_config.py` has two providers:
+- **`InstrumentSettings`** — legacy hardcoded fallback
+- **`InstrumentConfigProvider`** — DB-backed with 30s TTL cache, set at startup via `set_global_instrument_provider()`
+
+`_row_to_config()` maps `instrument.instrument_type` → `config.type` (the driver registry key).
 
 ### Database Relationships
 
 ```
 projects (1) ──→ (N) stations
-stations (1) ──→ (N) test_plans
+stations (1) ──→ (N) test_plans     # Each row = one test item (item_no)
 stations (1) ──→ (N) test_sessions
 users    (1) ──→ (N) test_sessions
 test_sessions (1) ──→ (N) test_results
@@ -249,177 +191,33 @@ test_plans    (1) ──→ (N) test_results
 test_sessions (1) ──→ (N) sfc_logs
 ```
 
-**Key Tables:**
-- `users` - Admin/Engineer/Operator roles with bcrypt password hashing
-- `test_plans` - CSV-imported test specifications with JSON parameters field
-- `test_sessions` - Test execution tracking with start/end time, final_result (PASS/FAIL/ABORT)
-- `test_results` - Individual test item results with measured_value and validation outcome
+**`test_plan_name`** groups rows into logical scripts/groups. `item_no` sequences items within a group.
 
-## Environment Configuration
+**Key model fields:**
+```
+TestSession: id, serial_number, station_id, user_id, start_time, end_time,
+             final_result (PASS/FAIL/ABORT), total_items, pass_items, fail_items,
+             test_duration_seconds
 
-### Required Environment Variables
-
-```bash
-# Backend (.env in backend/)
-DATABASE_URL=mysql+asyncmy://pdtool:pdtool123@db:3306/webpdtool
-SECRET_KEY=your-secret-key-minimum-32-characters-change-in-production
-ACCESS_TOKEN_EXPIRE_MINUTES=480  # 8 hours
-DEBUG=false  # Set to false in production
-
-# Redis Logging (optional, for distributed logging)
-REDIS_ENABLED=true
-REDIS_URL=redis://redis:6379/0
-REDIS_LOG_TTL=3600  # Log expiration in seconds
-
-# Database (docker-compose.yml or .env)
-MYSQL_ROOT_PASSWORD=rootpassword
-MYSQL_DATABASE=webpdtool
-MYSQL_USER=pdtool
-MYSQL_PASSWORD=pdtool123
-
-# Ports
-FRONTEND_PORT=9080
-BACKEND_PORT=9100
-MYSQL_PORT=33306
+TestResult:  id, session_id, test_plan_id, item_no, item_name, measured_value,
+             lower_limit, upper_limit, unit, result, error_message,
+             test_time, execution_duration_ms
 ```
 
-### Service Ports
+### User Roles
 
-- **Frontend:** 9080 (Nginx serving Vue SPA)
-- **Backend:** 9100 (uvicorn FastAPI server)
-- **Database:** 33306 (MySQL container, internal 3306)
-- **API Docs:** http://localhost:9100/docs (Swagger UI)
-
-## Common Development Tasks
-
-### Adding a New Measurement Type
-
-1. Create measurement class in `backend/app/measurements/implementations.py`:
-   ```python
-   class NewMeasurement(BaseMeasurement):
-       async def prepare(self, params: Dict[str, Any]) -> None:
-           # Setup logic
-
-       async def execute(self, params: Dict[str, Any]) -> MeasurementResult:
-           # Execution logic
-
-       async def cleanup(self) -> None:
-           # Cleanup logic
-   ```
-
-2. Register in `backend/app/measurements/registry.py`:
-   ```python
-   MEASUREMENT_REGISTRY.register('NewType', NewMeasurement)
-   ```
-
-3. Update test plan CSV with new `test_type` value
-
-### Modifying API Endpoints
-
-1. Add route in appropriate router (e.g., `backend/app/api/tests.py`)
-2. Implement business logic in service layer (e.g., `backend/app/services/test_engine.py`)
-3. Update frontend API client (e.g., `frontend/src/api/tests.js`)
-4. Add Pydantic schema if needed (`backend/app/schemas/`)
-
-### Database Schema Changes
-
-1. Create Alembic migration:
-   ```bash
-   cd backend
-   alembic revision --autogenerate -m "Description"
-   ```
-
-2. Review generated migration in `backend/alembic/versions/`
-
-3. Apply migration:
-   ```bash
-   alembic upgrade head
-   ```
-
-4. Update SQLAlchemy models in `backend/app/models/`
-
-### Frontend Component Development
-
-- Use Composition API (`<script setup>`) for all new components
-- State management via Pinia stores in `frontend/src/stores/`
-- API calls through centralized clients in `frontend/src/api/`
-- Element Plus UI components for consistency
-- CRUD management pages: follow `UserManage.vue` / `InstrumentManage.vue` pattern (el-table + el-dialog + reactive form + ElMessageBox.confirm for delete)
-- Navigation: add route to `router/index.js`, button to `AppNavBar.vue` using `buttonType()`/`isCurrent()` helpers, and link to `TestMain.vue` top nav bar
-
-### Managing Users
-
-User management allows administrators to create, edit, and delete user accounts with role-based access control.
-
-**File Locations:**
-- Backend API: `backend/app/api/users.py` - User CRUD endpoints
-- Backend Schemas: `backend/app/schemas/user.py` - User data validation schemas
-- Backend Models: `backend/app/models/user.py` - User ORM model with UserRole enum
-- Frontend View: `frontend/src/views/UserManage.vue` - User management UI
-- Frontend Store: `frontend/src/stores/users.js` - User state management
-- Frontend API: `frontend/src/api/users.js` - User API client functions
-
-**User Roles:**
-- `admin` - Full system access including user management (can create, edit, delete users)
-- `engineer` - Test plan management and test execution
-- `operator` - Test execution only
-
-**API Endpoints Summary:**
-- `GET /api/users` - List users with pagination and filtering (offset, limit, search, role, is_active)
-- `GET /api/users/{id}` - Get specific user
-- `POST /api/users` - Create new user (admin only)
-- `PUT /api/users/{id}` - Update user (admin only; allows full_name, email, is_active)
-- `PUT /api/users/{id}/password` - Change password (admin or self)
-- `DELETE /api/users/{id}` - Delete user (admin only; prevents self-deletion)
-
-**Documentation:**
-- Complete API reference: `docs/api/users-api.md`
-- Interactive API docs: http://localhost:9100/docs (Swagger UI)
-
-### Managing Instruments
-
-Instrument management allows administrators to configure test instrument connections used during testing.
-
-**File Locations:**
-- Backend API: `backend/app/api/instruments.py` - Instrument CRUD endpoints
-- Backend Schemas: `backend/app/schemas/instrument.py` - Instrument data validation schemas
-- Backend Models: `backend/app/models/instrument.py` - Instrument ORM model
-- Backend Repository: `backend/app/repositories/instrument_repository.py` - Database operations
-- Frontend View: `frontend/src/views/InstrumentManage.vue` - Instrument management UI
-- Frontend Store: `frontend/src/stores/instruments.js` - Instrument state management
-- Frontend API: `frontend/src/api/instruments.js` - Instrument API client functions
-
-**Instrument Connection Types:**
-- `VISA` - VISA resource string (e.g., TCPIP0::192.168.1.100::inst0::INSTR)
-- `SERIAL` - Serial port (port, baudrate, databits, stopbits, parity)
-- `TCPIP_SOCKET` - TCP/IP socket connection (host, port)
-- `GPIB` - GPIB interface (address)
-- `LOCAL` - Local command execution
-
-**API Endpoints Summary:**
-- `GET /api/instruments` - List instruments (optional: enabled_only=true)
-- `GET /api/instruments/{instrument_id}` - Get specific instrument
-- `POST /api/instruments` - Create new instrument (admin only)
-- `PATCH /api/instruments/{instrument_id}` - Update instrument (admin only; instrument_id excluded)
-- `DELETE /api/instruments/{instrument_id}` - Delete instrument (admin only)
-
-**Supported Instrument Types:**
-- DAQ973A, DAQ6510, 34970A, 2260B, IT6723C, Model2306, Model2303
-- MT8872A, CMW100, SMCV100B, N5182A, APS7050, PSW3072
-- Keithley2015, MDO34, AnalogDiscovery2, PeakCAN
-- ConsoleCommand, ComPortCommand, TCPIPCommand, WaitTest
+- `admin` — Full access including user/instrument management
+- `engineer` — Test plan management and execution
+- `operator` — Test execution only
 
 ## Important Implementation Details
 
 ### Alembic Migrations and asyncmy
 
-The project uses `asyncmy` for FastAPI runtime but requires `pymysql` for Alembic migrations (which uses a synchronous engine). `alembic/env.py` auto-converts `mysql+asyncmy://` → `mysql+pymysql://` via `_resolve_alembic_database_url()`. If you see `ModuleNotFoundError: No module named 'pymysql'` during container startup, ensure `pymysql>=1.0.0` is in `pyproject.toml` dependencies.
+FastAPI runtime uses `asyncmy`; Alembic requires synchronous `pymysql`. `alembic/env.py` auto-converts `mysql+asyncmy://` → `mysql+pymysql://` via `_resolve_alembic_database_url()`. The database module exports `ASYNC_DATABASE_URL` (not `DATABASE_URL`).
 
-The database module exports `ASYNC_DATABASE_URL` (not `DATABASE_URL`) — `alembic/env.py` imports from this and aliases it locally.
+### All DB Operations are Async
 
-### Async/Await Pattern
-
-All database operations and measurement executions use async/await:
 ```python
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -428,123 +226,42 @@ async def get_test_plan(db: AsyncSession, station_id: int):
     return result.scalars().all()
 ```
 
-### JWT Token Management
+### Frontend CRUD Pattern
 
-- Tokens expire after 8 hours (ACCESS_TOKEN_EXPIRE_MINUTES=480)
-- Frontend stores token in localStorage and Pinia auth store
-- Axios interceptor auto-adds `Authorization: Bearer <token>` header
-- Backend validates via `app/dependencies.py::get_current_user()`
+Follow `UserManage.vue` / `InstrumentManage.vue`: `el-table` + `el-dialog` + reactive form + `ElMessageBox.confirm` for delete. When adding a new management page: add route to `router/index.js`, button to `AppNavBar.vue` using `buttonType()`/`isCurrent()` helpers, and link to `TestMain.vue` top nav bar.
 
 ### CSV Import Field Mapping
 
-The CSV parser (`backend/app/utils/csv_parser.py`) maps PDTool4 CSV columns to database fields. Critical mappings:
-- `項次` → `item_no`
-- `品名規格` → `item_name`
-- `上限值` → `upper_limit`
-- `下限值` → `lower_limit`
-- `limit_type`, `value_type` → PDTool4 validation parameters
-
-### Instrument Driver Registry (`backend/app/services/instruments/__init__.py`)
-
-`INSTRUMENT_DRIVERS` maps `instrument_type` strings to driver classes. The `instrument_type` stored in the DB (via `InstrumentManage.vue`) uses PDTool4 display names (`ConsoleCommand`, `ComPortCommand`, `TCPIPCommand`), while the internal runtime keys are lowercase (`console`, `comport`, `tcpip`). **Both aliases must exist in the registry.** When adding a new command-type instrument, register both variants:
-
-```python
-"console": ConSoleCommandDriver,
-"ConsoleCommand": ConSoleCommandDriver,  # DB-stored name from UI
-```
-
-Missing an alias produces `"No driver for instrument type 'X'"` at measurement runtime.
-
-### InstrumentConfig Provider
-
-`backend/app/core/instrument_config.py` has two providers:
-- **`InstrumentSettings`** — legacy hardcoded config, used as fallback
-- **`InstrumentConfigProvider`** — DB-backed with TTL cache (30s), injected at startup via `set_global_instrument_provider()`
-
-`_row_to_config()` maps `instrument.instrument_type` → `config.type`, which is then used as the driver registry key.
+`backend/app/utils/csv_parser.py` maps PDTool4 CSV columns:
+- `項次` → `item_no`, `品名規格` → `item_name`
+- `上限值` → `upper_limit`, `下限值` → `lower_limit`
+- `limit_type`, `value_type`, `eq_limit` → PDTool4 validation parameters
 
 ### Error Handling
 
-- Backend exceptions use FastAPI HTTPException with appropriate status codes
-- Frontend API client (`frontend/src/api/client.js`) has response interceptor for error handling; response data is automatically unwrapped (callers receive payload directly, not the Axios response object)
-- Measurement failures distinguish between validation failures (FAIL) and execution errors (ERROR)
-- runAllTest mode collects errors but continues execution
+- Backend: FastAPI `HTTPException` with appropriate status codes
+- Frontend: Axios response interceptor unwraps `response.data`; 401 → auto-logout + redirect
+- Measurement results distinguish: validation failures (FAIL) vs execution errors (ERROR)
+
+## Environment Configuration
+
+```bash
+# Backend (backend/.env)
+DATABASE_URL=mysql+asyncmy://pdtool:pdtool123@db:3306/webpdtool
+SECRET_KEY=<min 32 chars>
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+DEBUG=false
+REDIS_ENABLED=true          # Optional distributed logging
+REDIS_URL=redis://redis:6379/0
+
+# Docker ports
+FRONTEND_PORT=9080
+BACKEND_PORT=9100
+MYSQL_PORT=33306
+```
 
 ## Known Limitations
 
-1. **Instrument Drivers:** Current implementations are stubs. Real hardware drivers need implementation in `backend/app/services/instruments/`.
-
-2. **Real-time Updates:** Uses polling instead of WebSocket. WebSocket support is planned but not implemented.
-
-3. **Modbus/SFC Integration:** Stub implementations exist but need connection to actual Modbus devices and SFC web services.
-
-## Security Notes
-
-- Default SECRET_KEY must be changed in production
-- Default user passwords (admin123, eng123, op123) must be changed
-- CORS_ORIGINS should be restricted to trusted domains in production
-- All passwords are bcrypt-hashed before storage
-- SQL injection protected by SQLAlchemy ORM parameterized queries
-
-## Debugging Tips
-
-**Backend Issues:**
-```bash
-# Check backend logs
-docker-compose logs -f backend | grep ERROR
-
-# Verify database connection
-docker-compose exec backend python -c "from app.core.database import engine; print('DB OK')"
-
-# Check API health
-curl http://localhost:9100/health
-```
-
-**Frontend Issues:**
-```bash
-# Check frontend build
-cd frontend && npm run build
-
-# Verify API connection
-curl http://localhost:9100/docs  # Should show Swagger UI
-```
-
-**Database Issues:**
-```bash
-# Connect to database
-docker-compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} webpdtool
-
-# Check tables
-SHOW TABLES;
-SELECT COUNT(*) FROM test_plans;
-```
-
-**Test Execution Issues:**
-- Check instrument status: GET `/api/measurements/instruments`
-- View session status: GET `/api/tests/sessions/{session_id}/status`
-- Review test results: GET `/api/tests/sessions/{session_id}/results`
-
-## Technology Stack Summary
-
-**Frontend:**
-- Vue 3.4+ (Composition API)
-- Element Plus 2.5+ (UI components)
-- Pinia 2.1+ (state management)
-- Vue Router 4.2+ (routing)
-- Axios 1.6+ (HTTP client)
-- Vite 5.0+ (build tool)
-
-**Backend:**
-- FastAPI 0.104+ (web framework)
-- SQLAlchemy 2.0+ (async ORM)
-- Pydantic 2.0+ (data validation)
-- Python-JOSE (JWT tokens)
-- Alembic 1.12+ (migrations)
-- Uvicorn (ASGI server)
-
-**Database:**
-- MySQL 8.0+ (utf8mb4 charset)
-
-**DevOps:**
-- Docker + Docker Compose
-- Nginx (frontend reverse proxy)
+1. **Instrument Drivers:** Most implementations are stubs. Real hardware drivers need implementation in `backend/app/services/instruments/`.
+2. **Real-time Updates:** Uses polling; WebSocket not yet implemented.
+3. **Modbus/SFC Integration:** Stub implementations exist but require actual device connections.

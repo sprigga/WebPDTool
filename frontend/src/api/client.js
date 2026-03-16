@@ -45,9 +45,10 @@ apiClient.interceptors.response.use(
         case 403:
           ElMessage.error('權限不足')
           break
-        case 404:
-          ElMessage.error('請求的資源不存在')
-          break
+        // case 404: callers handle "not found" themselves (e.g. no config yet)
+        // case 404:
+        //   ElMessage.error('請求的資源不存在')
+        //   break
         case 500:
           ElMessage.error('伺服器錯誤')
           break

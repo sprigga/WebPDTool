@@ -1,5 +1,7 @@
 <template>
   <div class="modbus-config-container">
+    <AppNavBar current-page="modbus-config" />
+
     <el-card class="header-card">
       <template #header>
         <div class="card-header">
@@ -9,12 +11,28 @@
       </template>
 
       <el-form :inline="true" class="station-selector">
+        <el-form-item label="Project">
+          <el-select
+            v-model="selectedProjectId"
+            placeholder="Select Project"
+            @change="handleProjectChange"
+            filterable
+          >
+            <el-option
+              v-for="project in projects"
+              :key="project.id"
+              :label="project.project_name"
+              :value="project.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="Station">
           <el-select
             v-model="selectedStationId"
             placeholder="Select Station"
             @change="loadStationConfig"
             filterable
+            :disabled="!selectedProjectId"
           >
             <el-option
               v-for="station in stations"
@@ -157,10 +175,15 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { modbusApi } from '@/api/modbus'
-import apiClient from '@/api/client'
+import { useProjectStore } from '@/stores/project'
+import AppNavBar from '@/components/AppNavBar.vue'
+
+const projectStore = useProjectStore()
 
 // State
+const selectedProjectId = ref(null)
 const selectedStationId = ref(null)
+const projects = computed(() => projectStore.projects)
 const stations = ref([])
 const config = ref(null)
 const dialogVisible = ref(false)
@@ -203,10 +226,13 @@ const formRules = {
   device_id: [{ required: true, message: 'Please enter device ID', trigger: 'blur' }]
 }
 
-const loadStations = async () => {
+const handleProjectChange = async () => {
+  selectedStationId.value = null
+  config.value = null
+  disconnectWebSocket()
+  if (!selectedProjectId.value) return
   try {
-    const response = await apiClient.get('/api/stations')
-    stations.value = response || []
+    stations.value = await projectStore.fetchProjectStations(selectedProjectId.value)
   } catch (error) {
     ElMessage.error('Failed to load stations')
   }
@@ -221,7 +247,7 @@ const loadStationConfig = async () => {
     config.value = await modbusApi.getStationConfig(selectedStationId.value)
     connectWebSocket()
   } catch (error) {
-    if (error?.status === 404) {
+    if (error?.response?.status === 404) {
       config.value = null
     } else {
       ElMessage.error('Failed to load Modbus configuration')
@@ -329,7 +355,7 @@ const handleDelete = async () => {
 }
 
 onMounted(() => {
-  loadStations()
+  projectStore.fetchProjects()
 })
 
 onBeforeUnmount(() => {

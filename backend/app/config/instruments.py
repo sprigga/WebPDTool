@@ -321,61 +321,21 @@ MEASUREMENT_TEMPLATES = {
         }
     },
     "Other": {
-        # 修正方案 A: 加入特殊測試類型作為 switch_mode 選項
-        # 這些選項原本散落在 case_type 欄位,現在統一到 switch_mode
+        # 方案 A: 只保留 "script" switch_mode
+        # 其他選項移除原因:
+        #   - chassis_rotation: 已有頂層 test_type="chassis_rotation"（ChassisRotationMeasurement）
+        #   - test123:          客製腳本名稱，不屬於通用 UI 選項；應用 script + command 欄位
+        #   - WAIT_FIX_5sec:   客製腳本名稱，且功能與頂層 Wait/wait 重複
+        #   - wait/relay/console/comport/tcpip: 已有對應頂層測試類型
         "script": {
-            # 自訂腳本模式 (預設)
+            # 通用腳本執行模式: 從「命令」(command) 欄位讀取完整命令或腳本路徑執行
             "required": [],
             "optional": [],
             "example": {}
         },
-        "wait": {
-            # 等待測試類型
-            "required": [],
-            "optional": ["wait_msec", "WaitmSec"],
-            "example": {"wait_msec": "1000"}
-        },
-        "relay": {
-            # 繼電器控制
-            "required": ["RelayName", "Action"],
-            "optional": [],
-            "example": {"RelayName": "RELAY_1", "Action": "ON"}
-        },
-        "chassis_rotation": {
-            # 底盤旋轉控制
-            "required": ["Action"],
-            "optional": ["Angle", "Speed"],
-            "example": {"Action": "ROTATE", "Angle": "90"}
-        },
-        "console": {
-            # 控制台命令執行
-            "required": ["Command"],
-            "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
-            "example": {"Command": "echo test", "Timeout": "5"}
-        },
-        "comport": {
-            # 串口通訊 (作為 Other 的一種模式)
-            "required": ["Port", "Baud", "Command"],
-            "optional": ["keyWord", "spiltCount", "splitLength"],
-            "example": {"Port": "COM4", "Baud": "9600", "Command": "AT+VERSION"}
-        },
-        "tcpip": {
-            # TCP/IP 通訊 (作為 Other 的一種模式)
-            "required": ["Host", "Port", "Command"],
-            "optional": ["keyWord", "Timeout"],
-            "example": {"Host": "192.168.1.100", "Port": "5025", "Command": "*IDN?"}
-        },
-        # 新增: test123 和 WAIT_FIX_5sec (來自 validation_rules 遷移 2026-03-16)
-        "test123": {
-            "required": [],
-            "optional": ["arg"],
-            "example": {"arg": "optional_argument"}
-        },
-        "WAIT_FIX_5sec": {
-            "required": [],
-            "optional": [],
-            "example": {}
-        }
+        # "chassis_rotation": 已是獨立頂層 test_type，移除
+        # "test123": 客製腳本名稱，移除（改用 script + command 欄位）
+        # "WAIT_FIX_5sec": 客製腳本名稱且與 Wait 重複，移除
     },
     "Wait": {
         "default": {
@@ -442,86 +402,26 @@ MEASUREMENT_TEMPLATES = {
             }
         }
     },
-    # 新增: CommandTest — PDTool4 舊式格式 (Port/Baud/Command schema)
-    # 注意: 與頂層 "comport"/"console"/"tcpip" key 不同，此格式不使用 Instrument 欄位
-    "CommandTest": {
-        "comport": {
-            "required": ["Port", "Baud", "Command"],
-            "optional": ["keyWord", "spiltCount", "splitLength", "EqLimit", "Timeout"],
-            "example": {
-                "Port": "COM4",
-                "Baud": "9600",
-                "Command": "AT+VERSION",
-                "keyWord": "VERSION",
-                "spiltCount": "1",
-                "splitLength": "10"
-            }
-        },
-        "tcpip": {
-            "required": ["Host", "Port", "Command"],
-            "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
-            "example": {
-                "Host": "192.168.1.100",
-                "Port": "5025",
-                "Command": "*IDN?",
-                "Timeout": "5"
-            }
-        },
-        "console": {
-            "required": ["Command"],
-            "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
-            "example": {"Command": "echo hello"}
-        },
-        "android_adb": {
-            "required": ["Command"],
-            "optional": ["Timeout"],
-            "example": {"Command": "adb shell getprop ro.serialno"}
-        },
-        "PEAK": {
-            "required": ["Command"],
-            "optional": ["Timeout"],
-            "example": {"Command": "send:0x01:0x02"}
-        },
-        "custom": {
-            # 自定義腳本模式: command 或 script_path 任一即可，無強制 required
-            "required": [],
-            "optional": ["command", "script_path"],
-            "example": {"command": "python3 custom_script.py"}
-        }
-    },
-    # 新增: "command" — CommandTest 的別名，對應 case_type='command' 的測試計畫
-    "command": {
-        "comport": {
-            "required": ["Port", "Baud", "Command"],
-            "optional": ["keyWord", "spiltCount", "splitLength", "EqLimit", "Timeout"],
-            "example": {"Port": "COM4", "Baud": "9600", "Command": "AT+VERSION"}
-        },
-        "tcpip": {
-            "required": ["Host", "Port", "Command"],
-            "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
-            "example": {"Host": "192.168.1.100", "Port": "5025", "Command": "*IDN?"}
-        },
-        "console": {
-            "required": ["Command"],
-            "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
-            "example": {"Command": "echo hello"}
-        },
-        "android_adb": {
-            "required": ["Command"],
-            "optional": ["Timeout"],
-            "example": {"Command": "adb shell getprop ro.serialno"}
-        },
-        "PEAK": {
-            "required": ["Command"],
-            "optional": ["Timeout"],
-            "example": {"Command": "send:0x01:0x02"}
-        },
-        "custom": {
-            "required": [],
-            "optional": ["command", "script_path"],
-            "example": {"command": "python3 custom_script.py"}
-        }
-    },
+    # 已移除: CommandTest — 其 custom switch_mode 功能與頂層 test_type="console" 完全相同
+    # 使用者應直接選 test_type="console"（ConSoleMeasurement）以執行自定義命令/腳本
+    # 後端 MEASUREMENT_REGISTRY 仍保留 CommandTest/COMMAND_TEST → ConSoleMeasurement 映射，
+    # 支援 CSV 匯入的向下相容，但 UI 下拉選單不再顯示此選項。
+    # "CommandTest": {
+    #     "custom": {
+    #         "required": [],
+    #         "optional": ["command", "script_path"],
+    #         "example": {"command": "python3 custom_script.py"}
+    #     }
+    # },
+    # 已移除: "command" — CommandTest 的別名，同樣功能與 console 重複
+    # 後端 MEASUREMENT_REGISTRY 仍保留 command → ConSoleMeasurement 映射以支援舊測試計劃
+    # "command": {
+    #     "custom": {
+    #         "required": [],
+    #         "optional": ["command", "script_path"],
+    #         "example": {"command": "python3 custom_script.py"}
+    #     }
+    # },
     # 新增: android_adb — 作為頂層 measurement_type
     "android_adb": {
         "android_adb": {
@@ -609,17 +509,18 @@ MEASUREMENT_TYPE_DESCRIPTIONS = {
         "description": "Relay control operation",
         "category": "utility"
     },
-    # 新增: CommandTest/command/android_adb/PEAK/wait (2026-03-16 遷移)
-    "CommandTest": {
-        "name": "CommandTest",
-        "description": "PDTool4-compatible command execution (comport/tcpip/console/adb/PEAK)",
-        "category": "communication"
-    },
-    "command": {
-        "name": "command",
-        "description": "Alias for CommandTest (case_type='command')",
-        "category": "communication"
-    },
+    # 已移除 CommandTest/command 描述 — 已從 MEASUREMENT_TEMPLATES 移除，不再顯示於 UI
+    # "CommandTest": {
+    #     "name": "CommandTest",
+    #     "description": "PDTool4-compatible command execution (comport/tcpip/console/adb/PEAK)",
+    #     "category": "communication"
+    # },
+    # "command": {
+    #     "name": "command",
+    #     "description": "Alias for CommandTest (case_type='command')",
+    #     "category": "communication"
+    # },
+    # 新增: android_adb/PEAK/wait (2026-03-16 遷移)
     "android_adb": {
         "name": "android_adb",
         "description": "Android ADB command execution",

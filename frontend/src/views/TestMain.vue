@@ -60,6 +60,7 @@
           <el-button size="default" @click="navigateTo('/users')">使用者管理</el-button>
           <el-button size="default" @click="navigateTo('/instruments')">儀器管理</el-button>
           <el-button size="default" @click="navigateTo('/analysis')">報表分析</el-button>
+          <el-button size="default" @click="navigateTo('/modbus-config')">Modbus 設定</el-button>
           <el-button type="danger" size="default" @click="handleLogout">登出</el-button>
         </el-col>
       </el-row>
@@ -363,6 +364,40 @@
       </el-col>
     </el-row>
 
+    <!-- OPjudge 操作員判斷 Dialog -->
+    <el-dialog
+      v-model="showOpJudgeDialog"
+      title="操作員判斷 (OPjudge)"
+      width="480px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
+    >
+      <div style="text-align: center; padding: 16px 0">
+        <el-icon style="font-size: 48px; color: #e6a23c; margin-bottom: 16px"><WarningFilled /></el-icon>
+        <p style="font-size: 16px; font-weight: bold; margin-bottom: 8px">{{ opJudgeContent }}</p>
+        <p v-if="opJudgeMode === 'confirm'" style="color: #909399; font-size: 13px">請確認後點擊「確認」繼續測試</p>
+        <p v-else style="color: #909399; font-size: 13px">請判斷結果並點擊對應按鈕</p>
+      </div>
+      <template #footer>
+        <div style="text-align: center">
+          <el-button
+            v-if="opJudgeMode !== 'confirm'"
+            type="danger"
+            size="large"
+            style="width: 120px; margin-right: 24px"
+            @click="handleOpJudgeFail"
+          >FAIL</el-button>
+          <el-button
+            type="success"
+            size="large"
+            style="width: 120px"
+            @click="handleOpJudgePass"
+          >{{ opJudgeMode === 'confirm' ? '確認' : 'PASS' }}</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- SFC Configuration Dialog -->
     <el-dialog
       v-model="showSFCConfig"
@@ -412,11 +447,12 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
-  Document, 
-  VideoPlay, 
-  VideoPause, 
-  CircleCheck, 
-  CircleClose 
+  Document,
+  VideoPlay,
+  VideoPause,
+  CircleCheck,
+  CircleClose,
+  WarningFilled
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectStore } from '@/stores/project'
@@ -467,6 +503,35 @@ const runAllTests = ref(true)
 const loopCount = ref(0)
 const showSFCConfig = ref(false)
 const requireBarcode = ref(false) // 控制是否需要輸入產品序號才能開始測試
+
+// OPjudge 操作員判斷 Modal
+const showOpJudgeDialog = ref(false)
+const opJudgeContent = ref('')   // 顯示給操作員的說明文字 (content 欄位)
+const opJudgeMode = ref('YorN')  // 'confirm' 或 'YorN'
+let resolveOpJudge = null        // Promise resolve callback，由按鈕點擊觸發
+
+/**
+ * 暫停測試執行，等待操作員在 Modal 中點擊 PASS/FAIL
+ * @returns {Promise<'PASS'|'FAIL'>} 操作員的判斷結果
+ */
+const waitForOpJudge = () => {
+  return new Promise((resolve) => {
+    resolveOpJudge = resolve
+    showOpJudgeDialog.value = true
+  })
+}
+
+const handleOpJudgePass = () => {
+  showOpJudgeDialog.value = false
+  if (resolveOpJudge) resolveOpJudge('PASS')
+  resolveOpJudge = null
+}
+
+const handleOpJudgeFail = () => {
+  showOpJudgeDialog.value = false
+  if (resolveOpJudge) resolveOpJudge('FAIL')
+  resolveOpJudge = null
+}
 const sfcConfig = reactive({
   path: '',
   stationID: '',
@@ -1131,6 +1196,15 @@ const executeSingleItem = async (item, index) => {
       finalSwitchMode = switchMode.toLowerCase()
     }
 
+    // OPjudge 攔截：暫停測試，等待操作員在 Modal 中點擊判斷
+    // 只在 measurementType 是 'OPjudge' 且無靜態 operator_judgment 時觸發
+    if (measurementType === 'OPjudge' && !testParams.operator_judgment) {
+      opJudgeContent.value = testParams.content || item.content || item.item_name || '請操作員判斷'
+      opJudgeMode.value = finalSwitchMode || 'YorN'
+      const judgment = await waitForOpJudge()
+      testParams.operator_judgment = judgment
+    }
+
     // Execute measurement via API
     const measurementData = {
       measurement_type: measurementType,
@@ -1146,7 +1220,9 @@ const executeSingleItem = async (item, index) => {
     // 原有程式碼: const measuredValue = Number(response.measured_value)
     // 修改: 支援字串類型的測量值,只有數值類型才進行限制值檢查
     let result = response.result
-    if (response.measured_value !== null && response.measured_value !== undefined) {
+    // OPjudge 的 result 由後端 _execute_op_judge 決定（measured_value=1/0 是語義符號，非量測值）
+    // 跳過 limit 二次驗證，避免 measured_value=0 被 lower_limit 誤判為 FAIL
+    if (measurementType !== 'OPjudge' && response.measured_value !== null && response.measured_value !== undefined) {
       // 檢查是否為數值類型
       const measuredValue = Number(response.measured_value)
       const isNumeric = !isNaN(measuredValue) && typeof response.measured_value !== 'string'

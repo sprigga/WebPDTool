@@ -128,8 +128,9 @@ class TestOPjudgeMeasurement:
 
     @pytest.mark.asyncio
     async def test_opjudge_script_not_found_fallback(self):
-        """Test OPjudge fallback when script not found"""
-
+        """Test OPjudge: operator_judgment param takes priority over script execution (Web mode)"""
+        # 修正: operator_judgment 優先於 script，即使 script 不存在也應回傳 PASS
+        # error_message 不再包含 "fallback"，因為這是正常的 Web 模式路徑
         with patch('os.path.exists', return_value=False):
             result = await measurement_service._execute_op_judge(
                 test_point_id="Fallback_Test",
@@ -143,7 +144,8 @@ class TestOPjudgeMeasurement:
 
         assert result.result == "PASS"
         assert result.measured_value == Decimal("1")
-        assert "fallback" in result.error_message.lower()
+        # operator_judgment 優先路徑不設 error_message
+        assert result.error_message is None
 
     @pytest.mark.asyncio
     async def test_opjudge_script_execution_error(self):
