@@ -987,7 +987,7 @@ environment:
   # 設為 "true" 跳過自動 migration
   SKIP_MIGRATIONS: ${SKIP_MIGRATIONS:-false}
   # 資料庫連線等待時間（秒）
-  MIGRATION_TIMEOUT: ${MIGRATION_TIMEOUT:-60}
+  MIGRATION_TIMEOUT: ${MIGRATION_TIMEOUT:-10}
   # 傳遞給 alembic 的額外參數
   ALEMBIC_ARGS: ${ALEMBIC_ARGS:-}
 ```
@@ -1048,7 +1048,7 @@ docker-compose exec backend uv run alembic downgrade -1
 | 變數 | 預設值 | 說明 |
 |------|--------|------|
 | `SKIP_MIGRATIONS` | `false` | 設為 `true` 跳過自動 migration |
-| `MIGRATION_TIMEOUT` | `60` | 等待資料庫的最大秒數 |
+| `MIGRATION_TIMEOUT` | `10` | 等待資料庫的最大秒數 |
 | `ALEMBIC_ARGS` | `""` | 傳遞給 `alembic upgrade` 的額外參數 |
 
 ### 故障排除
@@ -1070,7 +1070,7 @@ Entrypoint 設計為**優雅降級**：即使 migration 失敗，應用程式仍
 如果看到 `Database connection timeout` 錯誤：
 
 1. 檢查資料庫容器是否健康：`docker-compose ps db`
-2. 增加超時時間：`MIGRATION_TIMEOUT=120`（120 秒）
+2. 增加超時時間：`MIGRATION_TIMEOUT=30`（30 秒）
 3. 手動檢查連線：`docker-compose exec backend python -c "import pymysql; pymysql.connect(host='db', user='pdtool', password='pdtool123', database='webpdtool')"`
 
 #### 查看詳細 Migration 日誌

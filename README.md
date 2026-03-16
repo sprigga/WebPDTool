@@ -656,6 +656,75 @@ bash scripts/batch_import.sh
 - **API 處理**: FastAPI 的非同步路由
 - **遷移狀態**: 認證、使用者、專案、站別、測試計劃、儀器模組已全面遷移至 AsyncSession
 
+#### 同步 vs 非同步差異性
+
+| 特性 | 同步架構 (Synchronous) | 非同步架構 (Asynchronous) |
+|------|------------------------|---------------------------|
+| **執行模型** | 阻塞式 (Blocking) | 事件循環 (Event Loop) |
+| **執行緒處理** | 每個請求佔用一個執行緒 | 單執行緒多任務切換 |
+| **I/O 等待** | 執行緒阻塞，資源閒置 | 掛起任務，處理其他請求 |
+| **記憶體佔用** | 高 (每執行緒 ~8MB) | 低 (單執行緒 + 協程) |
+| **並發模型** | 多執行緒並發 | 協程 (Coroutine) 並發 |
+| **錯誤處理** | Try-Except 區塊 | try/except 區塊 + asyncio.gather |
+
+#### 對系統效能的影響
+
+**1. 吞吐量提升 (Throughput)**
+- **同步模式**: 假設每個資料庫查詢耗時 50ms，單執行緒每秒最多處理 20 個請求
+- **非同步模式**: 在 I/O 等待期間可處理其他請求，實際吞吐量可達 **5-10 倍提升**
+
+**2. 資源利用率**
+```
+同步執行時序:
+Req1: [███████████████] 50ms DB query → 執行緒阻塞
+Req2:                     [███████████████] 50ms → 阻塞
+Req3:                                        [███████████████] 50ms
+總耗時: 150ms (3 個請求序列執行)
+
+非同步執行時序:
+Req1: [████████░░░░░░░] 50ms DB query (await)
+Req2:   [████████░░░░░░░] 50ms DB query (並發)
+Req3:     [████████░░░░░░░] 50ms DB query (並發)
+總耗時: ~60ms (3 個請求並發執行)
+```
+
+**3. 測試執行場景優化**
+WebPDTool 的測試執行流程包含大量 I/O 操作：
+- 資料庫查詢測試計劃
+- 儀器通訊 (TCP/IP、Serial Port)
+- 結果寫入資料庫
+
+非同步架構允許同時執行多個測試項目的 I/O 操作，大幅縮短整體測試時間。
+
+**4. 擴展性對比**
+
+| 指標 | 同步架構 | 非同步架構 |
+|------|---------|-----------|
+| 併發請求數 | 受限於執行緒池大小 (~100-500) | 理論無上限 (~10,000+ 協程) |
+| 記憶體消耗 | 線性增長 (每執行緒固定成本) | 恆定增長 (協程輕量級) |
+| CPU 效率 | 上下文切換開銷大 | 事件循環切換開銷極小 |
+| 適合場景 | CPU 密集型運算 | I/O 密集型 (資料庫、網路) |
+
+#### FastAPI 非同步最佳實踐
+
+```python
+# ✅ 正確 - 非同步資料庫操作
+@router.get("/api/tests/sessions")
+async def list_sessions(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(TestSession))
+    return result.scalars().all()
+
+# ❌ 錯誤 - 在非同步函式中使用同步 ORM
+async def list_sessions_bad():
+    result = db.query(TestSession).all()  # 阻塞事件循環！
+    return result
+```
+
+**遷移注意事項**:
+- 使用 `async/await` 語法標記非同步函式
+- 資料庫操作必須使用 `AsyncSession` + `asyncmy` 驅動
+- 避免在非同步函式中呼叫同步阻塞函式 (如 `time.sleep()` 改用 `asyncio.sleep()`)
+
 ---
 
 ## 測試

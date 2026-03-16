@@ -263,7 +263,7 @@ set -e
 
 # Configuration
 SKIP_MIGRATIONS="${SKIP_MIGRATIONS:-false}"
-MIGRATION_TIMEOUT="${MIGRATION_TIMEOUT:-60}"
+MIGRATION_TIMEOUT="${MIGRATION_TIMEOUT:-10}"
 
 # Logging functions
 log_info() {
@@ -406,7 +406,7 @@ services:
 
       # Alembic migration automation
       SKIP_MIGRATIONS: ${SKIP_MIGRATIONS:-false}
-      MIGRATION_TIMEOUT: ${MIGRATION_TIMEOUT:-60}
+      MIGRATION_TIMEOUT: ${MIGRATION_TIMEOUT:-10}
       ALEMBIC_ARGS: ${ALEMBIC_ARGS:-}
 ```
 
@@ -551,7 +551,7 @@ docker-compose logs db | tail -n 20
 2. 增加超時時間：
 ```yaml
 environment:
-  MIGRATION_TIMEOUT: 120  # 120 秒
+  MIGRATION_TIMEOUT: 30  # 30 秒
 ```
 
 3. 手動測試連線：
@@ -781,7 +781,7 @@ WebPDTool/
 | 變數 | 預設值 | 說明 |
 |------|--------|------|
 | `SKIP_MIGRATIONS` | `false` | 跳過自動 migration |
-| `MIGRATION_TIMEOUT` | `60` | DB 等待秒數 |
+| `MIGRATION_TIMEOUT` | `10` | DB 等待秒數 |
 | `ALEMBIC_ARGS` | `""` | 額外 alembic 參數 |
 
 ### 常用指令

@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     libpq-dev \
+    iputils-ping \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for package management

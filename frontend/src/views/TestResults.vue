@@ -288,8 +288,12 @@
           max-height="500"
         >
           <el-table-column prop="item_no" label="項次" width="80" />
-          <el-table-column prop="item_name" label="測試項目" min-width="220" />
-          <el-table-column prop="measured_value" label="測量值" width="120" />
+          <el-table-column prop="item_name" label="測試項目" min-width="120" />
+          <el-table-column prop="measured_value" label="測量值" min-width="340">
+            <template #default="{ row }">
+              <span style="white-space: pre-wrap; word-break: break-all;">{{ row.measured_value }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="限制值" width="180">
             <template #default="{ row }">
               <span v-if="row.lower_limit !== null || row.upper_limit !== null">

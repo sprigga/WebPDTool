@@ -411,6 +411,12 @@ Instrument management allows administrators to configure test instrument connect
 
 ## Important Implementation Details
 
+### Alembic Migrations and asyncmy
+
+The project uses `asyncmy` for FastAPI runtime but requires `pymysql` for Alembic migrations (which uses a synchronous engine). `alembic/env.py` auto-converts `mysql+asyncmy://` → `mysql+pymysql://` via `_resolve_alembic_database_url()`. If you see `ModuleNotFoundError: No module named 'pymysql'` during container startup, ensure `pymysql>=1.0.0` is in `pyproject.toml` dependencies.
+
+The database module exports `ASYNC_DATABASE_URL` (not `DATABASE_URL`) — `alembic/env.py` imports from this and aliases it locally.
+
 ### Async/Await Pattern
 
 All database operations and measurement executions use async/await:

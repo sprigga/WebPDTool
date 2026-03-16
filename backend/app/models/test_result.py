@@ -23,7 +23,8 @@ class TestResult(Base):
 
     item_no = Column(Integer, nullable=False)
     item_name = Column(String(100), nullable=False)
-    measured_value = Column(String(100), nullable=True)  # String to support both numeric and text values
+    # measured_value = Column(String(100), nullable=True)  # Too short for multi-line console output (e.g. ping)
+    measured_value = Column(Text, nullable=True)  # Text to support long console/command output
     lower_limit = Column(DECIMAL(15, 6), nullable=True)
     upper_limit = Column(DECIMAL(15, 6), nullable=True)
     unit = Column(String(20), nullable=True)

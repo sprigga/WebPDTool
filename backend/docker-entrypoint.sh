@@ -7,7 +7,7 @@
 #
 # Environment Variables:
 #   SKIP_MIGRATIONS    - Set to "true" to skip migration runs (default: false)
-#   MIGRATION_TIMEOUT  - Maximum time to wait for DB connection (default: 60s)
+#   MIGRATION_TIMEOUT  - Maximum time to wait for DB connection (default: 10s)
 #   ALEMBIC_ARGS       - Additional arguments to pass to alembic (default: "")
 # =============================================================================
 
@@ -21,7 +21,7 @@ NC='\033[0m' # No Color
 
 # Configuration from environment variables
 SKIP_MIGRATIONS="${SKIP_MIGRATIONS:-false}"
-MIGRATION_TIMEOUT="${MIGRATION_TIMEOUT:-60}"
+MIGRATION_TIMEOUT="${MIGRATION_TIMEOUT:-10}"
 ALEMBIC_ARGS="${ALEMBIC_ARGS:-}"
 
 # Logging functions

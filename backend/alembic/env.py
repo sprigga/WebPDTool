@@ -11,7 +11,11 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Import database configuration and models
-from app.core.database import Base, DATABASE_URL
+# Modified: Use ASYNC_DATABASE_URL instead of DATABASE_URL (async-only migration)
+from app.core.database import Base, ASYNC_DATABASE_URL
+
+# For backwards compatibility with existing code
+DATABASE_URL = ASYNC_DATABASE_URL
 from app.models.user import User
 from app.models.project import Project
 from app.models.station import Station
@@ -26,10 +30,21 @@ from app.models.instrument import Instrument  # Added for instruments table supp
 config = context.config
 
 def _resolve_alembic_database_url() -> str:
+    """
+    Resolve database URL for Alembic migrations.
+    Converts asyncmy to pymysql for synchronous migration engine.
+    """
     env_database_url = os.getenv("ALEMBIC_DATABASE_URL") or os.getenv("DATABASE_URL")
     if env_database_url:
-        return env_database_url
-    return DATABASE_URL
+        url = env_database_url
+    else:
+        url = DATABASE_URL
+
+    # Convert mysql+asyncmy:// to mysql+pymysql:// for sync migrations
+    # Alembic's run_migrations_online() uses a synchronous engine
+    if url.startswith("mysql+asyncmy://"):
+        return url.replace("mysql+asyncmy://", "mysql+pymysql://")
+    return url
 
 
 config.set_main_option("sqlalchemy.url", _resolve_alembic_database_url())
