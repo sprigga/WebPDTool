@@ -72,6 +72,51 @@ MEASUREMENT_TEMPLATES = {
                 "SetVolt": "5.0",
                 "SetCurr": "2.0"
             }
+        },
+        "IT6723C": {
+            "required": ["Instrument", "SetVolt", "SetCurr"],
+            "optional": ["OVP", "OCP"],
+            "example": {
+                "Instrument": "it6723c_1",
+                "SetVolt": "5.0",
+                "SetCurr": "2.0"
+            }
+        },
+        "PSW3072": {
+            "required": ["Instrument", "SetVolt", "SetCurr"],
+            "optional": ["OVP", "OCP"],
+            "example": {
+                "Instrument": "psw3072_1",
+                "SetVolt": "12.0",
+                "SetCurr": "1.0"
+            }
+        },
+        "2260B": {
+            "required": ["Instrument", "SetVolt", "SetCurr"],
+            "optional": ["Frequency"],
+            "example": {
+                "Instrument": "2260b_1",
+                "SetVolt": "5.0",
+                "SetCurr": "0.5"
+            }
+        },
+        "APS7050": {
+            "required": ["Instrument", "Channel", "SetVolt", "SetCurr"],
+            "optional": ["OVP", "OCP"],
+            "example": {
+                "Instrument": "aps7050_1",
+                "Channel": "1",
+                "SetVolt": "5.0",
+                "SetCurr": "1.0"
+            }
+        },
+        "KEITHLEY2015": {
+            "required": ["Instrument", "Command"],
+            "optional": ["Range", "NPLC"],
+            "example": {
+                "Instrument": "keithley2015_1",
+                "Command": "SOURCE:VOLTAGE 5.0"
+            }
         }
     },
     "PowerRead": {
