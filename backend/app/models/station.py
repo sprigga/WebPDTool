@@ -23,6 +23,7 @@ class Station(Base):
 
     project = relationship("Project", back_populates="stations")
     test_sessions = relationship("TestSession", back_populates="station")
+    modbus_config = relationship("ModbusConfig", back_populates="station", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Station {self.station_code}>"
