@@ -119,11 +119,20 @@ export function useMeasurementParams() {
     const name = paramName.toLowerCase()
 
     // 數字類型
+    // 原有程式碼: 未包含 waitmsec（'WaitmSec'.toLowerCase() 的結果）
+    // if (name.includes('volt') || name.includes('curr') ||
+    //     name.includes('channel') || name.includes('timeout') ||
+    //     name.includes('nplc') || name.includes('range') ||
+    //     name.includes('bandwidth') || name.includes('frequency') ||
+    //     name.includes('delay')) {
+    //   return 'number'
+    // }
+    // 修正: 加入 'waitmsec'（'WaitmSec'.toLowerCase() = 'waitmsec'）
     if (name.includes('volt') || name.includes('curr') ||
         name.includes('channel') || name.includes('timeout') ||
         name.includes('nplc') || name.includes('range') ||
         name.includes('bandwidth') || name.includes('frequency') ||
-        name.includes('delay')) {
+        name.includes('delay') || name.includes('waitmsec')) {
       return 'number'
     }
 
@@ -137,6 +146,11 @@ export function useMeasurementParams() {
     }
 
     if (name === 'item' && typeof exampleValue === 'string') {
+      return 'select'
+    }
+
+    // 新增: operator_judgment → select (OPjudge YorN 模式的後備判定，僅 YorN 模式模板中有此欄位)
+    if (name === 'operator_judgment') {
       return 'select'
     }
 
@@ -158,6 +172,11 @@ export function useMeasurementParams() {
 
     if (name === 'item') {
       return ['volt', 'curr', 'res', 'temp', 'freq']
+    }
+
+    // 新增: operator_judgment 選項（OPjudge YorN 後備判定值）
+    if (name === 'operator_judgment') {
+      return ['PASS', 'FAIL']
     }
 
     return []
