@@ -147,13 +147,40 @@ MEASUREMENT_TEMPLATES = {
             }
         }
     },
+    # 原有程式碼: 舊版 stub — 使用 "default" mode 和 Type/Expected/Result 參數
+    # "OPjudge": {
+    #     "default": {
+    #         "required": ["Type"],
+    #         "optional": ["Expected", "Result"],
+    #         "example": {
+    #             "Type": "YorN",
+    #             "Expected": "PASS"
+    #         }
+    #     }
+    # },
+    # 修正 (Option A): 展開格式 — 前端直接提供 ImagePath/content 為頂層欄位
+    # 注意: UI 要求兩個欄位均填寫 (required)，但 _execute_op_judge 執行時接受任一欄位即可 (any())
+    # operator_judgment 僅在 YorN 模式下有意義，confirm 模式不需要後備判定
     "OPjudge": {
-        "default": {
-            "required": ["Type"],
-            "optional": ["Expected", "Result"],
+        "confirm": {
+            "required": ["ImagePath", "content"],
+            "optional": ["WaitmSec", "Timeout"],
             "example": {
-                "Type": "YorN",
-                "Expected": "PASS"
+                "ImagePath": "/images/led.jpg",
+                "content": "Confirm LED is green",
+                "WaitmSec": 0,
+                "Timeout": 30000
+            }
+        },
+        "YorN": {
+            "required": ["ImagePath", "content"],
+            "optional": ["WaitmSec", "Timeout", "operator_judgment"],
+            "example": {
+                "ImagePath": "/images/display.jpg",
+                "content": "Is display correct?",
+                "WaitmSec": 0,
+                "Timeout": 30000,
+                "operator_judgment": "PASS"
             }
         }
     },

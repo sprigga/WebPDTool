@@ -719,9 +719,16 @@ class MeasurementService:
                 "WAIT_FIX_5sec": [],  # 原有程式碼: 新增 WAIT_FIX_5sec 支援,不需要任何參數
             },
             "getSN": {"SN": [], "IMEI": [], "MAC": []},
+            # 原有程式碼: 要求 TestParams key（舊版 PDTool4 格式）
+            # "OPjudge": {
+            #     "YorN": ["TestParams"],
+            #     "confirm": ["TestParams"],
+            # },
+            # 修正: 與 MEASUREMENT_TEMPLATES 同步，使用展開格式頂層欄位
+            # 此為後備驗證路徑，通常由 validate_params_config (primary path) 先行處理
             "OPjudge": {
-                "YorN": ["TestParams"],  # Requires TestParams list with ImagePath and content
-                "confirm": ["TestParams"],  # Requires TestParams list with ImagePath and content
+                "YorN": ["ImagePath", "content"],
+                "confirm": ["ImagePath", "content"],
             },
             # 新增: wait 測量類型支援
             "wait": {"wait": []},  # wait switch_mode 不需要任何參數
