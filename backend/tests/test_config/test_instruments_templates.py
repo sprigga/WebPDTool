@@ -158,3 +158,41 @@ class TestWaitAndOtherModes:
     def test_other_wait_fix_validate_no_required(self):
         result = validate_params("Other", "WAIT_FIX_5sec", {})
         assert result["valid"] is True
+
+
+class TestValidateParamsEndToEnd:
+    """Regression: validate_params() in instruments.py (primary path) handles all migrated types."""
+
+    def test_commandtest_uses_primary_path(self):
+        from app.config.instruments import validate_params
+        result = validate_params("CommandTest", "comport", {
+            "Port": "COM4", "Baud": "9600", "Command": "AT"
+        })
+        assert result["valid"] is True
+        assert not any("Legacy" in s for s in result.get("suggestions", []))
+
+    def test_sfctest_webstep_primary_path(self):
+        from app.config.instruments import validate_params
+        result = validate_params("SFCtest", "webStep1_2", {})
+        assert result["valid"] is True
+        assert not any("Legacy" in s for s in result.get("suggestions", []))
+
+    def test_getsn_sn_primary_path(self):
+        from app.config.instruments import validate_params
+        result = validate_params("getSN", "SN", {})
+        assert result["valid"] is True
+
+    def test_wait_lowercase_primary_path(self):
+        from app.config.instruments import validate_params
+        result = validate_params("wait", "wait", {})
+        assert result["valid"] is True
+
+    def test_android_adb_primary_path(self):
+        from app.config.instruments import validate_params
+        result = validate_params("android_adb", "android_adb", {"Command": "adb shell ls"})
+        assert result["valid"] is True
+
+    def test_peak_primary_path(self):
+        from app.config.instruments import validate_params
+        result = validate_params("PEAK", "PEAK", {"Command": "send:0x01"})
+        assert result["valid"] is True

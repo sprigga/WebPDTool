@@ -716,74 +716,79 @@ class MeasurementService:
             # },
             "PowerRead": {},  # Empty dict - all instruments migrated to MEASUREMENT_TEMPLATES
 
-            "CommandTest": {
-                "comport": ["Port", "Baud", "Command"],
-                "tcpip": ["Host", "Port", "Command"],
-                "console": ["Command"],
-                "android_adb": ["Command"],
-                "PEAK": ["Command"],
-                # 自定義腳本模式 - 只要有 command 或 script_path 即可
-                "custom": ["command"],  # command 欄位可選,如果沒有則使用 script_path
-            },
+            # 原有程式碼: CommandTest / command 硬編碼驗證
+            # 已遷移到 MEASUREMENT_TEMPLATES (2026-03-16)
+            # "CommandTest": {
+            #     "comport": ["Port", "Baud", "Command"],
+            #     "tcpip": ["Host", "Port", "Command"],
+            #     "console": ["Command"],
+            #     "android_adb": ["Command"],
+            #     "PEAK": ["Command"],
+            #     # 自定義腳本模式 - 只要有 command 或 script_path 即可
+            #     "custom": ["command"],  # command 欄位可選,如果沒有則使用 script_path
+            # },
             # 新增: 支援 measurement_type='command' (對應 case_type='command')
-            "command": {
-                "comport": ["Port", "Baud", "Command"],
-                "console": ["Command"],
-                "tcpip": ["Host", "Port", "Command"],
-                "android_adb": ["Command"],
-                "PEAK": ["Command"],
-                "custom": ["command"],
-            },
-            # 新增: 直接支援 case_type 作為 measurement_type
-            # 這些都使用與 CommandTest 相同的驗證規則
-            "comport": {
-                "comport": ["Port", "Baud", "Command"],
-                "custom": ["command"],
-            },
-            "console": {
-                "console": ["Command"],
-                "custom": ["command"],
-            },
-            "tcpip": {
-                "tcpip": ["Host", "Port", "Command"],
-                "custom": ["command"],
-            },
-            "android_adb": {
-                "android_adb": ["Command"],
-                "custom": ["command"],
-            },
-            "PEAK": {
-                "PEAK": ["Command"],
-                "custom": ["command"],
-            },
-            "SFCtest": {
-                "webStep1_2": [],
-                "URLStep1_2": [],
-                "skip": [],
-                "WAIT_FIX_5sec": [],  # 原有程式碼: 新增 WAIT_FIX_5sec 支援,不需要任何參數
-            },
-            "getSN": {"SN": [], "IMEI": [], "MAC": []},
+            # 已遷移到 MEASUREMENT_TEMPLATES (2026-03-16)
+            # "command": {
+            #     "comport": ["Port", "Baud", "Command"],
+            #     "console": ["Command"],
+            #     "tcpip": ["Host", "Port", "Command"],
+            #     "android_adb": ["Command"],
+            #     "PEAK": ["Command"],
+            #     "custom": ["command"],
+            # },
+            # 原有程式碼: comport/console/tcpip/android_adb/PEAK 作為頂層 measurement_type
+            # 已遷移到 MEASUREMENT_TEMPLATES (2026-03-16)
+            # "comport": {
+            #     "comport": ["Port", "Baud", "Command"],
+            #     "custom": ["command"],
+            # },
+            # "console": {
+            #     "console": ["Command"],
+            #     "custom": ["command"],
+            # },
+            # "tcpip": {
+            #     "tcpip": ["Host", "Port", "Command"],
+            #     "custom": ["command"],
+            # },
+            # "android_adb": {
+            #     "android_adb": ["Command"],
+            #     "custom": ["command"],
+            # },
+            # "PEAK": {
+            #     "PEAK": ["Command"],
+            #     "custom": ["command"],
+            # },
+            # 原有程式碼: SFCtest 顯式 switch_mode 已遷移到 MEASUREMENT_TEMPLATES (2026-03-16)
+            # "SFCtest": {
+            #     "webStep1_2": [],
+            #     "URLStep1_2": [],
+            #     "skip": [],
+            #     "WAIT_FIX_5sec": [],
+            # },
+            # 原有程式碼: getSN 顯式 switch_mode 已遷移到 MEASUREMENT_TEMPLATES (2026-03-16)
+            # "getSN": {"SN": [], "IMEI": [], "MAC": []},
             # 原有程式碼: 要求 TestParams key（舊版 PDTool4 格式）
             # "OPjudge": {
             #     "YorN": ["TestParams"],
             #     "confirm": ["TestParams"],
             # },
             # 修正: 與 MEASUREMENT_TEMPLATES 同步，使用展開格式頂層欄位
-            # 此為後備驗證路徑，通常由 validate_params_config (primary path) 先行處理
+            # OPjudge: 後備驗證路徑，通常由 validate_params_config (primary path) 先行處理
             "OPjudge": {
                 "YorN": ["ImagePath", "content"],
                 "confirm": ["ImagePath", "content"],
             },
-            # 新增: wait 測量類型支援
-            "wait": {"wait": []},  # wait switch_mode 不需要任何參數
-            "Wait": {"wait": []},  # 支援大寫 Wait
-            # 新增: test123 測試腳本支援
-            "Other": {
-                "test123": [],  # test123.py 不需要任何必需參數，可選 arg 參數
-                "custom": [],
-                "WAIT_FIX_5sec": [],  # 原有程式碼: 新增 WAIT_FIX_5sec 支援,不需要任何參數
-                "wait": [],  # 修改: 新增 wait 支援,用於 WAIT_DUT_restart_20 等待測試,不需要任何參數
-            },
+            # 原有程式碼: wait/Wait 已遷移到 MEASUREMENT_TEMPLATES (2026-03-16)
+            # "wait": {"wait": []},  # wait switch_mode 不需要任何參數
+            # "Wait": {"wait": []},  # 支援大寫 Wait
+            # 原有程式碼: Other test123/WAIT_FIX_5sec/wait modes 已遷移到 MEASUREMENT_TEMPLATES (2026-03-16)
+            # "Other": {
+            #     "test123": [],  # test123.py 不需要任何必需參數，可選 arg 參數
+            #     "custom": [],
+            #     "WAIT_FIX_5sec": [],
+            #     "wait": [],
+            # },
         }
 
         if measurement_type not in validation_rules:
