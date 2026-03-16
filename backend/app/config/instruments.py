@@ -26,6 +26,8 @@ AVAILABLE_INSTRUMENTS = {
     "multimeters": [
         {"id": "34970A", "type": "34970A", "description": "Keysight 34970A"},
         {"id": "DAQ6510", "type": "DAQ6510", "description": "Keysight DAQ6510"},
+        {"id": "6510", "type": "6510", "description": "Keysight DAQ6510 (legacy)"},
+        {"id": "2015", "type": "2015", "description": "Keysight 2015 Multimeter (legacy)"},
         {"id": "KEITHLEY2015", "type": "KEITHLEY2015", "description": "Keithley 2015 Multimeter"}
     ],
     "communication": [
