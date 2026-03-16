@@ -141,6 +141,7 @@ async def health_check():
 from app.api import auth, projects, stations, tests, measurements, dut_control, users
 from app.api import instruments as instruments_api
 from app.api import modbus as modbus_api
+from app.api import modbus_ws as modbus_ws_api
 from app.api.testplan import router as testplans_router
 from app.api.results import router as measurement_results_router
 
@@ -155,4 +156,5 @@ app.include_router(measurement_results_router, prefix="/api/measurement-results"
 app.include_router(dut_control.router, prefix="/api", tags=["DUT Control"])
 app.include_router(instruments_api.router, prefix="/api/instruments", tags=["Instruments"])
 app.include_router(modbus_api.router, prefix="/api/modbus", tags=["Modbus"])
+app.include_router(modbus_ws_api.router, prefix="/api/modbus", tags=["Modbus-WS"])
 # ...
