@@ -226,6 +226,8 @@ MEASUREMENT_TEMPLATES = {
     #         }
     #     }
     # },
+    # 原有程式碼: 只有 "default" mode
+    # 修正: 新增 PDTool4 validation_rules 中的所有 switch_mode (2026-03-16)
     "SFCtest": {
         "default": {
             "required": ["Mode"],
@@ -233,8 +235,30 @@ MEASUREMENT_TEMPLATES = {
             "example": {
                 "Mode": "webStep1_2"
             }
+        },
+        "webStep1_2": {
+            "required": [],
+            "optional": [],
+            "example": {}
+        },
+        "URLStep1_2": {
+            "required": [],
+            "optional": [],
+            "example": {}
+        },
+        "skip": {
+            "required": [],
+            "optional": [],
+            "example": {}
+        },
+        "WAIT_FIX_5sec": {
+            "required": [],
+            "optional": [],
+            "example": {}
         }
     },
+    # 原有程式碼: 只有 "default" mode
+    # 修正: 新增 PDTool4 validation_rules 中的所有 switch_mode (2026-03-16)
     "getSN": {
         "default": {
             "required": ["Type"],
@@ -242,6 +266,21 @@ MEASUREMENT_TEMPLATES = {
             "example": {
                 "Type": "SN"
             }
+        },
+        "SN": {
+            "required": [],
+            "optional": ["SerialNumber"],
+            "example": {}
+        },
+        "IMEI": {
+            "required": [],
+            "optional": [],
+            "example": {}
+        },
+        "MAC": {
+            "required": [],
+            "optional": [],
+            "example": {}
         }
     },
     # 原有程式碼: 舊版 stub — 使用 "default" mode 和 Type/Expected/Result 參數
@@ -325,6 +364,17 @@ MEASUREMENT_TEMPLATES = {
             "required": ["Host", "Port", "Command"],
             "optional": ["keyWord", "Timeout"],
             "example": {"Host": "192.168.1.100", "Port": "5025", "Command": "*IDN?"}
+        },
+        # 新增: test123 和 WAIT_FIX_5sec (來自 validation_rules 遷移 2026-03-16)
+        "test123": {
+            "required": [],
+            "optional": ["arg"],
+            "example": {"arg": "optional_argument"}
+        },
+        "WAIT_FIX_5sec": {
+            "required": [],
+            "optional": [],
+            "example": {}
         }
     },
     "Wait": {
@@ -391,6 +441,121 @@ MEASUREMENT_TEMPLATES = {
                 "BufferSize": "1024"
             }
         }
+    },
+    # 新增: CommandTest — PDTool4 舊式格式 (Port/Baud/Command schema)
+    # 注意: 與頂層 "comport"/"console"/"tcpip" key 不同，此格式不使用 Instrument 欄位
+    "CommandTest": {
+        "comport": {
+            "required": ["Port", "Baud", "Command"],
+            "optional": ["keyWord", "spiltCount", "splitLength", "EqLimit", "Timeout"],
+            "example": {
+                "Port": "COM4",
+                "Baud": "9600",
+                "Command": "AT+VERSION",
+                "keyWord": "VERSION",
+                "spiltCount": "1",
+                "splitLength": "10"
+            }
+        },
+        "tcpip": {
+            "required": ["Host", "Port", "Command"],
+            "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
+            "example": {
+                "Host": "192.168.1.100",
+                "Port": "5025",
+                "Command": "*IDN?",
+                "Timeout": "5"
+            }
+        },
+        "console": {
+            "required": ["Command"],
+            "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
+            "example": {"Command": "echo hello"}
+        },
+        "android_adb": {
+            "required": ["Command"],
+            "optional": ["Timeout"],
+            "example": {"Command": "adb shell getprop ro.serialno"}
+        },
+        "PEAK": {
+            "required": ["Command"],
+            "optional": ["Timeout"],
+            "example": {"Command": "send:0x01:0x02"}
+        },
+        "custom": {
+            # 自定義腳本模式: command 或 script_path 任一即可，無強制 required
+            "required": [],
+            "optional": ["command", "script_path"],
+            "example": {"command": "python3 custom_script.py"}
+        }
+    },
+    # 新增: "command" — CommandTest 的別名，對應 case_type='command' 的測試計畫
+    "command": {
+        "comport": {
+            "required": ["Port", "Baud", "Command"],
+            "optional": ["keyWord", "spiltCount", "splitLength", "EqLimit", "Timeout"],
+            "example": {"Port": "COM4", "Baud": "9600", "Command": "AT+VERSION"}
+        },
+        "tcpip": {
+            "required": ["Host", "Port", "Command"],
+            "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
+            "example": {"Host": "192.168.1.100", "Port": "5025", "Command": "*IDN?"}
+        },
+        "console": {
+            "required": ["Command"],
+            "optional": ["keyWord", "spiltCount", "splitLength", "Timeout"],
+            "example": {"Command": "echo hello"}
+        },
+        "android_adb": {
+            "required": ["Command"],
+            "optional": ["Timeout"],
+            "example": {"Command": "adb shell getprop ro.serialno"}
+        },
+        "PEAK": {
+            "required": ["Command"],
+            "optional": ["Timeout"],
+            "example": {"Command": "send:0x01:0x02"}
+        },
+        "custom": {
+            "required": [],
+            "optional": ["command", "script_path"],
+            "example": {"command": "python3 custom_script.py"}
+        }
+    },
+    # 新增: android_adb — 作為頂層 measurement_type
+    "android_adb": {
+        "android_adb": {
+            "required": ["Command"],
+            "optional": ["Timeout", "serial"],
+            "example": {"Command": "adb shell getprop ro.serialno"}
+        },
+        "custom": {
+            "required": [],
+            "optional": ["command", "script_path"],
+            "example": {"command": "python3 custom_adb.py"}
+        }
+    },
+    # 新增: PEAK — 作為頂層 measurement_type (對應 PEAK CAN 控制)
+    "PEAK": {
+        "PEAK": {
+            "required": ["Command"],
+            "optional": ["Timeout", "channel"],
+            "example": {"Command": "send:0x01:0x02"}
+        },
+        "custom": {
+            "required": [],
+            "optional": ["command", "script_path"],
+            "example": {"command": "python3 custom_peak.py"}
+        }
+    },
+    # 新增: "wait" (小寫) — 對應 validation_rules 中的 wait/Wait 型別
+    # Wait (大寫) 已有 "default" mode，此處補充小寫別名
+    "wait": {
+        "wait": {
+            "required": [],
+            "optional": ["wait_msec", "WaitmSec"],
+            "example": {"wait_msec": "1000"}
+        }
     }
 }
 
@@ -442,6 +607,32 @@ MEASUREMENT_TYPE_DESCRIPTIONS = {
     "Relay": {
         "name": "Relay",
         "description": "Relay control operation",
+        "category": "utility"
+    },
+    # 新增: CommandTest/command/android_adb/PEAK/wait (2026-03-16 遷移)
+    "CommandTest": {
+        "name": "CommandTest",
+        "description": "PDTool4-compatible command execution (comport/tcpip/console/adb/PEAK)",
+        "category": "communication"
+    },
+    "command": {
+        "name": "command",
+        "description": "Alias for CommandTest (case_type='command')",
+        "category": "communication"
+    },
+    "android_adb": {
+        "name": "android_adb",
+        "description": "Android ADB command execution",
+        "category": "communication"
+    },
+    "PEAK": {
+        "name": "PEAK",
+        "description": "PEAK CAN bus command execution",
+        "category": "communication"
+    },
+    "wait": {
+        "name": "wait",
+        "description": "Wait/delay operation (lowercase alias for Wait)",
         "category": "utility"
     },
     # 新增: 對應遷移後的三個 Measurement class
