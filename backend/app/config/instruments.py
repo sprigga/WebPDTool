@@ -146,6 +146,47 @@ MEASUREMENT_TEMPLATES = {
                 "Instrument": "keithley2015_1",
                 "Command": "READ?",
             }
+        },
+        "2015": {
+            "required": ["Instrument", "Command"],
+            "optional": ["Range", "NPLC"],
+            "example": {
+                "Instrument": "2015_1",
+                "Command": "MEASURE:VOLTAGE?"
+            }
+        },
+        "6510": {
+            "required": ["Instrument", "Item"],
+            "optional": ["Range", "NPLC"],
+            "example": {
+                "Instrument": "daq6510_1",
+                "Item": "volt"
+            }
+        },
+        "APS7050": {
+            "required": ["Instrument", "Item"],
+            "optional": ["Range"],
+            "example": {
+                "Instrument": "aps7050_1",
+                "Item": "current"
+            }
+        },
+        "MDO34": {
+            "required": ["Instrument", "Channel", "Item"],
+            "optional": ["Range"],
+            "example": {
+                "Instrument": "mdo34_1",
+                "Channel": "1",
+                "Item": "volt"
+            }
+        },
+        "MT8870A_INF": {
+            "required": ["Instrument", "Item"],
+            "optional": ["Range"],
+            "example": {
+                "Instrument": "mt8870a_1",
+                "Item": "power"
+            }
         }
     },
     # 已移除: CommandTest 的 comport/tcpip switch_mode 與直接測試類型 comport/tcpip 功能重疊
