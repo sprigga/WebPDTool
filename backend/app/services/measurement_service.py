@@ -241,11 +241,20 @@ class MeasurementService:
             await asyncio.sleep(wait_msec / 1000.0)
 
         # --- Determine script path (relative to backend working directory) ---
-        script_map = {
+        # 優先使用 terminal 版本（Web/Docker 無 GUI 環境），PyQt5 版本作為備用（實體硬體站）
+        # 原有程式碼: 直接使用 PyQt5 版本，Web 環境會因 ModuleNotFoundError: No module named 'PyQt5' 失敗
+        script_map_terminal = {
+            "confirm": "./src/lowsheen_lib/OPjudge_confirm_terminal.py",
+            "YorN": "./src/lowsheen_lib/OPjudge_YorN_terminal.py",
+        }
+        script_map_gui = {
             "confirm": "./src/lowsheen_lib/OPjudge_confirm.py",
             "YorN": "./src/lowsheen_lib/OPjudge_YorN.py",
         }
-        script_path = script_map[switch_mode]
+        # 優先 terminal 版本（無 PyQt5 依賴），若不存在才使用 GUI 版本
+        terminal_path = script_map_terminal[switch_mode]
+        gui_path = script_map_gui[switch_mode]
+        script_path = terminal_path if os.path.exists(terminal_path) else gui_path
 
         # --- Extract timeout (case-insensitive, default 60s) ---
         timeout_ms = 60000
@@ -258,22 +267,23 @@ class MeasurementService:
                 break
         timeout_sec = timeout_ms / 1000.0
 
-        # --- Fallback path: script not found (headless/web mode) ---
-        if not os.path.exists(script_path):
-            fallback_judgment = None
-            for key in test_params:
-                if key.lower() == "operator_judgment":
-                    fallback_judgment = str(test_params[key]).upper()
-                    break
+        # --- operator_judgment 優先路徑（Web 模式：前端 Modal 已取得操作員判斷）---
+        # 原有程式碼: 只有 script 不存在時才使用 operator_judgment
+        # 修正: 只要 test_params 中有 operator_judgment，直接使用，不執行 subprocess
+        #       這樣前端 Modal 的結果才能生效；subprocess 只在沒有 operator_judgment 時執行
+        web_judgment = None
+        for key in test_params:
+            if key.lower() == "operator_judgment":
+                web_judgment = str(test_params[key]).upper()
+                break
 
-            fallback_msg = f"Script {script_path} not found - fallback to operator_judgment param"
-            if fallback_judgment in ("PASS", "1", "YES", "Y"):
+        if web_judgment is not None:
+            if web_judgment in ("PASS", "1", "YES", "Y"):
                 return MeasurementResult(
                     item_no=0,
                     item_name=test_point_id,
                     result="PASS",
                     measured_value=Decimal("1"),
-                    error_message=fallback_msg,
                 )
             else:
                 return MeasurementResult(
@@ -281,10 +291,21 @@ class MeasurementService:
                     item_name=test_point_id,
                     result="FAIL",
                     measured_value=Decimal("0"),
-                    error_message=fallback_msg,
                 )
 
-        # --- Primary path: run Qt script via subprocess ---
+        # --- Fallback path: script not found (headless/web mode) ---
+        if not os.path.exists(script_path):
+            fallback_msg = f"Script {script_path} not found - fallback to operator_judgment param"
+            # operator_judgment 已在上方處理，此處直接回傳 ERROR（無法執行且無判斷依據）
+            return MeasurementResult(
+                item_no=0,
+                item_name=test_point_id,
+                result="ERROR",
+                error_message=fallback_msg,
+            )
+
+        # --- Primary path: run terminal/GUI script via subprocess ---
+        # 以下僅在沒有 operator_judgment 且 script 存在時執行
         try:
             test_uid_str = f"('{test_point_id}',)"
             params_str = str(parsed_params)
@@ -321,7 +342,11 @@ class MeasurementService:
                     error_message=stderr_str or f"Script exited with code {process.returncode}",
                 )
 
-            response = stdout.decode("utf-8", errors="replace").strip().upper()
+            # 原有程式碼: .strip().upper() 取整段輸出，terminal 腳本的說明文字會混入
+            # 修正: 取最後一行，terminal 腳本的實際結果永遠是最後一個 print("PASS"/"FAIL")
+            full_output = stdout.decode("utf-8", errors="replace").strip()
+            last_line = full_output.splitlines()[-1].strip() if full_output else ""
+            response = last_line.upper()
 
             if not response:
                 return MeasurementResult(
@@ -662,27 +687,35 @@ class MeasurementService:
         # 後備: 使用舊版硬編碼驗證規則 (支援尚未遷移的測試類型)
         # TODO: 將以下所有規則遷移到 MEASUREMENT_TEMPLATES 後可移除此段
         validation_rules = {
-            "PowerSet": {
-                "DAQ973A": ["Instrument", "Channel", "Item"],
-                "MODEL2303": ["Instrument", "SetVolt", "SetCurr"],
-                "MODEL2306": ["Instrument", "Channel", "SetVolt", "SetCurr"],
-                "IT6723C": ["Instrument", "SetVolt", "SetCurr"],
-                "PSW3072": ["Instrument", "SetVolt", "SetCurr"],
-                "2260B": ["Instrument", "SetVolt", "SetCurr"],
-                "APS7050": ["Instrument", "Channel", "SetVolt", "SetCurr"],
-                "34970A": ["Instrument", "Channel", "Item"],
-                "KEITHLEY2015": ["Instrument", "Command"],
-            },
-            "PowerRead": {
-                "DAQ973A": ["Instrument", "Channel", "Item", "Type"],
-                "34970A": ["Instrument", "Channel", "Item"],
-                "2015": ["Instrument", "Command"],
-                "6510": ["Instrument", "Item"],
-                "APS7050": ["Instrument", "Item"],
-                "MDO34": ["Instrument", "Channel", "Item"],
-                "MT8870A_INF": ["Instrument", "Item"],
-                "KEITHLEY2015": ["Instrument", "Command"],
-            },
+            # 原有程式碼: PowerSet 所有儀器已遷移到 MEASUREMENT_TEMPLATES (2026-03-16)
+            # 保留此處註解以記錄遷移日期
+            # "PowerSet": {
+            #     "DAQ973A": ["Instrument", "Channel", "Item"],        # 已在 MEASUREMENT_TEMPLATES
+            #     "MODEL2303": ["Instrument", "SetVolt", "SetCurr"],    # 已在 MEASUREMENT_TEMPLATES
+            #     "MODEL2306": ["Instrument", "Channel", "SetVolt", "SetCurr"],  # 已在 MEASUREMENT_TEMPLATES
+            #     "IT6723C": ["Instrument", "SetVolt", "SetCurr"],      # 已遷移 (2026-03-16)
+            #     "PSW3072": ["Instrument", "SetVolt", "SetCurr"],      # 已遷移 (2026-03-16)
+            #     "2260B": ["Instrument", "SetVolt", "SetCurr"],        # 已遷移 (2026-03-16)
+            #     "APS7050": ["Instrument", "Channel", "SetVolt", "SetCurr"],  # 已遷移 (2026-03-16)
+            #     "34970A": ["Instrument", "Channel", "Item"],          # 已在 MEASUREMENT_TEMPLATES
+            #     "KEITHLEY2015": ["Instrument", "Command"],            # 已遷移 (2026-03-16)
+            # },
+            "PowerSet": {},  # Empty dict - all instruments migrated to MEASUREMENT_TEMPLATES
+
+            # 原有程式碼: PowerRead 所有儀器已遷移到 MEASUREMENT_TEMPLATES (2026-03-16)
+            # 保留此處註解以記錄遷移日期
+            # "PowerRead": {
+            #     "DAQ973A": ["Instrument", "Channel", "Item", "Type"],  # 已在 MEASUREMENT_TEMPLATES
+            #     "34970A": ["Instrument", "Channel", "Item"],           # 已在 MEASUREMENT_TEMPLATES
+            #     "2015": ["Instrument", "Command"],                    # 已遷移 (2026-03-16)
+            #     "6510": ["Instrument", "Item"],                       # 已遷移 (2026-03-16)
+            #     "APS7050": ["Instrument", "Item"],                    # 已遷移 (2026-03-16)
+            #     "MDO34": ["Instrument", "Channel", "Item"],           # 已遷移 (2026-03-16)
+            #     "MT8870A_INF": ["Instrument", "Item"],                # 已遷移 (2026-03-16)
+            #     "KEITHLEY2015": ["Instrument", "Command"],            # 已遷移 (2026-03-16)
+            # },
+            "PowerRead": {},  # Empty dict - all instruments migrated to MEASUREMENT_TEMPLATES
+
             "CommandTest": {
                 "comport": ["Port", "Baud", "Command"],
                 "tcpip": ["Host", "Port", "Command"],
