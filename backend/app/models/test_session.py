@@ -21,6 +21,8 @@ class TestSession(Base):
     station_id = Column(Integer, ForeignKey("stations.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
+    # 修改(2026-03-16): 還原 func.now()，Python 端已統一改為 Asia/Taipei aware datetime
+    # 原有程式碼 (UTC 保底): server_default=func.utc_timestamp()
     start_time = Column(TIMESTAMP, server_default=func.now())
     end_time = Column(TIMESTAMP, nullable=True)
 
@@ -30,6 +32,8 @@ class TestSession(Base):
     fail_items = Column(Integer, nullable=True)
     test_duration_seconds = Column(Float, nullable=True)
 
+    # 修改(2026-03-16): 還原 func.now()
+    # created_at = Column(TIMESTAMP, server_default=func.utc_timestamp())
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     station = relationship("Station", back_populates="test_sessions")

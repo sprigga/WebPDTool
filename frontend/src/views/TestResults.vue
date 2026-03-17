@@ -8,6 +8,16 @@
           <h2>測試結果查詢</h2>
           <div class="header-actions">
             <el-button
+              v-if="isAdmin"
+              type="danger"
+              :icon="Delete"
+              :disabled="selectedSessions.length === 0"
+              :loading="deleting"
+              @click="handleBulkDelete"
+            >
+              刪除選取 ({{ selectedSessions.length }})
+            </el-button>
+            <el-button
               type="success"
               :icon="Download"
               :disabled="sessions.length === 0"
@@ -148,7 +158,9 @@
         v-loading="loading"
         stripe
         style="width: 100%"
+        @selection-change="handleSelectionChange"
       >
+        <el-table-column v-if="isAdmin" type="selection" width="50" />
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="expanded-content">
@@ -281,7 +293,15 @@
           </el-descriptions-item>
         </el-descriptions>
 
+        <el-alert
+          v-if="!resultsLoading && sessionResults.length === 0"
+          title="此 Session 無測試項目明細"
+          type="info"
+          :closable="false"
+          style="margin-bottom: 12px"
+        />
         <el-table
+          v-else
           :data="sessionResults"
           v-loading="resultsLoading"
           stripe
@@ -315,6 +335,20 @@
               {{ row.execution_duration_ms != null ? `${(row.execution_duration_ms / 1000).toFixed(3)} s` : '-' }}
             </template>
           </el-table-column>
+          <!-- 新增(2026-03-16): Wall Time 和 Overhead 欄位 -->
+          <el-table-column label="Wall Time" width="120">
+            <template #default="{ row }">
+              {{ row.wall_time_ms != null ? `${(row.wall_time_ms / 1000).toFixed(3)} s` : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="Overhead" width="110">
+            <template #default="{ row }">
+              <span v-if="row.wall_time_ms != null && row.execution_duration_ms != null" style="color: #909399">
+                {{ ((row.wall_time_ms - row.execution_duration_ms) / 1000).toFixed(3) }} s
+              </span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="error_message" label="錯誤訊息" min-width="220" show-overflow-tooltip />
         </el-table>
       </div>
@@ -328,14 +362,20 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Download } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Download, Delete } from '@element-plus/icons-vue'
 import AppNavBar from '@/components/AppNavBar.vue'
 import { useProjectStore } from '@/stores/project'
-import { queryTestSessions, getSessionWithResults, exportTestResults } from '@/api/testResults'
+import { useAuthStore } from '@/stores/auth'
+import { queryTestSessions, getSessionWithResults, exportTestResults, deleteTestSessions } from '@/api/testResults'
 import { getStationTestPlanNames } from '@/api/testplans'
 
 const projectStore = useProjectStore()
+const authStore = useAuthStore()
+
+const isAdmin = computed(() => authStore.user?.role === 'admin')
+const selectedSessions = ref([])
+const deleting = ref(false)
 
 const filters = reactive({
   project_id: null,
@@ -479,6 +519,37 @@ const handleViewResults = async (session) => {
   }
 }
 
+const handleSelectionChange = (rows) => {
+  selectedSessions.value = rows
+}
+
+const handleBulkDelete = async () => {
+  if (selectedSessions.value.length === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `確定要刪除選取的 ${selectedSessions.value.length} 筆測試記錄及其所有測試結果？此操作無法復原。`,
+      '刪除確認',
+      { type: 'warning', confirmButtonText: '確定刪除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  deleting.value = true
+  try {
+    const ids = selectedSessions.value.map((s) => s.id)
+    await deleteTestSessions(ids)
+    ElMessage.success(`已刪除 ${ids.length} 筆測試記錄`)
+    selectedSessions.value = []
+    await loadSessions()
+  } catch (error) {
+    ElMessage.error('刪除失敗，請稍後再試')
+  } finally {
+    deleting.value = false
+  }
+}
+
 const handleExport = async () => {
   try {
     const response = await exportTestResults(buildQueryParams())
@@ -544,9 +615,9 @@ const formatDateTime = (dateStr) => {
   if (!dateStr) {
     return '-'
   }
-  // Append 'Z' if no timezone info, so the browser treats it as UTC
-  // then display in Asia/Taipei timezone
-  const normalized = /[Zz]|[+-]\d{2}:?\d{2}$/.test(dateStr) ? dateStr : dateStr + 'Z'
+  // 修改(2026-03-17): DB 已統一儲存 Asia/Taipei 時間，補上 +08:00 而非 'Z'
+  // 原有程式碼: dateStr + 'Z'（當 DB 儲存 UTC 時正確，現在會多加 8 小時）
+  const normalized = /[Zz]|[+-]\d{2}:?\d{2}$/.test(dateStr) ? dateStr : dateStr + '+08:00'
   const date = new Date(normalized)
   return date.toLocaleString('zh-TW', {
     timeZone: 'Asia/Taipei',

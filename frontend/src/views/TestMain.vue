@@ -881,8 +881,37 @@ const executeMeasurements = async () => {
         }
 
         try {
-          // Execute single measurement
+          // 新增(2026-03-16): 計算端到端 wall_time_ms（含網路+DB overhead）
+          const itemWallStart = Date.now()
+          // Execute single measurement (does NOT save to DB — see executeSingleItem)
           const result = await executeSingleItem(item, index)
+
+          // 修改(2026-03-16): 移至此處儲存測試結果，確保 wall_time_ms 能正確計算
+          // 原有程式碼: createTestResult 在 executeSingleItem 內呼叫（wall_time_ms 永遠為 null）
+          if (currentSession.value && item.id) {
+            // wall_time 包含: 量測執行 + 網路傳輸（不含 DB 寫入，DB 寫入在 createTestResult 後）
+            const wallTimeMs = Date.now() - itemWallStart
+            item.wall_time_ms = wallTimeMs
+            try {
+              await createTestResult(currentSession.value.id, {
+                session_id: currentSession.value.id,
+                test_plan_id: item.id,
+                item_no: item.item_no,
+                item_name: item.item_name,
+                measured_value: result.measured_value_str,
+                lower_limit: item.lower_limit,
+                upper_limit: item.upper_limit,
+                unit: item.unit,
+                result: result.result,
+                error_message: result.error_message,
+                execution_duration_ms: result.execution_duration_ms,
+                wall_time_ms: wallTimeMs
+              })
+            } catch (saveError) {
+              console.error('Failed to save test result:', saveError)
+              addStatusMessage(`保存測試結果失敗: ${saveError.message}`, 'warning')
+            }
+          }
 
           // Update item with result
           item.status = result.result
@@ -1243,43 +1272,25 @@ const executeSingleItem = async (item, index) => {
       // 字串類型保持原有的 result 結果,不進行限制值檢查
     }
 
-    // 新增: 方案 A - 保存測試結果到資料庫
-    // 在每個測項執行完畢後，立即保存結果到 test_results 表
-    if (currentSession.value && item.id) {
-      try {
-        // 修正(2026-03-11): DB measured_value 欄位已改為 String(100)，支援字串類型
-        // 原有程式碼(已廢棄): 僅允許數值，字串傳 null（當時 decimal 欄位的限制）
-        // measured_value = Column(String(100), nullable=True) — 可直接儲存字串
-        const rawValue = response.measured_value
-        let measuredValueStr = null
-        if (rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '') {
-          measuredValueStr = String(rawValue)
-        }
+    // 修改(2026-03-16): 移除此處的 createTestResult 呼叫
+    // 原有程式碼: 在 executeSingleItem 內部呼叫 createTestResult，導致 wall_time_ms 無法正確捕捉
+    // 修改原因: wall_time_ms 在外層迴圈計算（executeSingleItem 回傳後），
+    //           若在此處儲存，wall_time_ms 永遠為 null（尚未賦值）
+    // 修改後: createTestResult 移至外層迴圈，由外層在計算 wall_time_ms 後統一儲存
 
-        await createTestResult(currentSession.value.id, {
-          session_id: currentSession.value.id,
-          test_plan_id: item.id,
-          item_no: item.item_no,
-          item_name: item.item_name,
-          measured_value: measuredValueStr,
-          lower_limit: item.lower_limit,
-          upper_limit: item.upper_limit,
-          unit: item.unit,
-          result: result,
-          error_message: response.error_message,
-          execution_duration_ms: response.execution_duration_ms
-        })
-      } catch (saveError) {
-        // 保存失敗不影響測試流程，只記錄錯誤
-        console.error('Failed to save test result:', saveError)
-        addStatusMessage(`保存測試結果失敗: ${saveError.message}`, 'warning')
-      }
+    // 修正(2026-03-11): DB measured_value 欄位已改為 Text，支援字串類型
+    const rawValue = response.measured_value
+    let measuredValueStr = null
+    if (rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '') {
+      measuredValueStr = String(rawValue)
     }
 
     return {
       result: result,
       measured_value: response.measured_value,
-      error_message: response.error_message
+      measured_value_str: measuredValueStr,
+      error_message: response.error_message,
+      execution_duration_ms: response.execution_duration_ms
     }
 
   } catch (error) {

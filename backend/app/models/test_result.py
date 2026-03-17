@@ -32,8 +32,12 @@ class TestResult(Base):
     result = Column(Enum(ItemResult), nullable=False, index=True)
     error_message = Column(Text, nullable=True)
 
+    # 修改(2026-03-16): 還原 func.now()，Python 端已統一改為 Asia/Taipei aware datetime
+    # 原有程式碼 (UTC 保底): server_default=func.utc_timestamp()
     test_time = Column(TIMESTAMP, server_default=func.now(), index=True)
     execution_duration_ms = Column(Integer, nullable=True)
+    # 新增(2026-03-16): 前端計量的端到端時間（含網路+DB overhead），與 execution_duration_ms 互補
+    wall_time_ms = Column(Integer, nullable=True)
 
     session = relationship("TestSession", back_populates="test_results")
     test_plan = relationship("TestPlan")

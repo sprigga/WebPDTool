@@ -1,18 +1,25 @@
 """
 Test Execution API Endpoints
 """
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import logging
+from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
 # Original code: from sqlalchemy.orm import Session
 # Modified: Use AsyncSession for async DB migration (Wave 6 - Task 13)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func, exists
-from typing import List, Optional
-from datetime import datetime
-import logging
+from sqlalchemy import delete as sa_delete
+from pydantic import BaseModel
+
+_TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 
 # Original code: from app.core.database import get_db
 # Modified: Use async DB dependency
 from app.core.database import get_async_db
+from app.core.api_helpers import PermissionChecker
 from app.dependencies import get_current_active_user
 from app.models.test_session import TestSession as TestSessionModel
 from app.models.test_result import TestResult as TestResultModel
@@ -36,6 +43,10 @@ from app.core.constants import TimeConstants
 
 # Module-level logger
 logger = logging.getLogger(__name__)
+
+
+class BulkDeleteSessionsRequest(BaseModel):
+    session_ids: List[int]
 
 # Check if report service is available
 try:
@@ -76,10 +87,13 @@ async def create_test_session(
         raise HTTPException(status_code=404, detail="Station not found")
 
     # Create test session
+    # 修改(2026-03-16): 明確傳入 Asia/Taipei start_time，避免 server_default 依賴 MySQL 時區設定
+    # 原有程式碼: 未傳 start_time，改由 server_default=func.now() 填入（若 MySQL session 時區不一致會寫入 UTC）
     db_session = TestSessionModel(
         serial_number=session_data.serial_number,
         station_id=session_data.station_id,
-        user_id=current_user.get("id")
+        user_id=current_user.get("id"),
+        start_time=datetime.now(_TZ_TAIPEI),
     )
 
     db.add(db_session)
@@ -249,8 +263,8 @@ async def export_test_sessions_csv(
 
         # Get test_plan_name from first result
         plan_name = None
-        if results and list(results)[0].test_plan_id:
-            first_result = list(results)[0]
+        if results and results[0].test_plan_id:
+            first_result = results[0]
             # Original code: plan = db.query(TestPlan).filter(TestPlan.id == ...).first()
             # Modified: Use select() with await for async
             result = await db.execute(
@@ -449,7 +463,10 @@ async def create_test_result(
             unit=result_data.unit,
             result=result_data.result,
             error_message=result_data.error_message,
-            execution_duration_ms=result_data.execution_duration_ms
+            execution_duration_ms=result_data.execution_duration_ms,
+            wall_time_ms=result_data.wall_time_ms,
+            # 修改(2026-03-16): 明確傳入 Asia/Taipei，取代 server_default UTC
+            test_time=datetime.now(_TZ_TAIPEI),
         )
         db.add(db_result)
         await db.commit()
@@ -524,7 +541,10 @@ async def create_test_results_batch(
                 unit=result_data.unit,
                 result=result_data.result,
                 error_message=result_data.error_message,
-                execution_duration_ms=result_data.execution_duration_ms
+                execution_duration_ms=result_data.execution_duration_ms,
+                wall_time_ms=result_data.wall_time_ms,
+                # 修改(2026-03-16): 明確傳入 Asia/Taipei，取代 server_default UTC
+                test_time=datetime.now(_TZ_TAIPEI),
             )
             db.add(db_result)
             created_count += 1
@@ -579,7 +599,9 @@ async def complete_test_session(
         )
 
     # Update session
-    session.end_time = datetime.utcnow()
+    # 修改(2026-03-16): 改用 Asia/Taipei
+    # session.end_time = datetime.utcnow()
+    session.end_time = datetime.now(_TZ_TAIPEI)
     session.final_result = complete_data.final_result
     session.total_items = complete_data.total_items
     session.pass_items = complete_data.pass_items
@@ -863,3 +885,55 @@ async def list_test_sessions(
         result_list.append(TestSession(**session_dict))
 
     return result_list
+
+
+@router.delete("/sessions")
+async def bulk_delete_test_sessions(
+    body: BulkDeleteSessionsRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    Bulk delete test sessions and all associated test_results (admin only)
+    """
+    PermissionChecker.check_admin(current_user, "bulk delete test sessions")
+
+    if not body.session_ids:
+        raise HTTPException(status_code=400, detail="No session IDs provided")
+
+    try:
+        # Confirm at least some sessions exist
+        result = await db.execute(
+            select(TestSessionModel).where(TestSessionModel.id.in_(body.session_ids))
+        )
+        found_sessions = result.scalars().all()
+        found_ids = [s.id for s in found_sessions]
+
+        if not found_ids:
+            raise HTTPException(status_code=404, detail="No matching sessions found")
+
+        # Delete associated test_results first (foreign key)
+        await db.execute(
+            sa_delete(TestResultModel).where(TestResultModel.session_id.in_(found_ids))
+        )
+
+        # Delete sessions
+        await db.execute(
+            sa_delete(TestSessionModel).where(TestSessionModel.id.in_(found_ids))
+        )
+
+        await db.commit()
+
+        return {
+            "message": f"Deleted {len(found_ids)} session(s) and associated results",
+            "deleted_session_ids": found_ids
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to bulk delete sessions: {str(e)}"
+        )

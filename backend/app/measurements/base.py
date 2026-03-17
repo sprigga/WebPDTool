@@ -6,10 +6,13 @@ Integrates PDTool4 TestPoint validation logic
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Tuple, Union
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 import logging
 
 logger = logging.getLogger(__name__)
+
+_TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 
 
 # ============================================================================
@@ -143,7 +146,9 @@ class MeasurementResult:
         self.unit = unit
         self.error_message = error_message
         self.execution_duration_ms = execution_duration_ms
-        self.test_time = datetime.now(timezone.utc)
+        # 修改(2026-03-16): 改用 Asia/Taipei 以符合舊資料時態
+        # self.test_time = datetime.now(timezone.utc)
+        self.test_time = datetime.now(_TZ_TAIPEI)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to dictionary for JSON serialization"""

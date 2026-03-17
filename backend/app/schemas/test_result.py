@@ -27,6 +27,8 @@ class TestResultCreate(BaseModel):
     result: ItemResultEnum
     error_message: Optional[str] = None
     execution_duration_ms: Optional[int] = None
+    # 新增(2026-03-16): 前端端到端時間（含網路+DB overhead）
+    wall_time_ms: Optional[int] = None
 
 
 class TestResult(TestResultCreate):

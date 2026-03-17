@@ -96,6 +96,8 @@ CREATE TABLE test_sessions (
     serial_number VARCHAR(100) NOT NULL,
     station_id INT NOT NULL,
     user_id INT NOT NULL,
+    -- 修改(2026-03-16): 還原 CURRENT_TIMESTAMP，Python 端已統一改為 Asia/Taipei
+    -- 原有程式碼 (UTC 保底): start_time TIMESTAMP DEFAULT (UTC_TIMESTAMP()),
     start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     end_time TIMESTAMP NULL,
     final_result ENUM('PASS', 'FAIL', 'ABORT') NULL,
@@ -103,6 +105,7 @@ CREATE TABLE test_sessions (
     pass_items INT,
     fail_items INT,
     test_duration_seconds INT,
+    -- created_at TIMESTAMP DEFAULT (UTC_TIMESTAMP()),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (station_id) REFERENCES stations(id),
     FOREIGN KEY (user_id) REFERENCES users(id),
@@ -125,8 +128,11 @@ CREATE TABLE test_results (
     unit VARCHAR(20),
     result ENUM('PASS', 'FAIL', 'SKIP', 'ERROR') NOT NULL,
     error_message TEXT,
+    -- 修改(2026-03-16): 還原 CURRENT_TIMESTAMP，Python 端已統一改為 Asia/Taipei
+    -- 原有程式碼 (UTC 保底): test_time TIMESTAMP DEFAULT (UTC_TIMESTAMP()),
     test_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     execution_duration_ms INT,
+    wall_time_ms INT,              -- 新增(2026-03-16): 前端端到端時間（含網路+DB overhead）
     FOREIGN KEY (session_id) REFERENCES test_sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (test_plan_id) REFERENCES test_plans(id),
     INDEX idx_session (session_id),

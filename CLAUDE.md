@@ -88,7 +88,7 @@ python scripts/import_testplan.py \
 
 - `main.py` — FastAPI app entry, middleware, router registration
 - `api/` — Route handlers: `auth`, `users`, `projects`, `stations`, `instruments`, `tests`, `measurements`, `dut_control`
-  - `results/` — 7 sub-routers: sessions, measurements, summary, export, cleanup, reports, analysis
+  - `results/` — 8 sub-routers: sessions, measurements, summary, export, cleanup, reports, analysis (descriptive stats per test item and per session)
   - `testplan/` — 4 sub-routers: queries, mutations, sessions, validation
 - `services/` — Business logic: `test_engine.py`, `measurement_service.py` (critical, ~46KB), `instrument_manager.py`, `instrument_connection.py`
   - `instruments/` — Driver registry (`INSTRUMENT_DRIVERS` dict) with 20+ hardware drivers

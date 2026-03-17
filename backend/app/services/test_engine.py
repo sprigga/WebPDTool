@@ -7,7 +7,10 @@ from typing import Dict, Any, List, Optional
 # Modified: Use AsyncSession for async DB migration (Wave 6 - Task 12)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+_TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 from decimal import Decimal
 import asyncio
 import logging
@@ -80,7 +83,9 @@ class TestEngine:
             # Initialize test state
             test_state = TestExecutionState(session_id)
             test_state.status = "RUNNING"
-            test_state.start_time = datetime.utcnow()
+            # 修改(2026-03-16): 改用 Asia/Taipei
+            # test_state.start_time = datetime.utcnow()
+            test_state.start_time = datetime.now(_TZ_TAIPEI)
             self.active_tests[session_id] = test_state
 
         # Background task creates its own AsyncSession
@@ -383,7 +388,9 @@ class TestEngine:
                 unit=result.unit,
                 result=ItemResult(result.result),
                 error_message=result.error_message,
-                execution_duration_ms=result.execution_duration_ms
+                execution_duration_ms=result.execution_duration_ms,
+                # 修改(2026-03-16): 明確傳入 Asia/Taipei 時間，取代 server_default
+                test_time=result.test_time,
             )
 
             # Original code: db.add(db_result); db.commit()
@@ -439,13 +446,18 @@ class TestEngine:
                 final_result = TestResultEnum.PASS
 
             # Calculate duration
+            # 修改(2026-03-16): 改用 Asia/Taipei，兩端需同為 aware datetime 才能相減
+            # duration_seconds = round((datetime.utcnow() - test_state.start_time).total_seconds(), 6)
+            _now = datetime.now(_TZ_TAIPEI)
             if test_state.start_time:
-                duration_seconds = round((datetime.utcnow() - test_state.start_time).total_seconds(), 6)
+                duration_seconds = round((_now - test_state.start_time).total_seconds(), 6)
             else:
                 duration_seconds = 0
 
             # Update session
-            session.end_time = datetime.utcnow()
+            # 修改(2026-03-16): 改用 Asia/Taipei
+            # session.end_time = datetime.utcnow()
+            session.end_time = _now
             session.final_result = final_result
             session.total_items = total_items
             session.pass_items = pass_items

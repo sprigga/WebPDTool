@@ -58,7 +58,7 @@ async def delete_test_session(
         # Original code: db.query(TestResultModel).filter(...).delete(synchronize_session=False)
         # Modified: Use sa_delete() with await for async
         await db.execute(
-            sa_delete(TestResultModel).where(TestResultModel.test_session_id == session_id)
+            sa_delete(TestResultModel).where(TestResultModel.session_id == session_id)
         )
 
         # Delete session
@@ -78,6 +78,7 @@ async def delete_test_session(
             status_code=500,
             detail=f"Failed to delete test session: {str(e)}"
         )
+
 
 
 @router.post("/cleanup")
@@ -105,7 +106,7 @@ async def cleanup_old_results(
         # Original code: old_sessions = db.query(TestSessionModel).filter(...).all()
         # Modified: Use select() with await for async
         result = await db.execute(
-            select(TestSessionModel).where(TestSessionModel.started_at < cutoff_date)
+            select(TestSessionModel).where(TestSessionModel.start_time < cutoff_date)
         )
         old_sessions = result.scalars().all()
 
@@ -121,31 +122,30 @@ async def cleanup_old_results(
                         "project": s.project.name,
                         "station": s.station.name,
                         "serial_number": s.serial_number,
-                        "started_at": s.started_at.isoformat()
+                        "start_time": s.start_time.isoformat() if s.start_time else None
                     }
                     for s in old_sessions
                 ]
             }
         else:
             # Actually delete the sessions and results
-            deleted_count = 0
-            for session in old_sessions:
-                # Delete results first
-                # Original code: db.query(TestResultModel).filter(...).delete(synchronize_session=False)
-                # Modified: Use sa_delete() with await
+            # 修改(簡化): 使用 bulk .in_() 取代 N×1 迴圈，避免每個 session 發出兩次 DB round-trip
+            old_ids = [s.id for s in old_sessions]
+            if old_ids:
+                # Delete results first (referential integrity)
+                # Original code: per-session loop with await db.execute(sa_delete(...)) + await db.delete()
                 await db.execute(
-                    sa_delete(TestResultModel).where(TestResultModel.test_session_id == session.id)
+                    sa_delete(TestResultModel).where(TestResultModel.session_id.in_(old_ids))
                 )
-
-                # Delete session
-                await db.delete(session)
-                deleted_count += 1
+                await db.execute(
+                    sa_delete(TestSessionModel).where(TestSessionModel.id.in_(old_ids))
+                )
 
             await db.commit()
 
             return {
                 "dry_run": False,
-                "deleted_sessions": deleted_count,
+                "deleted_sessions": len(old_ids),
                 "cutoff_date": cutoff_date.isoformat()
             }
 
