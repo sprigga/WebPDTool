@@ -97,7 +97,7 @@
 
         <!-- Chart Section -->
         <el-card class="chart-card" shadow="never">
-          <div ref="chartRef" style="width: 100%; height: 300px"></div>
+          <div ref="chartRef" class="chart-container"></div>
         </el-card>
 
         <!-- Timeline -->
@@ -246,6 +246,10 @@ import { useTestHistory } from '@/composables/useTestHistory'
 import { useTestTimeline } from '@/composables/useTestTimeline'
 import { normalizeTaipeiDate } from '@/utils/dateHelpers'
 
+// Chart initialization delay to ensure DOM container has dimensions
+// (100ms balances between reliability and responsiveness)
+const CHART_INIT_DELAY_MS = 100
+
 // Stores
 const projectStore = useProjectStore()
 const authStore = useAuthStore()
@@ -291,7 +295,7 @@ watch(sessions, () => {
 // Initialize chart after DOM is ready
 const initChartWhenReady = async () => {
   await nextTick()
-  setTimeout(initChart, 100) // Small delay to ensure container has size
+  setTimeout(initChart, CHART_INIT_DELAY_MS)
 }
 
 // Build query params
@@ -454,6 +458,11 @@ onMounted(async () => {
 
 .chart-card {
   margin-bottom: 20px;
+}
+
+.chart-container {
+  width: 100%;
+  height: 300px;
 }
 
 .history-timeline {

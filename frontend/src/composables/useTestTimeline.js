@@ -1,5 +1,5 @@
 // frontend/src/composables/useTestTimeline.js
-import { ref, computed, onUnmounted, onBeforeMount } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import * as echarts from 'echarts'
 
