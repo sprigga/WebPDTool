@@ -1,97 +1,188 @@
 # WebPDTool Documentation
 
-This directory contains comprehensive documentation for the WebPDTool production testing application (refactored from PDTool4).
+**最後更新：** 2026-03-25
 
-## 📚 Documentation Structure
+---
+
+## 快速導航
+
+| 角色 | 推薦閱讀路徑 |
+|------|------------|
+| **新用戶** | [Docker 部署指南](./deployment/Docker部署指南.md) → [快速參考](./guides/quick_reference.md) → [測試計畫匯入](./guides/README_import_testplan.md) |
+| **開發者** | [架構索引](./architecture/ARCHITECTURE_INDEX.md) → [代碼分析](./CODEBASE_ANALYSIS.md) → [API 測試範例](./guides/api_testing_examples.md) |
+| **架構師** | [架構索引](./architecture/ARCHITECTURE_INDEX.md) → [完整後端分析](./architecture/backend_complete_analysis.md) → [模組關係](./architecture/backend_module_relationships.md) |
+
+---
+
+## 文件目錄
 
 ```
 docs/
-├── README.md                    # 本文件
-├── index.md                     # PDTool4 應用程式總覽
+├── README.md                  # 本文件 - 文件索引
+├── CODEBASE_ANALYSIS.md       # 完整代碼庫分析
+├── pytest-migration-summary.md # Pytest 遷移總結
 │
-├── analysis/                    # 技術分析報告
-├── architecture/                # 系統架構設計
-├── bugfix/                      # Bug 修復記錄
-├── code_review/                 # 程式碼審查
-├── deployment/                  # 部署配置指南
-├── features/                    # 功能說明文件
-├── guides/                      # 使用指南
-├── implementation/              # 實作記錄
-├── integration/                 # 系統整合
-├── issues/                      # 問題追蹤
-├── lowsheen_lib/               # 儀器驅動分析
-├── Measurement/                 # 測量模組文件
-├── plans/                       # 開發計劃
-├── Polish/                      # PDTool4 Polish 版本分析
-├── prompt/                      # 提示詞模板
-├── refactoring/                 # 重構記錄
-│   └── field-merging/          # 欄位合併重構
-└── testplan/                    # 測試計劃相關
+├── architecture/              # 系統架構
+│   ├── ARCHITECTURE_INDEX.md  # 架構文件主索引
+│   ├── backend_complete_analysis.md
+│   ├── backend_module_relationships.md
+│   ├── backend_request_flows.md
+│   ├── mermaid_diagrams.md
+│   ├── core_application.md
+│   ├── architecture_workflow.md
+│   └── modbus_architecture.md
+│
+├── guides/                   # 使用指南
+│   ├── quick_reference.md
+│   ├── README_import_testplan.md
+│   ├── api_testing_examples.md
+│   ├── command_field_usage.md
+│   ├── measurement_testplan_integration.md
+│   ├── INSTRUMENT_QUICK_START.md
+│   ├── component-integration-guide.md
+│   ├── use_result_debug_guide.md
+│   ├── uml_diagram.md
+│   ├── code_review.md
+│   ├── ralph_loop_usage.md
+│   ├── claude-md-and-memory-guide.md
+│   └── summary_best_practices.md
+│
+├── features/                 # 功能說明
+│   ├── automatic-report-generation.md
+│   ├── report-generation-quickstart.md
+│   ├── project-manage.md
+│   ├── instrument-management-ui.md
+│   ├── test-results-csv-export.md
+│   ├── test-session-bulk-delete.md
+│   ├── modbus-listener-integration.md
+│   ├── modbus-auto-trigger-test.md
+│   ├── configuration-architecture.md
+│   ├── testplan-parameters-architecture.md
+│   ├── dynamic-validation-types.md
+│   ├── validation-rules-migration.md
+│   ├── instrument-config-database-migration.md
+│   ├── alembic-docker-migration-guide.md
+│   ├── dynamic-parameter-form-usage.md
+│   ├── command-measurement-migration.md
+│   ├── console-comport-tcpip-validation.md
+│   ├── comport-instrument-field-analysis.md
+│   └── mdo34-measurement-implementation.md
+│
+├── deployment/               # 部署配置
+│   ├── Docker部署指南.md
+│   └── configuration_setup.md
+│
+├── integration/              # 系統整合
+│   ├── sfc_integration.md
+│   └── modbus_communication.md
+│
+├── Measurement/              # 測量模組
+│   ├── measurement_modules.md
+│   ├── Measurement_api.md
+│   ├── Power_Set_Read_Measurement.md
+│   ├── Other_Measurement.md
+│   ├── OPjudge_Measurement.md
+│   └── OneCSV_Atlas.md
+│
+├── lowsheen_lib/             # 儀器驅動分析（30+ 檔案）
+│   ├── README.md
+│   ├── INSTRUMENT_MIGRATION.md
+│   └── ... (儀器 API 分析)
+│
+├── bugfix/                   # Bug 修復記錄（40+ 檔案）
+├── refactoring/              # 重構記錄
+├── implementation/           # 實作記錄
+├── code_review/              # 代碼審查
+├── plans/                    # 開發計劃
+├── Polish/                   # PDTool4 Polish 版本分析
+├── prompt/                   # 提示詞模板
+└── testplan/                 # 測試計劃相關
 ```
 
-## 🚀 Quick Start
+---
 
-### For New Users
-1. [deployment/Docker部署指南.md](./deployment/Docker部署指南.md) - 系統部署
-2. [guides/quick_reference.md](./guides/quick_reference.md) - 快速參考
-3. [guides/README_import_testplan.md](./guides/README_import_testplan.md) - 測試計劃匯入
+## 依功能類別索引
 
-### For Developers
-1. [architecture/ARCHITECTURE_INDEX.md](./architecture/ARCHITECTURE_INDEX.md) - 系統架構
-2. [guides/api_testing_examples.md](./guides/api_testing_examples.md) - API 測試
-3. [refactoring/REFACTORING_SUMMARY.md](./refactoring/REFACTORING_SUMMARY.md) - 重構總結
+### 系統架構
 
-## 📂 Major Categories
+| 文件 | 描述 |
+|------|------|
+| [架構索引](./architecture/ARCHITECTURE_INDEX.md) | 架構文件主入口 |
+| [完整後端分析](./architecture/backend_complete_analysis.md) | 後端架構詳解 |
+| [模組依賴關係](./architecture/backend_module_relationships.md) | 模組間依賴 |
+| [請求流程](./architecture/backend_request_flows.md) | 請求序列圖 |
+| [Modbus 架構](./architecture/modbus_architecture.md) | Modbus TCP 模組 |
+| [代碼庫分析](./CODEBASE_ANALYSIS.md) | 完整代碼庫分析 |
 
-### 🏗️ System Architecture
-- [architecture/](./architecture/) - 系統架構、模組關係、資料流程
-- [index.md](./index.md) - PDTool4 應用程式總覽
+### 快速開始
 
-### 🔧 Features & Configuration
-- [features/](./features/) - 功能說明與架構
-- [deployment/](./deployment/) - 部署與配置指南
-- [guides/](./guides/) - 使用指南與最佳實踐
+| 文件 | 描述 |
+|------|------|
+| [Docker 部署指南](./deployment/Docker部署指南.md) | 使用 Docker Compose 部署 |
+| [快速參考](./guides/quick_reference.md) | 開發者快速參考手冊 |
+| [測試計畫匯入](./guides/README_import_testplan.md) | CSV 測試計畫匯入指南 |
+| [API 測試範例](./guides/api_testing_examples.md) | API 端點測試範例 |
 
-### 🔬 Measurement & Testing
-- [Measurement/](./Measurement/) - 測量模組架構與實作
-- [lowsheen_lib/](./lowsheen_lib/) - PDTool4 儀器驅動分析
-- [testplan/](./testplan/) - 測試計劃格式與工具
+### 測試與測量
 
-### 🔌 Integration
-- [integration/](./integration/) - 外部系統整合 (SFC, Modbus)
+| 文件 | 描述 |
+|------|------|
+| [測量模組架構](./Measurement/measurement_modules.md) | 測量抽象層架構 |
+| [測試計畫參數架構](./features/testplan-parameters-architecture.md) | 測試計畫參數系統 |
+| [測試整合指南](./guides/measurement_testplan_integration.md) | 測試整合指南 |
+| [Command 欄位使用](./guides/command_field_usage.md) | Command 欄位說明 |
 
-### 🛠️ Development & Maintenance
-- [analysis/](./analysis/) - 技術分析與診斷報告
-- [refactoring/](./refactoring/) - 重構計劃與執行記錄
-- [implementation/](./implementation/) - 功能實作記錄
-- [bugfix/](./bugfix/) - Bug 修復記錄
-- [code_review/](./code_review/) - 程式碼審查記錄
-- [issues/](./issues/) - 問題追蹤
+### 儀器驅動
 
-### 📋 Planning & Research
-- [plans/](./plans/) - 開發計劃與設計文件
-- [Polish/](./Polish/) - PDTool4 Polish 版本程式碼分析
+| 文件 | 描述 |
+|------|------|
+| [儀器庫說明](./lowsheen_lib/README.md) | PDTool4 儀器驅動庫索引 |
+| [儀器遷移指南](./lowsheen_lib/INSTRUMENT_MIGRATION.md) | 儀器驅動遷移指南 |
+| [儀器管理 UI](./features/instrument-management-ui.md) | 儀器管理界面 |
+| [儀器配置數據庫遷移](./features/instrument-config-database-migration.md) | 配置遷移 |
 
-## 📝 Recent Updates (2026-02-10)
+### 功能實作
 
-### Analysis & Refactoring
-- ✅ [analysis/field-usage-analysis.md](./analysis/field-usage-analysis.md) - execute_name/case_type 欄位使用分析
-- ✅ [refactoring/field-merging/merge-case-type-to-switch-mode.md](./refactoring/field-merging/merge-case-type-to-switch-mode.md) - 欄位合併實施報告
-- ✅ 統一使用 switch_mode 欄位,簡化前後端邏輯
+| 文件 | 描述 |
+|------|------|
+| [自動報告生成](./features/automatic-report-generation.md) | 自動報告功能 |
+| [專案管理](./features/project-manage.md) | 專案管理功能 |
+| [測試結果 CSV 匯出](./features/test-results-csv-export.md) | 結果匯出功能 |
+| [批量刪除會話](./features/test-session-bulk-delete.md) | 批量刪除功能 |
+| [動態驗證類型](./features/dynamic-validation-types.md) | 動態驗證系統 |
 
-## 📖 Documentation Guidelines
+### Modbus 整合
 
-### File Naming
-- 使用小寫字母和連字符: `feature-name.md`
-- 日期格式: `YYYY-MM-DD-description.md`
+| 文件 | 描述 |
+|------|------|
+| [Modbus 架構](./architecture/modbus_architecture.md) | Modbus TCP 模組架構 |
+| [Modbus 監聽器整合](./features/modbus-listener-integration.md) | 監聽器功能實作 |
+| [Modbus 自動觸發測試](./features/modbus-auto-trigger-test.md) | SN 讀取自動觸發（v0.8.0） |
 
-### Structure
-1. 標題和日期
-2. 問題/目標描述
-3. 解決方案/實作
-4. 測試驗證
-5. 結論
+### Bug 修復與重構
 
-## About PDTool4
+| 文件 | 描述 |
+|------|------|
+| [Bug 修復記錄](./bugfix/) | 40+ 修復記錄 |
+| [重構記錄](./refactoring/) | 系統重構歷史 |
+| [代碼審查](./code_review/) | 代碼審查記錄 |
 
-PDTool4 is a comprehensive production testing application built with PySide2 for testing power delivery devices. It provides a GUI interface for operators to run various tests on devices under test (DUT) and integrates with Shop Floor Control (SFC) systems for production tracking and process control.
+---
+
+## 關鍵統計
+
+| 指標 | 數值 |
+|------|------|
+| 後端代碼 | 24,190+ 行 |
+| API 端點 | ~60 個 |
+| 數據庫表 | 9 個 |
+| 測量類型 | 20+ 種 |
+| 儀器驅動 | 23 個 |
+
+---
+
+## 關於 PDTool4
+
+PDTool4 是一個使用 PySide2 構建的綜合生產測試應用程式，用於測試電源傳輸設備。它提供 GUI 介面供操作員執行各種測試，並與 Shop Floor Control (SFC) 系統整合進行生產追蹤和流程控制。
+
+WebPDTool 是 PDTool4 的完整網頁式重構版本，保持相容性的同時現代化架構。

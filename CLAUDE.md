@@ -87,13 +87,14 @@ python scripts/import_testplan.py \
 ### Backend Structure (`backend/app/`)
 
 - `main.py` — FastAPI app entry, middleware, router registration
-- `api/` — Route handlers: `auth`, `users`, `projects`, `stations`, `instruments`, `tests`, `measurements`, `dut_control`
+- `api/` — Route handlers: `auth`, `users`, `projects`, `stations`, `instruments`, `tests`, `measurements`, `dut_control`, `modbus`, `modbus_ws`
   - `results/` — 8 sub-routers: sessions, measurements, summary, export, cleanup, reports, analysis (descriptive stats per test item and per session)
   - `testplan/` — 4 sub-routers: queries, mutations, sessions, validation
 - `services/` — Business logic: `test_engine.py`, `measurement_service.py` (critical, ~46KB), `instrument_manager.py`, `instrument_connection.py`
   - `instruments/` — Driver registry (`INSTRUMENT_DRIVERS` dict) with 20+ hardware drivers
+  - `modbus/` — `modbus_manager.py` (singleton), `modbus_listener.py` (async pymodbus), `modbus_config.py`
 - `measurements/` — PDTool4 measurement abstraction layer (see below)
-- `models/` — SQLAlchemy ORM: users, projects, stations, test_plans, test_sessions, test_results, sfc_logs, instruments
+- `models/` — SQLAlchemy ORM: users, projects, stations, test_plans, test_sessions, test_results, sfc_logs, instruments, modbus_config
 - `repositories/` — Data access layer (currently: `instrument_repository.py`)
 - `core/` — `database.py`, `security.py`, `instrument_config.py`, `logging_v2.py`, `constants.py`
 - `config/instruments.py` — `MEASUREMENT_TEMPLATES` and `AVAILABLE_INSTRUMENTS` (see below)
@@ -260,8 +261,21 @@ BACKEND_PORT=9100
 MYSQL_PORT=33306
 ```
 
+## Modbus Integration
+
+`ModbusListenerService` polls a Modbus TCP device for coil/register values. `ModbusManager` is a singleton that manages one active listener per station.
+
+**WebSocket flow:** `TestMain.vue` connects to `WS /api/modbus/ws/{station_id}`. The backend broadcasts `sn_received` events when a serial number register changes; the frontend auto-triggers a test run on receipt.
+
+**Stale socket guard:** The frontend tracks a `modbusWsRef` counter — each new `WebSocket` increments it, and the `onopen`/`onmessage` handlers check the counter at call time to drop messages from closed sockets.
+
+**Key routes:**
+- `GET/POST /api/modbus/configs` — CRUD for `ModbusConfig` (station_id, host, port, register addresses)
+- `POST /api/modbus/start/{station_id}`, `POST /api/modbus/stop/{station_id}` — listener lifecycle
+- `WS /api/modbus/ws/{station_id}` — real-time events (`listener_started`, `listener_stopped`, `sn_received`, `result_written`)
+
 ## Known Limitations
 
 1. **Instrument Drivers:** Most implementations are stubs. Real hardware drivers need implementation in `backend/app/services/instruments/`.
-2. **Real-time Updates:** Uses polling; WebSocket not yet implemented.
-3. **Modbus/SFC Integration:** Stub implementations exist but require actual device connections.
+2. **Real-time Updates:** Modbus uses WebSocket. Test execution status still uses polling (GET `/api/tests/sessions/{id}/status`).
+3. **Modbus:** WebSocket and REST are implemented; requires actual Modbus TCP device for production use.

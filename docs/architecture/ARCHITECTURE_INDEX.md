@@ -101,6 +101,30 @@ WebPDTool is a web-based automated testing system refactored from the desktop ap
 
 ---
 
+### 7. [Modbus Architecture](./modbus_architecture.md)
+**Purpose:** Modbus TCP communication module documentation
+
+**Contents:**
+- Modbus module structure and organization
+- Database model (ModbusConfig) and schema definitions
+- Service layer architecture:
+  - ModbusListenerService - core listening service with state machine
+  - ModbusManager - singleton manager for all station listeners
+  - Configuration conversion utilities
+- API layer (REST + WebSocket)
+- Test engine integration (auto result writeback)
+- Complete execution flows:
+  - Listener startup
+  - SN reading and test triggering
+  - Simulation mode workflow
+- Comparison with PDTool4 (Qt vs asyncio)
+- Key implementation details (address conversion, re-entry guard, auto-reconnect)
+- Troubleshooting guide
+
+**When to read:** When working with Modbus TCP devices, implementing auto-trigger tests, or troubleshooting SN reading issues
+
+---
+
 ## Quick Reference
 
 ### Directory Structure
@@ -138,6 +162,8 @@ backend/app/
 | `test_sessions` | Test execution sessions | `id` | `project_id`, `station_id`, `user_id` |
 | `test_results` | Individual test results | `id` | `test_session_id`, `test_plan_id` |
 | `sfc_logs` | SFC web service logs | `id` | `test_session_id` |
+| `modbus_configs` | Modbus TCP configuration | `id` | `station_id` (UNIQUE) |
+| `instruments` | Instrument registry | `id` | - |
 
 ### API Endpoints Summary
 
@@ -255,13 +281,15 @@ stateDiagram-v2
 
 | Metric | Value |
 |--------|-------|
-| Total Backend Code | 24,190 lines |
-| API Endpoints | ~50 endpoints |
-| Database Tables | 7 tables |
+| Total Backend Code | 24,190+ lines |
+| API Endpoints | ~60 endpoints (including Modbus) |
+| Database Tables | 11 tables (incl. configurations, modbus_logs as pure SQL) |
+| ORM Models | 9 models |
 | Measurement Types | 13 types |
-| Instrument Drivers | 23 drivers |
+| Instrument Drivers | 27 drivers |
 | Limit Types | 7 types (PDTool4) |
 | Value Types | 3 types (PDTool4) |
+| Modbus Listeners | Per-station singleton |
 
 ---
 
