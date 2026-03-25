@@ -114,6 +114,8 @@ services:
       # 遮蓋 .env 檔案，避免 volume mount 將本機 .env (host.docker.internal:33306) 帶入容器
       # 容器內應使用 docker-compose environment 區塊中的環境變數
       - /dev/null:/app/.env:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - webpdtool-network
     depends_on:

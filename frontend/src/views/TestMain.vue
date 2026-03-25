@@ -633,7 +633,9 @@ const connectModbusWs = (stationId) => {
         // 只要 listener 在跑，就開啟自動模式
         modbusAutoMode.value = !!data.data.running
       } else if (data.type === 'sn_received' && data.sn) {
-        // listener 推送 SN — 自動填入並觸發測試
+        // listener 推送 SN — 代表 listener 一定在跑，確保 auto mode 開啟
+        modbusAutoMode.value = true
+        // 自動填入並觸發測試
         if (testing.value) {
           // 測試進行中，略過此次 SN（避免重複觸發）
           return
@@ -1166,6 +1168,17 @@ const executeMeasurements = async () => {
       `測試完成: ${finalResult.value}${loopText} (通過: ${passCount}, 失敗: ${failCount}, 錯誤: ${errorCount})`,
       finalResult.value === 'PASS' ? 'success' : 'error'
     )
+
+    // Modbus Auto-Trigger: 寫回測試結果 (Test Result address)
+    // TestMain 直接在前端執行量測，不經過 test_engine，需在此手動通知 Modbus listener
+    // 注意: 直接以 WS 連線狀態判斷，不依賴 modbusAutoMode flag（flag 可能因重連時序而不準確）
+    if (modbusWs && modbusWs.readyState === WebSocket.OPEN) {
+      modbusWs.send(JSON.stringify({
+        action: 'write_result',
+        passed: finalResult.value === 'PASS'
+      }))
+      addStatusMessage(`Modbus 結果已回寫: ${finalResult.value}`, 'info')
+    }
 
   } catch (error) {
     console.error('Failed to execute measurements:', error)

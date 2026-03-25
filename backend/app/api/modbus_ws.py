@@ -132,17 +132,39 @@ async def start_modbus_listener_ws(station_id: int, db: AsyncSession):
             })
         )
 
+    def on_connected(connected: bool):
+        """Callback when Modbus TCP connection state changes"""
+        asyncio.create_task(
+            ws_manager.send_to_station(station_id, {
+                "type": "connected_change",
+                "connected": connected,
+            })
+        )
+
+    def on_cycle(cycle_count: int):
+        """Callback each polling cycle to keep cycle_count real-time"""
+        asyncio.create_task(
+            ws_manager.send_to_station(station_id, {
+                "type": "cycle_update",
+                "cycle_count": cycle_count,
+            })
+        )
+
     # Start listener
     try:
         await modbus_manager.start_listener(
             config_schema,
             on_sn_received=on_sn_received,
-            on_error=on_error
+            on_error=on_error,
+            on_connected=on_connected,
+            on_cycle=on_cycle,
         )
 
+        # Unified response format: {"type": "status", "data": {"running": bool, ...}}
+        status = modbus_manager.get_status(station_id) or {"running": True}
         await ws_manager.send_to_station(station_id, {
             "type": "status",
-            "status": "running",
+            "data": status,
             "message": "Modbus listener started"
         })
 
@@ -185,9 +207,10 @@ async def modbus_websocket(
 
             elif action == "stop":
                 await modbus_manager.stop_listener(station_id)
+                # Unified response format: {"type": "status", "data": {"running": bool, ...}}
                 await websocket.send_json({
                     "type": "status",
-                    "status": "stopped",
+                    "data": {"running": False},
                     "message": "Modbus listener stopped"
                 })
 
@@ -197,6 +220,44 @@ async def modbus_websocket(
                     "type": "status",
                     "data": status
                 })
+
+            elif action == "inject_sn":
+                # Simulation mode: inject a SN manually
+                sn = data.get("sn", "")
+                listener = modbus_manager.get_listener(station_id)
+                if listener and listener.simulation_mode:
+                    await listener.inject_sn(sn)
+                    await websocket.send_json({
+                        "type": "status",
+                        "message": f"SN injected: {sn}"
+                    })
+                else:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "inject_sn only available in simulation mode with active listener"
+                    })
+
+            elif action == "write_result":
+                # Write test PASS/FAIL result back to Modbus device
+                # Called by TestMain.vue after test completes in modbusAutoMode
+                passed = data.get("passed")
+                if passed is None:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "write_result requires 'passed' field (bool)"
+                    })
+                else:
+                    written = await modbus_manager.write_test_result(station_id, bool(passed))
+                    if written:
+                        await websocket.send_json({
+                            "type": "status",
+                            "message": f"Test result written: {'PASS' if passed else 'FAIL'}"
+                        })
+                    else:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "No active Modbus listener for this station"
+                        })
 
             elif action == "unsubscribe":
                 await websocket.send_json({

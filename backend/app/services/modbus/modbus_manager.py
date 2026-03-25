@@ -28,7 +28,9 @@ class ModbusManager:
         self,
         config: ModbusConfigCreate,
         on_sn_received: Optional[callable] = None,
-        on_error: Optional[callable] = None
+        on_error: Optional[callable] = None,
+        on_connected: Optional[callable] = None,
+        on_cycle: Optional[callable] = None,
     ) -> ModbusListenerService:
         """
         Start a Modbus listener for a station
@@ -37,6 +39,8 @@ class ModbusManager:
             config: Modbus configuration
             on_sn_received: Callback when SN is received
             on_error: Callback when error occurs
+            on_connected: Callback when TCP connection state changes (bool)
+            on_cycle: Callback each polling cycle with current cycle_count (int)
 
         Returns:
             ModbusListenerService instance
@@ -55,6 +59,10 @@ class ModbusManager:
                 listener.on_sn_received = on_sn_received
             if on_error:
                 listener.on_error = on_error
+            if on_connected:
+                listener.on_connected = on_connected
+            if on_cycle:
+                listener.on_cycle = on_cycle
 
             # Start listener
             await listener.start()

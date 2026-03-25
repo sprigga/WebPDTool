@@ -267,11 +267,26 @@ const connectWebSocket = () => {
     const data = JSON.parse(event.data)
     if (data.type === 'status') {
       if (data.data) {
+        // Unified status format from get_status / start / stop
         listenerStatus.value = data.data
         listenerRunning.value = data.data.running
       }
     } else if (data.type === 'sn_received') {
       ElMessage.success(`SN received: ${data.sn}`)
+      // 即時更新 Last SN 顯示，不需等待下次 get_status
+      if (listenerStatus.value) {
+        listenerStatus.value.last_sn = data.sn
+      }
+    } else if (data.type === 'connected_change') {
+      // 即時更新 Connected 顯示，TCP 連線狀態改變時觸發
+      if (listenerStatus.value) {
+        listenerStatus.value.connected = data.connected
+      }
+    } else if (data.type === 'cycle_update') {
+      // 即時更新 Cycle Count，每次輪詢完成後觸發
+      if (listenerStatus.value) {
+        listenerStatus.value.cycle_count = data.cycle_count
+      }
     } else if (data.type === 'error' && data.message) {
       ElMessage.error(data.message)
     }

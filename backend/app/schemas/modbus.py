@@ -39,13 +39,16 @@ class ModbusConfigBase(BaseModel):
     )
     @classmethod
     def validate_hex_string(cls, v: str) -> str:
-        """Validate hex string format"""
-        if not (v.startswith('0x') or v.startswith('0X')):
-            raise ValueError('Hex address must start with 0x or 0X')
-        try:
-            int(v, 16)
-        except ValueError:
-            raise ValueError(f'Invalid hex string: {v}')
+        """Validate hex string format. Accepts 0x-prefixed hex or plain decimal strings."""
+        if v.startswith('0x') or v.startswith('0X'):
+            try:
+                int(v, 16)
+            except ValueError:
+                raise ValueError(f'Invalid hex string: {v}')
+        else:
+            # Accept plain decimal strings stored by legacy data (e.g. "400001")
+            if not v.isdigit():
+                raise ValueError('Hex address must start with 0x or 0X, or be a plain decimal number')
         return v
 
 

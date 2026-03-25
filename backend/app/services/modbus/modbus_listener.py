@@ -56,6 +56,9 @@ class ModbusListenerService:
         self.running = False
         self.connected = False
         self._task: Optional[asyncio.Task] = None
+        self._testing = False  # True between sn_received and write_test_result
+        self._testing_since: Optional[datetime] = None  # timestamp when _testing was set
+        self._testing_timeout_seconds = 300  # auto-clear _testing after 5 min if write_result never arrives
 
         # Statistics
         self.cycle_count = 0
@@ -67,6 +70,8 @@ class ModbusListenerService:
         self.on_sn_received: Optional[Callable[[str], None]] = None
         self.on_error: Optional[Callable[[str], None]] = None
         self.on_status_change: Optional[Callable[[str], None]] = None
+        self.on_connected: Optional[Callable[[bool], None]] = None  # (connected: bool)
+        self.on_cycle: Optional[Callable[[int], None]] = None  # (cycle_count: int)
 
         # Modbus register configuration (PDTool4 compatible format)
         self.modbus_scheme = modbus_config_to_dict(
@@ -117,18 +122,62 @@ class ModbusListenerService:
             self.client = None
 
         self.connected = False
+        self._testing = False
+        self._testing_since = None
         logger.info(f"Modbus listener stopped for station {self.station_id}")
+
+    async def inject_sn(self, sn: str) -> None:
+        """
+        Inject a SN directly (simulation mode only).
+
+        Called by the WebSocket endpoint when action='inject_sn' is received.
+        Fires on_sn_received if the listener is running and in simulation mode.
+        """
+        if not self.simulation_mode:
+            logger.warning(f"inject_sn called on station {self.station_id} but simulation_mode is off, ignoring")
+            return
+        if not self.running:
+            logger.warning(f"inject_sn called on station {self.station_id} but listener is not running, ignoring")
+            return
+        self.last_sn = sn
+        if self.on_sn_received:
+            self.on_sn_received(sn)
 
     async def _run_async(self) -> None:
         """
         Main async listening loop
 
-        Polls Modbus device for SN, handles connection errors
+        Polls Modbus device for SN, handles connection errors.
+        In simulation_mode, skips real TCP connection and idles (SNs are injected
+        via inject_sn / WS action 'inject_sn').
         """
-        from pymodbus.client import AsyncModbusTcpClient
         from pymodbus.exceptions import ModbusException
 
         delay_time = int(self.modbus_scheme["Delay"])
+
+        # --- Simulation mode: no real TCP client needed ---
+        if self.simulation_mode:
+            try:
+                # Mark as "connected" immediately so status indicators light up
+                self.connected = True
+                if self.on_connected:
+                    self.on_connected(True)
+                logger.info(f"Modbus listener station {self.station_id}: simulation mode, waiting for inject_sn")
+
+                while self.running:
+                    self.cycle_count += 1
+                    if self.on_cycle:
+                        self.on_cycle(self.cycle_count)
+                    await asyncio.sleep(delay_time)
+
+            except asyncio.CancelledError:
+                logger.info(f'Simulation listener for station {self.station_id} cancelled gracefully')
+            finally:
+                self.connected = False
+            return
+        # --- End simulation mode ---
+
+        from pymodbus.client import AsyncModbusTcpClient
 
         try:
             # Create client in async context
@@ -138,49 +187,70 @@ class ModbusListenerService:
                     port=self.server_port
                 )
 
-            # Connect to device
-            if not self.client.connected:
-                await self.client.connect()
-
-            # Main polling loop
+            # Main polling loop — connect handled inside loop for reconnect support
             while self.running:
-                # Check connection
+                # Check connection, reconnect if needed
                 if not self.client.connected:
-                    errmsg = f"Cannot connect to Modbus server {self.server_host}:{self.server_port}"
-                    self.last_error = errmsg
-                    if self.on_error:
-                        self.on_error(errmsg)
-                    logger.error(errmsg)
-                    # Try to reconnect
-                    await self.client.connect()
+                    connected = await self.client.connect()
+                    if not connected:
+                        errmsg = f"Cannot connect to Modbus server {self.server_host}:{self.server_port}"
+                        self.last_error = errmsg
+                        if self.connected:
+                            self.connected = False
+                            if self.on_connected:
+                                self.on_connected(False)
+                        # self.connected = False  # moved into the if-block above
+                        if self.on_error:
+                            self.on_error(errmsg)
+                        logger.error(errmsg)
+                        # Wait before retry to avoid tight reconnect loop
+                        await asyncio.sleep(delay_time)
+                        continue
 
-                if self.client.connected:
+                # Notify on first connection (was False, now True)
+                if not self.connected:
                     self.connected = True
+                    if self.on_connected:
+                        self.on_connected(True)
+                # self.connected = True  # moved into the if-block above
 
-                    try:
-                        # Read ready status
-                        ready_status = await self._read_registers_async()
+                try:
+                    # Auto-clear _testing if write_result never arrived within timeout
+                    if self._testing and self._testing_since:
+                        elapsed = (datetime.utcnow() - self._testing_since).total_seconds()
+                        if elapsed > self._testing_timeout_seconds:
+                            logger.warning(
+                                f"Station {self.station_id}: _testing timed out after {elapsed:.0f}s, "
+                                f"clearing flag to allow next SN"
+                            )
+                            self._testing = False
+                            self._testing_since = None
 
-                        if ready_status == 0x01:
-                            # SN ready, read it
-                            await self._read_sn_async()
+                    # Read ready status
+                    ready_status = await self._read_registers_async()
 
-                        # Clear error on success
-                        self.last_error = None
+                    if ready_status == 0x01:
+                        # SN ready, read it
+                        await self._read_sn_async()
 
-                        self.cycle_count += 1
-                        logger.debug(f"Device {self.device_id} listening cycle {self.cycle_count}")
+                    # Clear error on success
+                    self.last_error = None
 
-                    except ModbusException as e:
-                        logger.error(f"Modbus operation error: {e}")
-                        self.last_error = str(e)
-                        if self.on_error:
-                            self.on_error(str(e))
-                    except Exception as e:
-                        logger.error(f"Unexpected error: {e}")
-                        self.last_error = str(e)
-                        if self.on_error:
-                            self.on_error(str(e))
+                    self.cycle_count += 1
+                    logger.debug(f"Device {self.device_id} listening cycle {self.cycle_count}")
+                    if self.on_cycle:
+                        self.on_cycle(self.cycle_count)
+
+                except ModbusException as e:
+                    logger.error(f"Modbus operation error: {e}")
+                    self.last_error = str(e)
+                    if self.on_error:
+                        self.on_error(str(e))
+                except Exception as e:
+                    logger.error(f"Unexpected error: {e}")
+                    self.last_error = str(e)
+                    if self.on_error:
+                        self.on_error(str(e))
 
                 # Wait before next poll
                 await asyncio.sleep(delay_time)
@@ -211,14 +281,26 @@ class ModbusListenerService:
             rr = await self.client.read_holding_registers(
                 address=address,
                 count=count,
-                slave=self.device_id
+                device_id=self.device_id
             )
 
             if rr.isError():
                 logger.warning('Unable to read status data.')
                 return None
 
-            return rr.registers[0] if rr.registers else None
+            value = rr.registers[0] if rr.registers else None
+            if value is not None:
+                logger.info(
+                    f"[Modbus] {self.server_host}:{self.server_port} "
+                    f"ReadHoldingReg addr=0x{address:04X} count={count} "
+                    f"-> 0x{value:04X} ({value})"
+                )
+            else:
+                logger.info(
+                    f"[Modbus] {self.server_host}:{self.server_port} "
+                    f"ReadHoldingReg addr=0x{address:04X} count={count} -> (no data)"
+                )
+            return value
 
         except ModbusException as e:
             logger.error(f'Modbus error reading status: {e}')
@@ -228,11 +310,17 @@ class ModbusListenerService:
         """
         Read SN from Modbus device and emit callback
         """
+        # Guard: skip if previous test result has not been written back yet
+        if self._testing:
+            logger.debug(f"Station {self.station_id}: _read_sn skipped, previous test still in progress")
+            return
+
         from pymodbus.exceptions import ModbusException
 
         sn_address = self._str2hex(self.modbus_scheme["read_sn_Add"])
         sn_length = self._str2hex(self.modbus_scheme["read_sn_Len"])
 
+        ready_status_address = self._str2hex(self.modbus_scheme["ready_status_Add"])
         test_status_address = self._str2hex(self.modbus_scheme["test_status_Add"])
         in_testing_value = self._str2hex(self.modbus_scheme["in_testing_Val"])
 
@@ -241,7 +329,7 @@ class ModbusListenerService:
             rr = await self.client.read_holding_registers(
                 address=sn_address,
                 count=sn_length,
-                slave=self.device_id
+                device_id=self.device_id
             )
 
             if rr.isError():
@@ -250,11 +338,23 @@ class ModbusListenerService:
 
             registers_sn = rr.registers
 
+            # Issue 1 fix: clear ready_status (write 0x00) so device stops
+            # asserting ready and prevents re-triggering on next poll cycle
+            wr_ready = await self.client.write_register(
+                address=ready_status_address,
+                value=0x00,
+                device_id=self.device_id
+            )
+            if wr_ready.isError():
+                logger.warning("Failed to clear ready_status register.")
+            else:
+                logger.info(f"Cleared ready_status register {ready_status_address}")
+
             # Write test status = "in testing"
             wr = await self.client.write_register(
                 address=test_status_address,
                 value=in_testing_value,
-                slave=self.device_id
+                device_id=self.device_id
             )
 
             if wr.isError():
@@ -269,7 +369,7 @@ class ModbusListenerService:
             wr2 = await self.client.write_register(
                 address=test_result_address,
                 value=test_no_result,
-                slave=self.device_id
+                device_id=self.device_id
             )
 
             if wr2.isError():
@@ -281,6 +381,10 @@ class ModbusListenerService:
             # Decode SN from registers
             ascii_string = self._decode_sn(registers_sn or [])
             self.last_sn = ascii_string
+
+            # Mark testing in progress — prevents re-entry until write_test_result clears it
+            self._testing = True
+            self._testing_since = datetime.utcnow()
 
             # Emit callback (replaces Qt Signal)
             if self.on_sn_received:
@@ -298,6 +402,24 @@ class ModbusListenerService:
         Args:
             passed: True for PASS, False for FAIL
         """
+        # Simulation mode: no TCP client, skip hardware write
+        if self.simulation_mode:
+            logger.info(
+                f"[Simulation] write_test_result skipped for station {self.station_id}: "
+                f"{'PASS' if passed else 'FAIL'}"
+            )
+            self._testing = False
+            self._testing_since = None
+            return
+
+        if not self.client or not self.client.connected:
+            logger.warning(
+                f"write_test_result: no connected client for station {self.station_id}, skipping"
+            )
+            self._testing = False
+            self._testing_since = None
+            return
+
         from pymodbus.exceptions import ModbusException
 
         test_result_address = self._str2hex(self.modbus_scheme["test_result_Add"])
@@ -311,7 +433,7 @@ class ModbusListenerService:
             wr1 = await self.client.write_register(
                 address=test_status_address,
                 value=test_finished_value,
-                slave=self.device_id
+                device_id=self.device_id
             )
 
             if wr1.isError():
@@ -326,7 +448,7 @@ class ModbusListenerService:
             wr2 = await self.client.write_register(
                 address=test_result_address,
                 value=result_value,
-                slave=self.device_id
+                device_id=self.device_id
             )
 
             if wr2.isError():
@@ -338,7 +460,7 @@ class ModbusListenerService:
             rr = await self.client.read_holding_registers(
                 address=test_result_address,
                 count=result_length,
-                slave=self.device_id
+                device_id=self.device_id
             )
 
             if not rr.isError() and rr.registers:
@@ -348,6 +470,10 @@ class ModbusListenerService:
 
         except ModbusException as e:
             logger.error(f'Modbus error in write_test_result: {e}')
+        finally:
+            # Clear testing flag so next SN can be accepted on next poll cycle
+            self._testing = False
+            self._testing_since = None
 
     async def reset_ready_status(self) -> None:
         """
@@ -364,7 +490,7 @@ class ModbusListenerService:
             wr = await self.client.write_register(
                 address=ready_status_address,
                 value=0x0,
-                slave=self.device_id
+                device_id=self.device_id
             )
             if wr.isError():
                 logger.warning("Failed to reset ready status.")
@@ -372,8 +498,25 @@ class ModbusListenerService:
             logger.error(f'Modbus error resetting ready status: {e}')
 
     def _str2hex(self, hex_str: str) -> int:
-        """Convert hex string to integer"""
-        return int(hex_str, 16)
+        """
+        Convert address/value strings to pymodbus integers.
+
+        Two formats stored in DB:
+          - Register addresses: decimal ModbusTools notation, no '0x' prefix
+              e.g. "400022" -> holding register 22 -> wire address 21 (400001-based)
+          - Value fields: hex strings with '0x' prefix
+              e.g. "0x01" -> 1 (returned as-is)
+
+        Old code: int(hex_str, 16) on "400022" -> 0x400022 (wrong!)
+        """
+        # Hex value strings (e.g. "0x01", "0x00") — parse as hex, return as-is
+        if hex_str.lower().startswith("0x"):
+            return int(hex_str, 16)
+        # Decimal ModbusTools register addresses (e.g. "400022") — convert to 0-based wire
+        val = int(hex_str, 10)
+        if val >= 400001:
+            return val - 400001
+        return val
 
     def _byte_offset(self, decimal_number: int) -> tuple:
         """

@@ -81,14 +81,26 @@ onMounted(() => {
   }
 
   websocket.value.onmessage = (event) => {
-    const data = JSON.parse(event.data)
-    if (data.type === 'status' && data.data) {
-      status.value = data.data
+    try {
+      const data = JSON.parse(event.data)
+      if (data.type === 'status') {
+        // data.data 可能是 null（listener 未啟動）或物件（listener 已啟動）
+        status.value = data.data || null
+      } else if (data.type === 'connected_change' && status.value) {
+        // listener 已啟動後的即時連線狀態更新
+        status.value = { ...status.value, connected: data.connected }
+      } else if (data.type === 'cycle_update' && status.value) {
+        // 即時 cycle_count 更新
+        status.value = { ...status.value, cycle_count: data.cycle_count }
+      }
+    } catch (e) {
+      console.warn('Modbus status WS: invalid message', e)
     }
   }
 
   websocket.value.onerror = () => {
     console.warn('Modbus status WebSocket error')
+    status.value = null
   }
 })
 
