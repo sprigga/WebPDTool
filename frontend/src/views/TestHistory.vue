@@ -95,6 +95,11 @@
           </el-col>
         </el-row>
 
+        <!-- Chart Section -->
+        <el-card class="chart-card" shadow="never">
+          <div ref="chartRef" style="width: 100%; height: 300px"></div>
+        </el-card>
+
         <!-- Timeline -->
         <el-timeline class="history-timeline">
           <el-timeline-item
@@ -231,13 +236,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import AppNavBar from '@/components/AppNavBar.vue'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
 import { queryTestSessions, getSessionWithResults } from '@/api/testResults'
 import { useTestHistory } from '@/composables/useTestHistory'
+import { useTestTimeline } from '@/composables/useTestTimeline'
 import { normalizeTaipeiDate } from '@/utils/dateHelpers'
 
 // Stores
@@ -246,6 +252,9 @@ const authStore = useAuthStore()
 
 // Composable
 const { sessions, sessionsByDate, dailyStats, loading, fetchSessions } = useTestHistory()
+
+// Timeline chart composable
+const { chartRef, initChart, updateChart } = useTestTimeline(sessions)
 
 // Filters
 const dateRange = ref([])
@@ -273,6 +282,17 @@ const passRate = computed(() => {
   if (sessions.value.length === 0) return 0
   return ((passCount.value / sessions.value.length) * 100).toFixed(1)
 })
+
+// Update chart when sessions change
+watch(sessions, () => {
+  updateChart()
+}, { deep: true })
+
+// Initialize chart after DOM is ready
+const initChartWhenReady = async () => {
+  await nextTick()
+  setTimeout(initChart, 100) // Small delay to ensure container has size
+}
 
 // Build query params
 const buildQueryParams = () => {
@@ -391,6 +411,9 @@ onMounted(async () => {
     ]
 
     await loadSessions()
+
+    // Initialize chart after data loads
+    await initChartWhenReady()
   } catch (error) {
     ElMessage.error('初始化失敗')
   }
@@ -427,6 +450,10 @@ onMounted(async () => {
 
 .stats-row {
   margin-bottom: 30px;
+}
+
+.chart-card {
+  margin-bottom: 20px;
 }
 
 .history-timeline {
