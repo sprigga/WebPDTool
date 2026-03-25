@@ -152,7 +152,76 @@
     <!-- Results Dialog (reuse from TestResults.vue) -->
     <el-dialog v-model="showResultsDialog" title="測試結果詳情" width="90%" top="5vh">
       <div v-if="selectedSession">
-        <!-- Results content will be added in Task 3 -->
+        <el-descriptions :column="2" border style="margin-bottom: 20px">
+          <el-descriptions-item label="Session ID">
+            {{ selectedSession.id }}
+          </el-descriptions-item>
+          <el-descriptions-item label="序號">
+            {{ selectedSession.serial_number }}
+          </el-descriptions-item>
+          <el-descriptions-item label="站別">
+            {{ getStationName(selectedSession) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="測試計劃">
+            {{ selectedSession.test_plan_name || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="最終結果">
+            <el-tag :type="getResultTagType(selectedSession.final_result)">
+              {{ selectedSession.final_result || '進行中' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="測試時間">
+            {{ formatDateTime(selectedSession.start_time) }}
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <!-- Loading state for results -->
+        <el-skeleton v-if="resultsLoading" :rows="5" animated />
+
+        <!-- Empty state for results -->
+        <el-empty
+          v-else-if="!resultsLoading && sessionResults.length === 0"
+          description="此 Session 無測試項目明細"
+        />
+
+        <!-- Results table -->
+        <el-table
+          v-else
+          :data="sessionResults"
+          stripe
+          max-height="500"
+        >
+          <el-table-column prop="item_no" label="項次" width="80" />
+          <el-table-column prop="item_name" label="測試項目" min-width="150" />
+          <el-table-column prop="measured_value" label="測量值" min-width="200">
+            <template #default="{ row }">
+              <span style="white-space: pre-wrap; word-break: break-all;">
+                {{ row.measured_value }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="限制值" width="150">
+            <template #default="{ row }">
+              <span v-if="row.lower_limit !== null || row.upper_limit !== null">
+                {{ row.lower_limit ?? '-' }} ~ {{ row.upper_limit ?? '-' }}
+              </span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="unit" label="單位" width="80" />
+          <el-table-column label="結果" width="100">
+            <template #default="{ row }">
+              <el-tag :type="getResultTagType(row.result)">
+                {{ row.result }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="執行時間" width="120">
+            <template #default="{ row }">
+              {{ row.execution_duration_ms != null ? `${(row.execution_duration_ms / 1000).toFixed(3)} s` : '-' }}
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
       <template #footer>
         <el-button @click="showResultsDialog = false">關閉</el-button>
@@ -285,6 +354,21 @@ const formatTime = (dateStr) => {
   if (!normalized) return '-'
   const date = new Date(normalized)
   return date.toLocaleTimeString('zh-TW', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return '-'
+  const normalized = /[Zz]|[+-]\d{2}:?\d{2}$/.test(dateStr) ? dateStr : dateStr + '+08:00'
+  const date = new Date(normalized)
+  return date.toLocaleString('zh-TW', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit'
