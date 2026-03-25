@@ -26,7 +26,9 @@ const routes = [
   },
   {
     path: '/history',
-    redirect: '/results'
+    name: 'TestHistory',
+    component: () => import('@/views/TestHistory.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/results',
