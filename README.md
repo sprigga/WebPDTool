@@ -250,51 +250,51 @@ flowchart TB
 
 #### 登入頁面 (Login)
 
-![登入頁面](.playwright-mcp/screenshot/login.png)
+![登入頁面](screenshots/login.png)
 
 #### 登入後選擇專案與站別
 
-![選擇專案與站別](.playwright-mcp/screenshot/login_select_project.png)
+![選擇專案與站別](screenshots/login_select_project.png)
 
 #### 測試主畫面 (TestMain)
 
-![測試主畫面](.playwright-mcp/screenshot/testmain.png)
+![測試主畫面](screenshots/testmain.png)
 
 #### 測試執行 (TestExecution)
 
-![測試執行](.playwright-mcp/screenshot/test_execution.png)
+![測試執行](screenshots/test_execution.png)
 
 #### 測試計劃管理 (TestPlanManage)
 
-![測試計劃管理](.playwright-mcp/screenshot/testplan_manage.png)
+![測試計劃管理](screenshots/testplan_manage.png)
 
 #### 測試結果查詢 (TestResults)
 
-![測試結果查詢](.playwright-mcp/screenshot/test_results.png)
+![測試結果查詢](screenshots/test_results.png)
 
 #### 報表分析 (ReportAnalysis)
 
-![報表分析](.playwright-mcp/screenshot/report_analysis.png)
+![報表分析](screenshots/report_analysis.png)
 
 #### 專案管理 (ProjectManage)
 
-![專案管理](.playwright-mcp/screenshot/project_manage.png)
+![專案管理](screenshots/project_manage.png)
 
 #### 使用者管理 (UserManage)
 
-![使用者管理](.playwright-mcp/screenshot/user_manage.png)
+![使用者管理](screenshots/user_manage.png)
 
 #### 儀器管理 (InstrumentManage)
 
-![儀器管理](.playwright-mcp/screenshot/instrument_manage.png)
+![儀器管理](screenshots/instrument_manage.png)
 
 #### Modbus 設定 (ModbusConfig)
 
-![Modbus 設定](.playwright-mcp/screenshot/modbus_config.png)
+![Modbus 設定](screenshots/modbus_config.png)
 
 #### 系統設定 (SystemConfig) — 預留功能
 
-![系統設定](.playwright-mcp/screenshot/system_config.png)
+![系統設定](screenshots/system_config.png)
 
 ---
 

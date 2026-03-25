@@ -236,8 +236,17 @@ htmlcov/
 # Terminal Paste Image folder
 .cp-images/
 
+# Playwright MCP server cache (console logs, page screenshots)
+.playwright-mcp/
+
 # Git worktrees
 .worktrees/
 
+# Mermaid diagram cache (generated temporary files)
+mermaid_diagram/
+
 # Test reports generated during execution
 backend/reports/
+
+# Documentation screenshots that are redundant
+docs/test_results_query_page.png
