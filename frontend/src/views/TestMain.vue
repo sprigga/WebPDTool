@@ -620,6 +620,7 @@ const connectModbusWs = (stationId) => {
   const myWs = ws  // 閉包捕捉，用於 stale socket 檢查
 
   ws.onopen = () => {
+    if (modbusWs !== myWs) return  // stale socket，忽略
     ws.send(JSON.stringify({ action: 'get_status' }))
   }
 
