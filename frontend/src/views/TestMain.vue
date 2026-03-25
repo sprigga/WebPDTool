@@ -617,34 +617,42 @@ const connectModbusWs = (stationId) => {
 
   const ws = modbusApi.connectWebSocket(stationId)
   modbusWs = ws
+  const myWs = ws  // 閉包捕捉，用於 stale socket 檢查
 
   ws.onopen = () => {
     ws.send(JSON.stringify({ action: 'get_status' }))
   }
 
   ws.onmessage = (event) => {
-    const data = JSON.parse(event.data)
+    if (modbusWs !== myWs) return  // stale socket，忽略
+    try {
+      const data = JSON.parse(event.data)
 
-    if (data.type === 'status' && data.data) {
-      // 只要 listener 在跑，就開啟自動模式
-      modbusAutoMode.value = !!data.data.running
-    } else if (data.type === 'sn_received' && data.sn) {
-      // listener 推送 SN — 自動填入並觸發測試
-      if (testing.value) {
-        // 測試進行中，略過此次 SN（避免重複觸發）
-        return
+      if (data.type === 'status' && data.data) {
+        // 只要 listener 在跑，就開啟自動模式
+        modbusAutoMode.value = !!data.data.running
+      } else if (data.type === 'sn_received' && data.sn) {
+        // listener 推送 SN — 自動填入並觸發測試
+        if (testing.value) {
+          // 測試進行中，略過此次 SN（避免重複觸發）
+          return
+        }
+        barcode.value = data.sn
+        addStatusMessage(`Modbus 收到 SN: ${data.sn}，自動啟動測試`, 'info')
+        handleStartTest()
       }
-      barcode.value = data.sn
-      addStatusMessage(`Modbus 收到 SN: ${data.sn}，自動啟動測試`, 'info')
-      handleStartTest()
+    } catch (e) {
+      console.warn('Modbus WS: invalid message', e)
     }
   }
 
   ws.onerror = () => {
+    if (modbusWs !== myWs) return  // stale socket，忽略
     modbusAutoMode.value = false
   }
 
   ws.onclose = () => {
+    if (modbusWs !== myWs) return  // stale socket，忽略
     modbusAutoMode.value = false
   }
 }
