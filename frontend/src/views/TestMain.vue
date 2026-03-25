@@ -112,6 +112,14 @@
               :station-id="currentStation.id"
               style="margin-left: 8px; vertical-align: middle"
             />
+            <el-tag
+              v-if="modbusAutoMode"
+              type="success"
+              size="small"
+              style="margin-left: 6px; vertical-align: middle"
+            >
+              Modbus Auto
+            </el-tag>
           </div>
         </el-col>
         <el-col :span="8">
@@ -457,6 +465,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useProjectStore } from '@/stores/project'
 import ModbusStatusIndicator from '@/components/ModbusStatusIndicator.vue'
+import { modbusApi } from '@/api/modbus'
 // 原有程式碼: 導入測試相關 API
 // 修改: 新增 createTestResult 和 completeTestSession API，用於保存測試結果到資料庫
 import {
@@ -582,6 +591,10 @@ const usedInstruments = ref({}) // 蒐集有使用的儀器 {'儀器位置':'儀
 // Polling
 let statusPollInterval = null
 
+// Modbus auto-trigger
+let modbusWs = null
+const modbusAutoMode = ref(false)  // 是否已連上 Modbus listener（有在跑才為 true）
+
 // Computed
 const progressPercentage = computed(() => {
   if (!testStatus.value.total_items) return 0
@@ -597,6 +610,53 @@ const progressStatus = computed(() => {
 })
 
 // Methods
+
+// Modbus WebSocket — 自動觸發測試
+const connectModbusWs = (stationId) => {
+  disconnectModbusWs()  // 先關掉舊的
+
+  const ws = modbusApi.connectWebSocket(stationId)
+  modbusWs = ws
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ action: 'get_status' }))
+  }
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data)
+
+    if (data.type === 'status' && data.data) {
+      // 只要 listener 在跑，就開啟自動模式
+      modbusAutoMode.value = !!data.data.running
+    } else if (data.type === 'sn_received' && data.sn) {
+      // listener 推送 SN — 自動填入並觸發測試
+      if (testing.value) {
+        // 測試進行中，略過此次 SN（避免重複觸發）
+        return
+      }
+      barcode.value = data.sn
+      addStatusMessage(`Modbus 收到 SN: ${data.sn}，自動啟動測試`, 'info')
+      handleStartTest()
+    }
+  }
+
+  ws.onerror = () => {
+    modbusAutoMode.value = false
+  }
+
+  ws.onclose = () => {
+    modbusAutoMode.value = false
+  }
+}
+
+const disconnectModbusWs = () => {
+  if (modbusWs) {
+    modbusWs.close()
+    modbusWs = null
+  }
+  modbusAutoMode.value = false
+}
+
 // 原有程式碼: formatNumber 直接使用 Number(value).toFixed(3)
 // 修改: 支援字串類型的測量值 (例如: "Hello World!")
 const formatNumber = (value) => {
@@ -1613,6 +1673,13 @@ const handleStationChange = async () => {
     await loadTestPlanMap()
     await loadTestPlanItems()
   }
+
+  // 若切換到新站別，嘗試連接 Modbus WebSocket（listener 有跑才會收到事件）
+  if (currentStation.value) {
+    connectModbusWs(currentStation.value.id)
+  } else {
+    disconnectModbusWs()
+  }
 }
 
 // Watchers
@@ -1664,6 +1731,11 @@ onMounted(async () => {
     await loadTestPlanItems()
   }
 
+  // 若頁面載入時已有選定站別，嘗試連接 Modbus WebSocket
+  if (currentStation.value) {
+    connectModbusWs(currentStation.value.id)
+  }
+
   // Load SFC config from localStorage
   const savedConfig = localStorage.getItem('sfcConfig')
   if (savedConfig) {
@@ -1673,7 +1745,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopStatusPolling()
-  
+  disconnectModbusWs()
+
   // Save SFC config to localStorage
   localStorage.setItem('sfcConfig', JSON.stringify(sfcConfig))
 })
