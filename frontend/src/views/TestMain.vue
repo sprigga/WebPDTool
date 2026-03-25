@@ -640,7 +640,7 @@ const connectModbusWs = (stationId) => {
         }
         barcode.value = data.sn
         addStatusMessage(`Modbus 收到 SN: ${data.sn}，自動啟動測試`, 'info')
-        handleStartTest()
+        handleStartTest()  // fire-and-forget async; errors handled inside handleStartTest's own catch block
       }
     } catch (e) {
       console.warn('Modbus WS: invalid message', e)
