@@ -541,7 +541,6 @@ import { useAuthStore } from '@/stores/auth'
 import { queryTestSessions, getSessionWithResults, exportTestResults, deleteTestSessions } from '@/api/testResults'
 import { getStationTestPlanNames } from '@/api/testplans'
 import { getAnalysis } from '@/api/analysis'
-import apiClient from '@/api/client'
 import { useTestHistory } from '@/composables/useTestHistory'
 import { useTestTimeline } from '@/composables/useTestTimeline'
 import { normalizeTaipeiDate } from '@/utils/dateHelpers'
@@ -773,7 +772,7 @@ watch(historySessions, async (newVal, oldVal) => {
   if (wasEmpty && nowHasData) {
     await nextTick()
     setTimeout(initChart, CHART_INIT_DELAY_MS)
-  } else {
+  } else if (activeTab.value === 'history') {
     updateChart()
   }
 }, { deep: true })
@@ -787,7 +786,7 @@ const handleTabChange = async (tabName) => {
 }
 
 // ── Tab 3: Analysis state ────────────────────────────────────────────────────
-const analysisFilters = ref({
+const analysisFilters = reactive({
   project_id: null,
   station_id: null,
   test_plan_name: null,
@@ -848,23 +847,23 @@ const analysisChartOption = computed(() => {
 })
 
 const onAnalysisProjectChange = async () => {
-  analysisFilters.value.station_id = null
-  analysisFilters.value.test_plan_name = null
+  analysisFilters.station_id = null
+  analysisFilters.test_plan_name = null
   analysisTestPlanNames.value = []
   analysisStationList.value = []
-  if (!analysisFilters.value.project_id) return
-  await projectStore.fetchProjectStations(analysisFilters.value.project_id)
+  if (!analysisFilters.project_id) return
+  await projectStore.fetchProjectStations(analysisFilters.project_id)
   analysisStationList.value = projectStore.stations || []
 }
 
 const onAnalysisStationChange = async () => {
-  analysisFilters.value.test_plan_name = null
+  analysisFilters.test_plan_name = null
   analysisTestPlanNames.value = []
-  if (!analysisFilters.value.station_id) return
+  if (!analysisFilters.station_id) return
   analysisLoadingPlans.value = true
   try {
-    const res = await apiClient.get(`/api/stations/${analysisFilters.value.station_id}/testplan-names`)
-    analysisTestPlanNames.value = Array.isArray(res) ? res : []
+    const names = await getStationTestPlanNames(analysisFilters.station_id, analysisFilters.project_id)
+    analysisTestPlanNames.value = Array.isArray(names) ? names : []
   } catch {
     ElMessage.error('載入測試腳本失敗')
   } finally {
@@ -881,11 +880,11 @@ const fetchAnalysis = async () => {
   selectedItemNo.value = null
   try {
     const params = {
-      station_id: analysisFilters.value.station_id,
-      test_plan_name: analysisFilters.value.test_plan_name
+      station_id: analysisFilters.station_id,
+      test_plan_name: analysisFilters.test_plan_name
     }
-    if (analysisFilters.value.date_from) params.date_from = analysisFilters.value.date_from
-    if (analysisFilters.value.date_to) params.date_to = analysisFilters.value.date_to
+    if (analysisFilters.date_from) params.date_from = analysisFilters.date_from
+    if (analysisFilters.date_to) params.date_to = analysisFilters.date_to
     const res = await getAnalysis(params)
     itemStats.value = res.item_stats || []
     sessionStats.value = res.session_stats || null
@@ -944,7 +943,8 @@ const formatDateTime = (dateStr) => {
 }
 
 const formatDate = (dateStr) => {
-  const date = new Date(dateStr)
+  // Append noon time to avoid UTC midnight boundary issue on different timezone browsers
+  const date = new Date(`${dateStr}T12:00:00`)
   return date.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
 }
 
