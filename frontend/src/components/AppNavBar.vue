@@ -12,9 +12,6 @@
           <el-button :type="buttonType('results')" size="default" :disabled="isCurrent('results')" @click="navigateTo('/results')">
             測試結果查詢
           </el-button>
-          <el-button :type="buttonType('history')" size="default" :disabled="isCurrent('history')" @click="navigateTo('/history')">
-            測試歷史記錄
-          </el-button>
           <el-button :type="buttonType('projects')" size="default" :disabled="isCurrent('projects')" @click="navigateTo('/projects')">
             專案管理
           </el-button>
@@ -23,9 +20,6 @@
           </el-button>
           <el-button :type="buttonType('instruments')" size="default" :disabled="isCurrent('instruments')" @click="navigateTo('/instruments')">
             儀器管理
-          </el-button>
-          <el-button :type="buttonType('analysis')" size="default" :disabled="isCurrent('analysis')" @click="navigateTo('/analysis')">
-            報表分析
           </el-button>
           <el-button :type="buttonType('modbus-config')" size="default" :disabled="isCurrent('modbus-config')" @click="navigateTo('/modbus-config')">
             Modbus 設定

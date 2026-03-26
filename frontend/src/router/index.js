@@ -25,21 +25,9 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/history',
-    name: 'TestHistory',
-    component: () => import('@/views/TestHistory.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
     path: '/results',
     name: 'TestResults',
     component: () => import('@/views/TestResults.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/analysis',
-    name: 'ReportAnalysis',
-    component: () => import('@/views/ReportAnalysis.vue'),
     meta: { requiresAuth: true }
   },
   {
