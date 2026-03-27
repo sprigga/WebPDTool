@@ -250,4 +250,7 @@ backend/reports/
 
 # Documentation screenshots that are redundant
 docs/test_results_query_page.png
+
+# Test screenshots in screenshots/ directory
+screenshots/test*.png
 .bash_profile
