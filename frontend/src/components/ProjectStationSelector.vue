@@ -5,6 +5,7 @@
         <el-select
           v-model="selectedProjectId"
           placeholder="請選擇專案"
+          :loading="loadingProjects"
           @change="handleProjectChange"
           style="width: 100%"
         >
@@ -24,6 +25,7 @@
           v-model="selectedStationId"
           placeholder="請選擇站別"
           :disabled="!selectedProjectId || stations.length === 0"
+          :loading="loadingStations"
           @change="handleStationChange"
           style="width: 100%"
         >
@@ -42,7 +44,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useProjectStore } from '@/stores/project'
 import { ElMessage } from 'element-plus'
 
@@ -53,8 +55,11 @@ const projects = ref([])
 const stations = ref([])
 const selectedProjectId = ref(null)
 const selectedStationId = ref(null)
+const loadingProjects = ref(false)
+const loadingStations = ref(false)
 
 onMounted(async () => {
+  loadingProjects.value = true
   try {
     projects.value = await projectStore.fetchProjects()
 
@@ -71,16 +76,39 @@ onMounted(async () => {
       }
     }
   } catch (error) {
-    ElMessage.error('載入專案列表失敗')
+    const status = error.response?.status
+    if (status === 401 || status === 403) {
+      ElMessage.error('無權限載入專案列表')
+    } else if (status >= 500) {
+      ElMessage.error('伺服器錯誤，請稍後再試')
+    } else if (!error.response) {
+      ElMessage.error('網路連線失敗，無法載入專案列表')
+    } else {
+      ElMessage.error('載入專案列表失敗')
+    }
+  } finally {
+    loadingProjects.value = false
   }
 })
 
 const loadStations = async (projectId) => {
+  loadingStations.value = true
   try {
     stations.value = await projectStore.fetchProjectStations(projectId)
   } catch (error) {
-    ElMessage.error('載入站別列表失敗')
+    const status = error.response?.status
+    if (status === 404) {
+      ElMessage.warning('該專案尚無站別資料')
+    } else if (status >= 500) {
+      ElMessage.error('伺服器錯誤，無法載入站別列表')
+    } else if (!error.response) {
+      ElMessage.error('網路連線失敗，無法載入站別列表')
+    } else {
+      ElMessage.error('載入站別列表失敗')
+    }
     stations.value = []
+  } finally {
+    loadingStations.value = false
   }
 }
 
@@ -94,21 +122,10 @@ const handleProjectChange = async (projectId) => {
   }
 }
 
-// 原有程式碼: 當選擇站別時，儲存站別資訊並發送事件
-// 修正: 加入更詳細的除錯訊息和錯誤處理
 const handleStationChange = (stationId) => {
-  console.log('Station ID selected:', stationId)
-  console.log('Available stations:', stations.value)
-
   if (stationId) {
     const station = stations.value.find(s => s.id === stationId)
-    console.log('Found station:', station)
-
-    if (!station) {
-      console.error('Station not found in stations array!')
-      return
-    }
-
+    if (!station) return
     projectStore.setCurrentStation(station)
     emit('station-selected', station)
   }

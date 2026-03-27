@@ -57,12 +57,8 @@ uv run pytest -m "not hardware"                 # Skip tests requiring hardware
 uv run pytest -k "test_instrument_model2306"    # Filter by name
 ```
 
-**Available pytest markers:**
-- **Speed:** `slow`, `fast`
-- **Type:** `unit`, `integration`, `e2e`
-- **Hardware:** `hardware`, `simulation`
-- **Instruments:** `instrument_34970a`, `instrument_model2306`, `instrument_it6723c`, `instrument_2260b`, `instrument_cmw100`, `instrument_mt8872a`
-- **Components:** `measurements`, `instruments`, `api`, `services`
+**Available pytest markers** (defined in `pytest.ini`):
+- `e2e` — end-to-end tests requiring external services
 
 ### Test Plan Import
 
@@ -92,13 +88,13 @@ python scripts/import_testplan.py \
 - `api/` — Route handlers: `auth`, `users`, `projects`, `stations`, `instruments`, `tests`, `measurements`, `dut_control`, `modbus`, `modbus_ws`
   - `results/` — 8 sub-routers: sessions, measurements, summary, export, cleanup, reports, analysis (descriptive stats per test item and per session)
   - `testplan/` — 4 sub-routers: queries, mutations, sessions, validation
-- `services/` — Business logic: `test_engine.py`, `measurement_service.py` (critical, ~46KB), `instrument_manager.py`, `instrument_connection.py`
+- `services/` — Business logic: `test_engine.py`, `measurement_service.py` (critical, ~46KB), `instrument_manager.py`, `instrument_connection.py`, `instrument_executor.py`, `test_plan_service.py`, `report_service.py`
   - `instruments/` — Driver registry (`INSTRUMENT_DRIVERS` dict) with 20+ hardware drivers
   - `modbus/` — `modbus_manager.py` (singleton), `modbus_listener.py` (async pymodbus), `modbus_config.py`
 - `measurements/` — PDTool4 measurement abstraction layer (see below)
 - `models/` — SQLAlchemy ORM: users, projects, stations, test_plans, test_sessions, test_results, sfc_logs, instruments, modbus_config
 - `repositories/` — Data access layer (currently: `instrument_repository.py`)
-- `core/` — `database.py`, `security.py`, `instrument_config.py`, `logging_v2.py`, `constants.py`
+- `core/` — `database.py`, `security.py`, `instrument_config.py`, `logging_v2.py`, `constants.py`, `api_helpers.py`, `exceptions.py`, `measurement_constants.py`, `report_config.py`
 - `config/instruments.py` — `MEASUREMENT_TEMPLATES` and `AVAILABLE_INSTRUMENTS` (see below)
 - `schemas/` — Pydantic v2 request/response models
 
@@ -121,7 +117,7 @@ python scripts/import_testplan.py \
 ### Measurement Abstraction Layer
 
 **`backend/app/measurements/base.py`** — `BaseMeasurement` abstract class:
-- Three-phase execution: `prepare()` → `execute()` → `cleanup()`
+- Three-phase execution: `setup()` → `execute()` → `teardown()`
 - `validate_result()` replicates PDTool4's exact rules:
   - `none` → always pass
   - `lower` → value ≥ lower_limit
@@ -133,9 +129,7 @@ python scripts/import_testplan.py \
 - Auto-detects instrument errors: strings starting with `"No instrument found"` or `"Error:"`
 - `MeasurementResult` dataclass: result (PASS/FAIL/SKIP/ERROR), measured_value, limits, unit, error_message, execution_duration_ms
 
-**`backend/app/measurements/registry.py`** — `MEASUREMENT_REGISTRY` maps test type strings → classes.
-
-**`backend/app/measurements/implementations.py`** (~2300 lines) — Concrete classes: PowerSet, PowerRead, CommandTest, SFCtest, getSN, OPjudge, Other, ConSole, ComPort, TCPIP, Wait. Uses lazy imports to avoid circular dependencies. Parameter extraction via `get_param(params, *keys, default=None)`.
+**`backend/app/measurements/implementations.py`** (~2260 lines) — `MEASUREMENT_REGISTRY` at bottom maps type strings → classes. Concrete classes: PowerSet, PowerRead, CommandTest, SFCtest, getSN, OPjudge, Other, ConSole, ComPort, TCPIP, Wait, Relay, ChassisRotation, RF_Tool (TX/RX), CMW100 (BLE/WiFi), L6MPU, MDO34, SMCV100B, PEAK_CAN. Parameter extraction via `get_param(params, *keys, default=None)`.
 
 ### MEASUREMENT_TEMPLATES (config/instruments.py)
 
@@ -159,7 +153,7 @@ MEASUREMENT_TEMPLATES = {
 TestMain.vue → POST /api/tests/sessions/start
 → TestEngine.execute_test_session() [asyncio background task]
 → MeasurementService.execute_measurement()
-→ BaseMeasurement subclass.prepare/execute/cleanup()
+→ BaseMeasurement subclass.setup/execute/teardown()
 → InstrumentManager (hardware access, singleton connection pool)
 → validate_result() (PDTool4 logic)
 → Save TestResult → DB
