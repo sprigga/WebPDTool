@@ -36,6 +36,8 @@ cd frontend
 npm install
 npm run dev  # Runs on http://localhost:5678 (NOT 5173)
              # /api proxy target: http://localhost:8765
+             # ⚠ For local dev, backend must run on port 8765, not 9100:
+             # uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8765
 
 # Database access
 mysql -h localhost -P 33306 -u pdtool -p webpdtool  # password: pdtool123
@@ -102,10 +104,17 @@ python scripts/import_testplan.py \
 
 ### Frontend Structure (`frontend/src/`)
 
-- `views/` — Vue 3 single-file components (TestMain, TestPlanManage, TestResults, ReportAnalysis, ProjectManage, UserManage, InstrumentManage, SystemConfig, TestExecution)
+- `views/` — Vue 3 single-file components: TestMain, TestPlanManage, **TestResults** (3-tab: query/history/analysis), ProjectManage, UserManage, InstrumentManage, SystemConfig, TestExecution, ModbusConfig, Login
+- `composables/` — Reusable logic:
+  - `useTestTimeline.js` — ECharts timeline chart for test history, handles init/dispose/resize lifecycle
+  - `useTestHistory.js` — Test history data fetching and filtering logic
+  - `useMeasurementParams.js` — Dynamic parameter form generation from `MEASUREMENT_TEMPLATES` (fetches `GET /api/measurements/types`)
+- `components/` — Shared UI: `AppNavBar.vue` (nav with `buttonType()`/`isCurrent()` helpers), `DynamicParamForm.vue` (renders measurement params), `ProjectStationSelector.vue`, `ModbusStatusIndicator.vue`
 - `stores/` — Pinia: `auth.js`, `project.js`, `users.js`, `instruments.js`
 - `api/` — Axios clients per domain; `client.js` base with auth interceptor that **unwraps `response.data`** (callers receive payload directly, not the full Axios response)
-- `router/index.js` — Vue Router with auth guard; unauthenticated → `/login`
+- `router/index.js` — Vue Router with auth guard; unauthenticated → `/login`; active routes: `/main`, `/test`, `/results`, `/testplan`, `/config`, `/projects`, `/users`, `/instruments`, `/modbus-config`
+
+**TestResults.vue tabs:** Tab 1 (查詢結果) — session query/filter/export/delete; Tab 2 (測試歷史) — ECharts timeline chart via `useTestTimeline`; Tab 3 (分析報告) — descriptive statistics (mean/median/std/MAD) from `/api/results/analysis`.
 
 ## Critical Architecture Patterns
 
@@ -231,6 +240,21 @@ async def get_test_plan(db: AsyncSession, station_id: int):
 
 Follow `UserManage.vue` / `InstrumentManage.vue`: `el-table` + `el-dialog` + reactive form + `ElMessageBox.confirm` for delete. When adding a new management page: add route to `router/index.js`, button to `AppNavBar.vue` using `buttonType()`/`isCurrent()` helpers, and link to `TestMain.vue` top nav bar.
 
+### MEASUREMENT_TEMPLATES → Frontend Flow
+
+When adding a new instrument+measurement combination, the data flows:
+1. Add entry to `MEASUREMENT_TEMPLATES` in `backend/app/config/instruments.py`
+2. Automatically exposed via `GET /api/measurements/types` (no code change needed there)
+3. Frontend `useMeasurementParams.js` fetches this endpoint and passes schema to `DynamicParamForm.vue`
+
+### DUT Communications (`backend/app/services/dut_comms/`)
+
+Custom hardware protocol implementations (not related to instrument drivers):
+- `chassis_controller.py`, `relay_controller.py` — top-level DUT control API
+- `ltl_chassis_fixt_comms/` — CRC16 Kermit framing, struct-based messages
+- `ls_comms/` — LS protocol messages
+- `vcu_ether_comms/` — Ethernet/TCP-based VCU protocol
+
 ### CSV Import Field Mapping
 
 `backend/app/utils/csv_parser.py` maps PDTool4 CSV columns:
@@ -279,3 +303,12 @@ MYSQL_PORT=33306
 1. **Instrument Drivers:** Most implementations are stubs. Real hardware drivers need implementation in `backend/app/services/instruments/`.
 2. **Real-time Updates:** Modbus uses WebSocket. Test execution status still uses polling (GET `/api/tests/sessions/{id}/status`).
 3. **Modbus:** WebSocket and REST are implemented; requires actual Modbus TCP device for production use.
+
+## Port Mapping Summary
+
+| Context | Backend port | Frontend port | Notes |
+|---------|-------------|---------------|-------|
+| Docker | 9100 (internal) | 9080 | Nginx proxies `/api` to backend |
+| Local dev | **8765** | 5678 | Vite proxy in `vite.config.js` targets 8765 |
+
+For local dev the backend **must** run on 8765 (`--port 8765`), not 9100, because `vite.config.js` hardcodes the proxy target as `http://localhost:8765`.

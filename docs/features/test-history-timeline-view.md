@@ -150,32 +150,88 @@ export function useTestHistory() {
 
 **File:** `frontend/src/composables/useTestTimeline.js`
 
-**Chart Configuration:**
+**Chart Configuration (2026-03-26 enhanced):**
+
+The chart option now includes a title, global Chinese typography, enriched tooltip with pass rate, axis labels, and hover emphasis:
+
 ```javascript
 const option = {
+  // Global font for proper Traditional Chinese rendering
+  textStyle: {
+    fontFamily: '"Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif',
+    fontSize: 13
+  },
+  title: {
+    text: '測試趨勢',
+    left: 'center',
+    top: 8,
+    textStyle: { fontSize: 15, fontWeight: '600', color: '#303133' }
+  },
   tooltip: {
     trigger: 'axis',
-    axisPointer: { type: 'shadow' }
+    axisPointer: { type: 'shadow' },
+    // Custom formatter: shows date, per-series counts (zero-filtered),
+    // total count, and pass rate percentage
+    formatter: (params) => {
+      const total = params.reduce((sum, p) => sum + (p.value || 0), 0)
+      const passItem = params.find(p => p.seriesName === '通過')
+      const passRate = total > 0
+        ? ((passItem?.value || 0) / total * 100).toFixed(1)
+        : '0.0'
+      const lines = params
+        .filter(p => p.value > 0)
+        .map(p => `${p.marker} ${p.seriesName}：<strong>${p.value}</strong> 次`)
+        .join('<br/>')
+      return `<div>...<br/>${lines}<br/>合計：${total} 次 ｜ 通過率：${passRate}%</div>`
+    }
   },
   legend: {
-    data: ['通過', '失敗', '中止']
+    data: ['通過', '失敗', '中止'],
+    top: 36,
+    left: 'center',
+    itemWidth: 14,
+    itemHeight: 14
   },
+  grid: { left: '3%', right: '4%', bottom: '8%', top: 80, containLabel: true },
   xAxis: {
     type: 'category',
-    data: chartData.value.map(d => d.date)
+    data: chartData.value.map(d => d.date),
+    axisLabel: {
+      // Compact MM-DD when > 7 dates; rotate 30° when > 10 dates
+      rotate: chartData.value.length > 10 ? 30 : 0,
+      formatter: (value) => chartData.value.length > 7 ? value.slice(5) : value
+    },
+    axisTick: { alignWithLabel: true }
   },
   yAxis: {
-    type: 'value'
+    type: 'value',
+    name: '次數',
+    splitLine: { lineStyle: { color: '#f0f0f0' } },
+    minInterval: 1  // prevent fractional tick marks
   },
   series: [
     {
       name: '通過',
-      type: 'bar',
-      stack: 'total',
+      type: 'bar', stack: 'total',
       data: chartData.value.map(d => d.pass),
-      itemStyle: { color: '#67C23A' }
+      itemStyle: { color: '#67C23A', borderRadius: [0, 0, 0, 0] },
+      emphasis: { itemStyle: { color: '#529b2e' } }
     },
-    // ... fail and abort series
+    {
+      name: '失敗',
+      type: 'bar', stack: 'total',
+      data: chartData.value.map(d => d.fail),
+      itemStyle: { color: '#F56C6C', borderRadius: [0, 0, 0, 0] },
+      emphasis: { itemStyle: { color: '#c45656' } }
+    },
+    {
+      name: '中止',
+      type: 'bar', stack: 'total',
+      data: chartData.value.map(d => d.abort),
+      // Top corners rounded only on the topmost stacked series
+      itemStyle: { color: '#E6A23C', borderRadius: [3, 3, 0, 0] },
+      emphasis: { itemStyle: { color: '#b88230' } }
+    }
   ]
 }
 ```
@@ -217,16 +273,74 @@ const CHART_INIT_DELAY_MS = 100
 </el-card>
 ```
 
-**CSS:**
+**CSS (2026-03-26 updated):**
 ```css
+/* Statistics card with column dividers */
+.stats-card {
+  margin-bottom: 20px;
+  background: #fafafa;
+}
+
+.stats-card :deep(.el-card__body) {
+  padding: 20px 0;
+}
+
+.stat-col {
+  padding: 8px 24px;
+  text-align: center;
+}
+
+/* Vertical dividers between stat columns */
+.stat-col--pass,
+.stat-col--fail,
+.stat-col--rate {
+  border-left: 1px solid #e4e7ed;
+}
+
+/* Larger stat numbers for readability */
+.stats-card :deep(.el-statistic__number) {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.stats-card :deep(.el-statistic__head) {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 6px;
+}
+
 .chart-card {
   margin-bottom: 20px;
 }
 
 .chart-container {
   width: 100%;
-  height: 300px;
+  height: 380px;  /* increased from 300px */
 }
+```
+
+**Statistics Template (2026-03-26 updated):**
+```vue
+<el-card class="stats-card" shadow="never">
+  <el-row :gutter="0" class="stats-row">
+    <el-col :span="6" class="stat-col stat-col--total">
+      <el-statistic title="總測試次數" :value="sessions.length" />
+    </el-col>
+    <el-col :span="6" class="stat-col stat-col--pass">
+      <el-statistic title="通過" :value="passCount"
+        :value-style="{ color: '#67C23A' }" />
+    </el-col>
+    <el-col :span="6" class="stat-col stat-col--fail">
+      <el-statistic title="失敗" :value="failCount"
+        :value-style="{ color: '#F56C6C' }" />
+    </el-col>
+    <el-col :span="6" class="stat-col stat-col--rate">
+      <el-statistic title="通過率" :value="passRate" suffix="%"
+        :value-style="passRateStyle" />
+    </el-col>
+  </el-row>
+</el-card>
 ```
 
 **Script Integration:**
@@ -235,6 +349,14 @@ import { useTestTimeline } from '@/composables/useTestTimeline'
 import { watch, nextTick } from 'vue'
 
 const { chartRef, initChart, updateChart } = useTestTimeline(sessions)
+
+// Pass rate color: green ≥ 90%, orange 70–90%, red < 70%
+const passRateStyle = computed(() => {
+  const rate = parseFloat(passRate.value)
+  if (rate >= 90) return { color: '#67C23A', fontWeight: '600' }
+  if (rate >= 70) return { color: '#E6A23C', fontWeight: '600' }
+  return { color: '#F56C6C', fontWeight: '600' }
+})
 
 // Update chart when sessions change
 watch(sessions, () => {
@@ -487,6 +609,17 @@ const hasChart = !!canvas;
 ---
 
 ## Changelog
+
+**2026-03-26**
+- Enhanced chart typography: global Chinese font stack (Microsoft JhengHei / PingFang TC)
+- Added chart title「測試趨勢」
+- Enriched tooltip: per-series counts (zero-filtered) + total + pass rate %
+- Added Y-axis name「次數」, soft grid lines, `minInterval: 1`
+- Adaptive X-axis: MM-DD compact when > 7 dates, 30° rotate when > 10 dates
+- Bar hover emphasis colors; top-corner border-radius on topmost stack series
+- Statistics card: grey background, column dividers, 28px bold numbers
+- Pass rate color indicator: green ≥ 90%, orange ≥ 70%, red < 70%
+- Chart height increased from 300px → 380px
 
 **2026-03-25**
 - Initial implementation of TestHistory.vue

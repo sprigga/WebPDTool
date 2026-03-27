@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 # Modified: Use async session for async DB migration (Wave 5)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
+from sqlalchemy.orm import selectinload
 from typing import List
 from datetime import date, datetime
 from pydantic import BaseModel
@@ -43,16 +44,19 @@ def convert_results_to_response(results: List[TestResultModel]) -> List['Measure
     return [
         MeasurementResultResponse(
             id=r.id,
-            test_session_id=r.test_session_id,
+            # Fixed: model field is session_id, not test_session_id
+            test_session_id=r.session_id,
             item_no=r.item_no,
             item_name=r.item_name,
             result=r.result,
             measured_value=r.measured_value,
-            min_limit=r.min_limit,
-            max_limit=r.max_limit,
+            # Fixed: model fields are lower_limit/upper_limit, not min_limit/max_limit
+            min_limit=r.lower_limit,
+            max_limit=r.upper_limit,
             error_message=r.error_message,
             execution_duration_ms=r.execution_duration_ms,
-            created_at=r.created_at
+            # Fixed: model field is test_time, not created_at
+            created_at=r.test_time
         )
         for r in results
     ]
@@ -65,7 +69,7 @@ class MeasurementResultResponse(BaseModel):
     item_no: int
     item_name: str
     result: str
-    measured_value: float | None = None
+    measured_value: str | None = None
     min_limit: float | None = None
     max_limit: float | None = None
     error_message: str | None = None
@@ -82,9 +86,13 @@ class TestSessionResponse(BaseModel):
     project_name: str
     station_name: str
     serial_number: str
+    # Fixed: renamed from operator_id to match model (user_id stored, username exposed)
     operator_id: str | None = None
+    # Fixed: renamed from status to final_result to match model
     status: str
+    # Fixed: renamed from started_at to match model field start_time
     started_at: datetime
+    # Fixed: renamed from completed_at to match model field end_time
     completed_at: datetime | None = None
     total_tests: int
     passed_tests: int
@@ -123,29 +131,38 @@ async def get_test_sessions(
     functionality where users can view test history and results.
     """
     try:
-        # Original code: query = db.query(TestSessionModel).join(ProjectModel).join(StationModel)
-        # Modified: Use select() with await db.execute() for async
-        stmt = select(TestSessionModel).join(ProjectModel).join(StationModel)
+        # Fixed: join order follows FK chain: TestSession.station_id → Station → Project
+        # Use selectinload to eagerly load relationships (required for async SQLAlchemy)
+        stmt = (
+            select(TestSessionModel)
+            .join(StationModel)
+            .join(ProjectModel)
+            .options(selectinload(TestSessionModel.station).selectinload(StationModel.project))
+        )
 
         # Apply filters
         if project_id:
-            stmt = stmt.where(TestSessionModel.project_id == project_id)
+            # Fixed: TestSession has no project_id; filter via Station.project_id
+            stmt = stmt.where(StationModel.project_id == project_id)
 
         if station_id:
             stmt = stmt.where(TestSessionModel.station_id == station_id)
 
         if status:
-            stmt = stmt.where(TestSessionModel.status == status)
+            # Fixed: model field is final_result, not status
+            stmt = stmt.where(TestSessionModel.final_result == status)
 
         if date_from:
-            stmt = stmt.where(TestSessionModel.started_at >= date_from)
+            # Fixed: model field is start_time, not started_at
+            stmt = stmt.where(TestSessionModel.start_time >= date_from)
 
         if date_to:
-            stmt = stmt.where(TestSessionModel.started_at <= date_to)
+            # Fixed: model field is start_time, not started_at
+            stmt = stmt.where(TestSessionModel.start_time <= date_to)
 
         # Order by most recent first
         result = await db.execute(
-            stmt.order_by(desc(TestSessionModel.started_at))
+            stmt.order_by(desc(TestSessionModel.start_time))
                 .offset(offset)
                 .limit(limit)
         )
@@ -158,7 +175,7 @@ async def get_test_sessions(
             # Original code: results = db.query(TestResultModel).filter(...).all()
             # Modified: Use select() with await
             result = await db.execute(
-                select(TestResultModel).where(TestResultModel.test_session_id == session.id)
+                select(TestResultModel).where(TestResultModel.session_id == session.id)
             )
             results = result.scalars().all()
 
@@ -172,13 +189,19 @@ async def get_test_sessions(
 
             response.append(TestSessionResponse(
                 id=session.id,
-                project_name=session.project.name,
-                station_name=session.station.name,
+                # Fixed: project accessed via station relationship; field is project_name
+                project_name=session.station.project.project_name,
+                # Fixed: field is station_name, not name
+                station_name=session.station.station_name,
                 serial_number=session.serial_number,
-                operator_id=session.operator_id,
-                status=session.status,
-                started_at=session.started_at,
-                completed_at=session.completed_at,
+                # Fixed: no operator_id on model; expose user_id as string
+                operator_id=str(session.user_id) if session.user_id else None,
+                # Fixed: field is final_result, not status
+                status=str(session.final_result.value) if session.final_result else "UNKNOWN",
+                # Fixed: field is start_time, not started_at
+                started_at=session.start_time,
+                # Fixed: field is end_time, not completed_at
+                completed_at=session.end_time,
                 results=result_responses,
                 **stats
             ))
@@ -205,12 +228,12 @@ async def get_test_session(
     examine all test points and their results for a specific session.
     """
     try:
-        # Original code: session = db.query(TestSessionModel).join(...).filter(...).first()
-        # Modified: Use select() with await
+        # Fixed: join order follows FK chain + eager load relationships for async
         result = await db.execute(
             select(TestSessionModel)
-            .join(ProjectModel)
             .join(StationModel)
+            .join(ProjectModel)
+            .options(selectinload(TestSessionModel.station).selectinload(StationModel.project))
             .where(TestSessionModel.id == session_id)
         )
         session = result.scalar_one_or_none()
@@ -226,7 +249,7 @@ async def get_test_session(
         # Modified: Use select() with await
         result = await db.execute(
             select(TestResultModel)
-            .where(TestResultModel.test_session_id == session_id)
+            .where(TestResultModel.session_id == session_id)
             .order_by(TestResultModel.item_no)
         )
         results = result.scalars().all()
@@ -241,13 +264,19 @@ async def get_test_session(
 
         return TestSessionResponse(
             id=session.id,
-            project_name=session.project.name,
-            station_name=session.station.name,
+            # Fixed: project accessed via station relationship; field is project_name
+            project_name=session.station.project.project_name,
+            # Fixed: field is station_name, not name
+            station_name=session.station.station_name,
             serial_number=session.serial_number,
-            operator_id=session.operator_id,
-            status=session.status,
-            started_at=session.started_at,
-            completed_at=session.completed_at,
+            # Fixed: no operator_id on model; expose user_id as string
+            operator_id=str(session.user_id) if session.user_id else None,
+            # Fixed: field is final_result, not status
+            status=str(session.final_result.value) if session.final_result else "UNKNOWN",
+            # Fixed: field is start_time, not started_at
+            started_at=session.start_time,
+            # Fixed: field is end_time, not completed_at
+            completed_at=session.end_time,
             results=result_responses,
             **stats
         )

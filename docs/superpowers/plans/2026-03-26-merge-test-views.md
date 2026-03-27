@@ -1,3 +1,66 @@
+# Merge Test Views Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Consolidate TestResults.vue, TestHistory.vue, and ReportAnalysis.vue into a single unified TestResults.vue using tabs — one page with three focused tab panels.
+
+**Architecture:** Replace the three separate pages/routes with one `/results` page that uses `el-tabs` to switch between: (1) 查詢結果 (table search + session detail dialog — existing TestResults content), (2) 歷史趨勢 (timeline chart + daily collapse groups — existing TestHistory content), and (3) 報表分析 (statistical analysis chart — existing ReportAnalysis content). All composables and API modules are kept unchanged; only the view layer merges.
+
+**Tech Stack:** Vue 3, Element Plus (`el-tabs`, `el-tab-pane`), ECharts (via `echarts` direct import for timeline, via `vue-echarts` for analysis line chart), Pinia project store.
+
+---
+
+## File Map
+
+| File | Action | Notes |
+|------|--------|-------|
+| `frontend/src/views/TestResults.vue` | **Rewrite** | Unified 3-tab view |
+| `frontend/src/views/TestHistory.vue` | **Delete** | Content merged into TestResults |
+| `frontend/src/views/ReportAnalysis.vue` | **Delete** | Content merged into TestResults |
+| `frontend/src/router/index.js` | **Modify** | Remove `/history` and `/analysis` routes |
+| `frontend/src/components/AppNavBar.vue` | **Modify** | Remove 歷史記錄 and 報表分析 buttons |
+
+**Composables / API kept as-is (no changes):**
+- `frontend/src/composables/useTestHistory.js`
+- `frontend/src/composables/useTestTimeline.js`
+- `frontend/src/api/testResults.js`
+- `frontend/src/api/analysis.js`
+- `frontend/src/api/testplans.js`
+
+---
+
+## Task 1: Rewrite TestResults.vue as a Unified 3-Tab View
+
+**Files:**
+- Modify: `frontend/src/views/TestResults.vue`
+
+### Tab 1 — 查詢結果 (existing TestResults content)
+Filters: project → station → test plan name → result type → serial number → date range → Search/Reset buttons.
+Table: Session ID, serial number, project/station, test plan, result tag, stats, start time. Expand row → descriptions + 查看詳細結果 button. Pagination. Admin delete + export buttons in card header.
+
+### Tab 2 — 歷史趨勢 (existing TestHistory content)
+Filters: date range, project select, station select, Search/Reset buttons + Refresh.
+Statistics summary row (total, pass, fail, pass rate).
+ECharts stacked-bar chart (uses `useTestTimeline` composable).
+`el-timeline` grouped by date with collapse items per session.
+
+### Tab 3 — 報表分析 (existing ReportAnalysis content)
+Filters: project → station → test plan name → date from → date to → 查詢 button.
+Session stats card (mean/median/stdev/MAD in seconds).
+Item name filter select.
+Item stats table (item_no, item_name, sample count, mean/median/stdev/MAD in ms).
+ECharts line chart (uses `vue-echarts` VChart component).
+
+### Tab switching behavior
+- Active tab is tracked in `activeTab` ref (default `'query'`).
+- When switching TO `'history'` tab: if sessions are empty, trigger `loadHistorySessions()`. If chart DOM just became visible, call `initChartWhenReady()`.
+- The ECharts timeline chart requires the DOM container to be visible before `initChart()`. Use `watch(activeTab, async (val) => { if (val === 'history') { await nextTick(); setTimeout(initChart, 100) } })`.
+
+- [ ] **Step 1: Write the new TestResults.vue**
+
+Replace the entire file with the unified 3-tab implementation below. The `<script setup>` combines all imports and state from all three original files. The `<template>` uses `<el-tabs v-model="activeTab">` with three `<el-tab-pane>` children.
+
+```vue
 <template>
   <div class="test-results-container">
     <AppNavBar current-page="results" />
@@ -7,6 +70,10 @@
 
         <!-- ===== Tab 1: 查詢結果 ===== -->
         <el-tab-pane label="查詢結果" name="query">
+          <template #label>
+            <span>查詢結果</span>
+          </template>
+
           <div class="tab-header-actions">
             <el-button
               v-if="isAdmin"
@@ -258,25 +325,25 @@
           <div v-else class="timeline-content">
             <!-- Statistics Summary -->
             <el-card class="stats-card" shadow="never">
-              <div class="stats-row">
-                <div class="stat-col stat-col--total">
+              <el-row :gutter="0" class="stats-row">
+                <el-col :span="6" class="stat-col stat-col--total">
                   <el-statistic title="總測試次數" :value="historyPassCount + historyFailCount + historyAbortCount" />
-                </div>
-                <div class="stat-col stat-col--pass">
+                </el-col>
+                <el-col :span="6" class="stat-col stat-col--pass">
                   <el-statistic title="通過" :value="historyPassCount" :value-style="{ color: '#67C23A' }" />
-                </div>
-                <div class="stat-col stat-col--fail">
+                </el-col>
+                <el-col :span="6" class="stat-col stat-col--fail">
                   <el-statistic title="失敗" :value="historyFailCount" :value-style="{ color: '#F56C6C' }" />
-                </div>
-                <div class="stat-col stat-col--rate">
+                </el-col>
+                <el-col :span="6" class="stat-col stat-col--rate">
                   <el-statistic
                     title="通過率"
                     :value="historyPassRate"
                     suffix="%"
                     :value-style="historyPassRateStyle"
                   />
-                </div>
-              </div>
+                </el-col>
+              </el-row>
             </el-card>
 
             <!-- Chart -->
@@ -541,6 +608,7 @@ import { useAuthStore } from '@/stores/auth'
 import { queryTestSessions, getSessionWithResults, exportTestResults, deleteTestSessions } from '@/api/testResults'
 import { getStationTestPlanNames } from '@/api/testplans'
 import { getAnalysis } from '@/api/analysis'
+import apiClient from '@/api/client'
 import { useTestHistory } from '@/composables/useTestHistory'
 import { useTestTimeline } from '@/composables/useTestTimeline'
 import { normalizeTaipeiDate } from '@/utils/dateHelpers'
@@ -772,7 +840,7 @@ watch(historySessions, async (newVal, oldVal) => {
   if (wasEmpty && nowHasData) {
     await nextTick()
     setTimeout(initChart, CHART_INIT_DELAY_MS)
-  } else if (activeTab.value === 'history') {
+  } else {
     updateChart()
   }
 }, { deep: true })
@@ -786,7 +854,7 @@ const handleTabChange = async (tabName) => {
 }
 
 // ── Tab 3: Analysis state ────────────────────────────────────────────────────
-const analysisFilters = reactive({
+const analysisFilters = ref({
   project_id: null,
   station_id: null,
   test_plan_name: null,
@@ -847,23 +915,23 @@ const analysisChartOption = computed(() => {
 })
 
 const onAnalysisProjectChange = async () => {
-  analysisFilters.station_id = null
-  analysisFilters.test_plan_name = null
+  analysisFilters.value.station_id = null
+  analysisFilters.value.test_plan_name = null
   analysisTestPlanNames.value = []
   analysisStationList.value = []
-  if (!analysisFilters.project_id) return
-  await projectStore.fetchProjectStations(analysisFilters.project_id)
+  if (!analysisFilters.value.project_id) return
+  await projectStore.fetchProjectStations(analysisFilters.value.project_id)
   analysisStationList.value = projectStore.stations || []
 }
 
 const onAnalysisStationChange = async () => {
-  analysisFilters.test_plan_name = null
+  analysisFilters.value.test_plan_name = null
   analysisTestPlanNames.value = []
-  if (!analysisFilters.station_id) return
+  if (!analysisFilters.value.station_id) return
   analysisLoadingPlans.value = true
   try {
-    const names = await getStationTestPlanNames(analysisFilters.station_id, analysisFilters.project_id)
-    analysisTestPlanNames.value = Array.isArray(names) ? names : []
+    const res = await apiClient.get(`/api/stations/${analysisFilters.value.station_id}/testplan-names`)
+    analysisTestPlanNames.value = Array.isArray(res) ? res : []
   } catch {
     ElMessage.error('載入測試腳本失敗')
   } finally {
@@ -880,11 +948,11 @@ const fetchAnalysis = async () => {
   selectedItemNo.value = null
   try {
     const params = {
-      station_id: analysisFilters.station_id,
-      test_plan_name: analysisFilters.test_plan_name
+      station_id: analysisFilters.value.station_id,
+      test_plan_name: analysisFilters.value.test_plan_name
     }
-    if (analysisFilters.date_from) params.date_from = analysisFilters.date_from
-    if (analysisFilters.date_to) params.date_to = analysisFilters.date_to
+    if (analysisFilters.value.date_from) params.date_from = analysisFilters.value.date_from
+    if (analysisFilters.value.date_to) params.date_to = analysisFilters.value.date_to
     const res = await getAnalysis(params)
     itemStats.value = res.item_stats || []
     sessionStats.value = res.session_stats || null
@@ -943,8 +1011,7 @@ const formatDateTime = (dateStr) => {
 }
 
 const formatDate = (dateStr) => {
-  // Append noon time to avoid UTC midnight boundary issue on different timezone browsers
-  const date = new Date(`${dateStr}T12:00:00`)
+  const date = new Date(dateStr)
   return date.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
 }
 
@@ -1023,76 +1090,43 @@ onMounted(async () => {
 
 .stats-card {
   margin-bottom: 20px;
-  overflow: hidden;
+  background: #fafafa;
 }
 
 .stats-card :deep(.el-card__body) {
-  padding: 0;
-}
-
-.stats-row {
-  display: flex;
-  width: 100%;
+  padding: 20px 0;
 }
 
 .stat-col {
-  flex: 1 1 0;
-  padding: 20px 12px;
+  padding: 8px 24px;
   text-align: center;
-  position: relative;
-  min-width: 0;
 }
 
-.stat-col + .stat-col::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 20%;
-  height: 60%;
-  width: 1px;
-  background: #e4e7ed;
-}
-
-.stat-col--total {
-  background: #f4f4f5;
-}
-
-.stat-col--pass {
-  background: #f0f9eb;
-}
-
-.stat-col--fail {
-  background: #fef0f0;
-}
-
+.stat-col--pass,
+.stat-col--fail,
 .stat-col--rate {
-  background: #ecf5ff;
+  border-left: 1px solid #e4e7ed;
 }
 
 .stats-card :deep(.el-statistic__number) {
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 700;
   line-height: 1.3;
 }
 
 .stats-card :deep(.el-statistic__head) {
   font-size: 13px;
-  color: #606266;
+  color: #909399;
   margin-bottom: 6px;
-  font-weight: 500;
 }
 
 .chart-card {
   margin-bottom: 20px;
 }
 
-.chart-card :deep(.el-card__body) {
-  padding: 12px 4px;
-}
-
 .chart-container {
   width: 100%;
-  height: max(380px, 42vh);
+  height: 380px;
 }
 
 .history-timeline {
@@ -1206,13 +1240,165 @@ onMounted(async () => {
   .filter-card :deep(.el-col) {
     margin-bottom: 10px;
   }
-
-  .chart-container {
-    height: 300px;
-  }
-
-  .stats-card :deep(.el-statistic__number) {
-    font-size: 22px;
-  }
 }
 </style>
+```
+
+- [ ] **Step 2: Verify the file saved correctly**
+
+```bash
+wc -l frontend/src/views/TestResults.vue
+```
+Expected: ~500+ lines (well over original 704 due to merged content).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add frontend/src/views/TestResults.vue
+git commit -m "feat: merge TestHistory and ReportAnalysis into TestResults as tabs"
+```
+
+---
+
+## Task 2: Remove Obsolete Routes and Nav Buttons
+
+**Files:**
+- Modify: `frontend/src/router/index.js`
+- Modify: `frontend/src/components/AppNavBar.vue`
+- Delete: `frontend/src/views/TestHistory.vue`
+- Delete: `frontend/src/views/ReportAnalysis.vue`
+
+- [ ] **Step 1: Remove /history and /analysis routes from router/index.js**
+
+In `frontend/src/router/index.js`, remove these two route objects:
+
+```js
+// REMOVE these two objects:
+  {
+    path: '/history',
+    name: 'TestHistory',
+    component: () => import('@/views/TestHistory.vue'),
+    meta: { requiresAuth: true }
+  },
+  // ...and...
+  {
+    path: '/analysis',
+    name: 'ReportAnalysis',
+    component: () => import('@/views/ReportAnalysis.vue'),
+    meta: { requiresAuth: true }
+  },
+```
+
+After removal the routes array should have entries for: login, main, test, results, testplan, config, projects, users, instruments, modbus-config.
+
+- [ ] **Step 2: Remove 歷史記錄 and 報表分析 buttons from AppNavBar.vue**
+
+In `frontend/src/components/AppNavBar.vue`, remove these two `<el-button>` elements:
+
+```html
+<!-- REMOVE: -->
+<el-button :type="buttonType('history')" size="default" :disabled="isCurrent('history')" @click="navigateTo('/history')">
+  測試歷史記錄
+</el-button>
+<!-- REMOVE: -->
+<el-button :type="buttonType('analysis')" size="default" :disabled="isCurrent('analysis')" @click="navigateTo('/analysis')">
+  報表分析
+</el-button>
+```
+
+- [ ] **Step 3: Delete the now-unused view files**
+
+```bash
+rm frontend/src/views/TestHistory.vue
+rm frontend/src/views/ReportAnalysis.vue
+```
+
+- [ ] **Step 4: Delete the now-unused composables (if no other consumers)**
+
+Check whether `useTestHistory` and `useTestTimeline` are still imported anywhere other than the new TestResults.vue:
+
+```bash
+grep -r "useTestHistory\|useTestTimeline" frontend/src --include="*.vue" --include="*.js" -l
+```
+
+Expected output: only `frontend/src/views/TestResults.vue` and `frontend/src/composables/useTestTimeline.js` (the composable files themselves). The composables are still used by TestResults.vue — **do NOT delete them**.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add frontend/src/router/index.js frontend/src/components/AppNavBar.vue
+git commit -m "feat: remove obsolete TestHistory and ReportAnalysis routes and nav buttons"
+```
+
+---
+
+## Task 3: Smoke Test in Browser
+
+**Prerequisites:** Docker services running (`docker-compose up -d`) or local dev server (`npm run dev`).
+
+- [ ] **Step 1: Open the app and navigate to 測試結果查詢**
+
+Open `http://localhost:9080` (Docker) or `http://localhost:5678` (dev).
+
+Verify:
+- NavBar no longer shows 測試歷史記錄 or 報表分析 buttons.
+- Navigating to `/history` or `/analysis` should redirect (no route match → likely 404 or redirect to `/login` if not caught — acceptable; no broken links in nav).
+
+- [ ] **Step 2: Test Tab 1 — 查詢結果**
+
+1. Click 查詢結果 tab (active by default).
+2. Click 查詢 without filters → table loads.
+3. Expand a row → descriptions appear, 查看詳細結果 button opens dialog.
+4. Admin: select rows, 刪除選取 button becomes enabled.
+5. 匯出結果 button downloads CSV when sessions exist.
+
+- [ ] **Step 3: Test Tab 2 — 歷史趨勢**
+
+1. Click 歷史趨勢 tab.
+2. Chart should appear with last-7-days data (loaded on mount).
+3. Statistics row shows total/pass/fail/rate.
+4. Timeline groups sessions by date; expand a collapse item, click 查看詳細結果 → dialog opens.
+5. Change date range, click 查詢 → chart and timeline update.
+
+- [ ] **Step 4: Test Tab 3 — 報表分析**
+
+1. Click 報表分析 tab.
+2. Select project → station list populates.
+3. Select station → 測試腳本 list populates.
+4. Select test script → click 查詢.
+5. Session stats card appears; item stats table appears.
+6. Select an item in the filter → line chart renders.
+
+- [ ] **Step 5: Commit (if any fixes were made)**
+
+```bash
+git add -p
+git commit -m "fix: smoke test corrections for merged TestResults tabs"
+```
+
+---
+
+## Self-Review
+
+**Spec coverage check:**
+
+| Requirement | Task |
+|-------------|------|
+| Merge TestResults query table | Task 1 (Tab 1) |
+| Merge TestHistory timeline + chart | Task 1 (Tab 2) |
+| Merge ReportAnalysis stats + line chart | Task 1 (Tab 3) |
+| Remove /history and /analysis routes | Task 2 |
+| Remove nav buttons for removed routes | Task 2 |
+| Delete obsolete view files | Task 2 |
+| Shared session detail dialog | Task 1 (shared dialog section) |
+| ECharts chart re-init on tab switch | Task 1 (`handleTabChange`) |
+| ECharts chart re-init on data change | Task 1 (`watch(historySessions)`) |
+
+**Placeholder scan:** No TBD, TODO, or vague steps found.
+
+**Type consistency:**
+- `historySessions` / `historySessionsByDate` / `historyDailyStats` — correctly prefixed to avoid collision with query-tab `sessions`.
+- `getStationName(row)` — used in query/dialog (takes row object). `getStationNameById(stationId)` — used in history timeline (takes bare id). Both defined.
+- `fmtNum` (analysis) vs no rename needed — `fmt` was renamed to `fmtNum` to avoid any future collision.
+- `analysisChartOption` (computed) vs `chartOption` in old ReportAnalysis — renamed correctly.
+- `useTestTimeline(historySessions)` — passes the correct `Ref<Session[]>` from `useTestHistory`, same as original.
