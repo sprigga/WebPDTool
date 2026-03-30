@@ -253,4 +253,10 @@ docs/test_results_query_page.png
 
 # Test screenshots in screenshots/ directory
 screenshots/test*.png
+# README 文檔截圖不在忽略範圍內
+!screenshots/testmain.png
+!screenshots/test_execution.png
+!screenshots/testplan_manage.png
+!screenshots/test_results.png
+!screenshots/testhistory-page.png
 .bash_profile
