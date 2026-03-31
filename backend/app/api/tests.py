@@ -7,8 +7,6 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-# Original code: from sqlalchemy.orm import Session
-# Modified: Use AsyncSession for async DB migration (Wave 6 - Task 13)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func, exists
 from sqlalchemy import delete as sa_delete
@@ -16,8 +14,6 @@ from pydantic import BaseModel
 
 _TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 
-# Original code: from app.core.database import get_db
-# Modified: Use async DB dependency
 from app.core.database import get_async_db
 from app.core.api_helpers import PermissionChecker
 from app.dependencies import get_current_active_user
@@ -77,8 +73,6 @@ async def create_test_session(
     Returns:
         Created test session
     """
-    # Original code: station = db.query(Station).filter(...).first()
-    # Modified: Use select() with await for async
     result = await db.execute(
         select(Station).where(Station.id == session_data.station_id)
     )
@@ -120,8 +114,6 @@ async def start_test_session(
     Returns:
         Test execution status
     """
-    # Original code: session = db.query(TestSessionModel).filter(...).first()
-    # Modified: Use select() with await for async
     result = await db.execute(
         select(TestSessionModel).where(TestSessionModel.id == session_id)
     )
@@ -138,8 +130,6 @@ async def start_test_session(
 
     # Start test execution
     try:
-        # Original code: result = await test_engine.start_test_session(..., db=db)
-        # Modified: Removed db parameter (Wave 6 - Task 12) - background task creates its own session
         result = await test_engine.start_test_session(
             session_id=session_id,
             serial_number=session.serial_number,
@@ -202,8 +192,6 @@ async def export_test_sessions_csv(
     from app.models.station import Station as StationModel
     from app.models.project import Project as ProjectModel
 
-    # Original code: query = db.query(TestSessionModel) with .filter().join() chaining
-    # Modified: Use select() with await for async
     stmt = select(TestSessionModel)
 
     if station_id:
@@ -252,8 +240,6 @@ async def export_test_sessions_csv(
     ])
 
     for session in sessions:
-        # Original code: results = db.query(TestResultModel).filter(...).order_by(...).all()
-        # Modified: Use select() with await for async
         result = await db.execute(
             select(TestResultModel)
             .where(TestResultModel.session_id == session.id)
@@ -265,8 +251,6 @@ async def export_test_sessions_csv(
         plan_name = None
         if results and results[0].test_plan_id:
             first_result = results[0]
-            # Original code: plan = db.query(TestPlan).filter(TestPlan.id == ...).first()
-            # Modified: Use select() with await for async
             result = await db.execute(
                 select(TestPlan).where(TestPlan.id == first_result.test_plan_id)
             )
@@ -326,8 +310,6 @@ async def get_test_session(
     current_user: dict = Depends(get_current_active_user)
 ):
     """Get test session by ID"""
-    # Original code: session = db.query(TestSessionModel).filter(...).first()
-    # Modified: Use select() with await for async
     result = await db.execute(
         select(TestSessionModel).where(TestSessionModel.id == session_id)
     )
@@ -355,8 +337,6 @@ async def get_test_session_status(
     Returns:
         Test session status with progress information
     """
-    # Original code: session = db.query(TestSessionModel).filter(...).first()
-    # Modified: Use select() with await for async
     result = await db.execute(
         select(TestSessionModel).where(TestSessionModel.id == session_id)
     )
@@ -364,8 +344,6 @@ async def get_test_session_status(
     if not session:
         raise HTTPException(status_code=404, detail="Test session not found")
 
-    # Original code: results = db.query(TestResultModel).filter(...).all()
-    # Modified: Use select() with await for async
     result = await db.execute(
         select(TestResultModel).where(TestResultModel.session_id == session_id)
     )
@@ -422,8 +400,6 @@ async def create_test_result(
     Returns:
         Created test result
     """
-    # Original code: session = db.query(TestSessionModel).filter(...).first()
-    # Modified: Use select() with await for async
     result = await db.execute(
         select(TestSessionModel).where(TestSessionModel.id == session_id)
     )
@@ -438,11 +414,8 @@ async def create_test_result(
             detail="session_id in URL and body must match"
         )
 
-    # Original: db_result = TestResultModel(**result_data.dict())
-    # Modified: Explicit field mapping to avoid bypassing Pydantic validation
-    # 修正: 添加錯誤處理和日誌，幫助診斷 500 錯誤
     try:
-        # 修正: 確保 measured_value 正確處理空字串和 NULL
+        # 確保 measured_value 正確處理空字串和 NULL
         # 空字串轉換為 NULL，避免資料庫類型錯誤
         measured_value_str = None
         if result_data.measured_value is not None:
@@ -506,8 +479,6 @@ async def create_test_results_batch(
     Returns:
         Number of results created
     """
-    # Original code: session = db.query(TestSessionModel).filter(...).first()
-    # Modified: Use select() with await for async
     result = await db.execute(
         select(TestSessionModel).where(TestSessionModel.id == session_id)
     )
@@ -522,11 +493,7 @@ async def create_test_results_batch(
             detail="session_id in URL and body must match"
         )
 
-    # Original: Batch insert lacked transaction safety handling
-    # Modified: Add try-except and rollback mechanism
     try:
-        # Original: db_result = TestResultModel(**result_data.dict())
-        # Modified: Explicit field mapping to avoid bypassing Pydantic validation
         # Create test results with explicit field mapping
         created_count = 0
         for result_data in batch_data.results:
@@ -582,8 +549,6 @@ async def complete_test_session(
     Returns:
         Updated test session
     """
-    # Original code: session = db.query(TestSessionModel).filter(...).first()
-    # Modified: Use select() with await for async
     result = await db.execute(
         select(TestSessionModel).where(TestSessionModel.id == session_id)
     )
@@ -598,9 +563,7 @@ async def complete_test_session(
             detail="Test session already completed"
         )
 
-    # Update session
     # 修改(2026-03-16): 改用 Asia/Taipei
-    # session.end_time = datetime.utcnow()
     session.end_time = datetime.now(_TZ_TAIPEI)
     session.final_result = complete_data.final_result
     session.total_items = complete_data.total_items
@@ -611,13 +574,9 @@ async def complete_test_session(
     await db.commit()
     await db.refresh(session)
 
-    # Original: CSV report was not generated after completion
-    # Modified: Auto-generate CSV report to support frontend-driven mode
-    # Refer to report generation logic in test_engine.py:_finalize_test_session()
+    # Auto-generate CSV report to support frontend-driven mode
     if REPORT_SERVICE_AVAILABLE and report_service:
         try:
-            # Original code: report_path = report_service.save_session_report(session_id, db)
-            # Modified: Use await for async call (Wave 6 - Task 13)
             report_path = await report_service.save_session_report(session_id, db)
             if report_path:
                 logger.info(f"CSV report generated for session {session_id}: {report_path}")
@@ -678,8 +637,6 @@ async def reset_instrument(
             status_code=500,
             detail=f"Error resetting instrument: {str(e)}"
         )
-    # Original: return session  # ← This line was unreachable (removed)
-    # Modified: Remove unreachable dead code to avoid confusion and potential bugs
 
 
 @router.get("/sessions/{session_id}/logs", response_model=dict)
@@ -704,8 +661,6 @@ async def get_session_logs(
     Returns:
         Dictionary with logs list and count
     """
-    # Original code: session = db.query(TestSessionModel).filter(...).first()
-    # Modified: Use select() with await for async
     result = await db.execute(
         select(TestSessionModel).where(TestSessionModel.id == session_id)
     )
@@ -753,8 +708,6 @@ async def get_session_results(
     Returns:
         List of test results ordered by item_no
     """
-    # Original code: session = db.query(TestSessionModel).filter(...).first()
-    # Modified: Use select() with await for async
     result = await db.execute(
         select(TestSessionModel).where(TestSessionModel.id == session_id)
     )
@@ -762,9 +715,6 @@ async def get_session_results(
     if not session:
         raise HTTPException(status_code=404, detail="Test session not found")
 
-    # Get results
-    # Original code: results = db.query(TestResultModel).filter(...).order_by(...).all()
-    # Modified: Use select() with await for async
     result = await db.execute(
         select(TestResultModel)
         .where(TestResultModel.session_id == session_id)
@@ -810,8 +760,6 @@ async def list_test_sessions(
     """
     from app.models.station import Station as StationModel
 
-    # Original code: query = db.query(TestSessionModel) with .filter().join() chaining
-    # Modified: Use select() with await for async
     stmt = select(TestSessionModel)
 
     if station_id:
@@ -822,7 +770,6 @@ async def list_test_sessions(
         stmt = stmt.join(StationModel, TestSessionModel.station_id == StationModel.id)\
                      .where(StationModel.project_id == project_id)
 
-    # Modified: Use parameterized query to prevent SQL injection risk
     if serial_number:
         stmt = stmt.where(
             TestSessionModel.serial_number.like(func.concat('%', serial_number, '%'))
@@ -858,10 +805,8 @@ async def list_test_sessions(
     # Populate test_plan_name for each session from its first test result's plan
     result_list = []
     for session in sessions:
-        # Original code: first_result = db.query(TestResultModel).filter(...).first()
-        # Modified: Use select() with await for async
-        # FIX: Add .limit(1) since scalar_one_or_none() expects 0 or 1 row,
-        # but a session has multiple test results. Using .first() pattern.
+        # .limit(1) since scalar_one_or_none() expects 0 or 1 row,
+        # but a session has multiple test results
         result = await db.execute(
             select(TestResultModel)
             .where(TestResultModel.session_id == session.id)
@@ -872,8 +817,6 @@ async def list_test_sessions(
 
         plan_name = None
         if first_result and first_result.test_plan_id:
-            # Original code: plan = db.query(TestPlan).filter(TestPlan.id == ...).first()
-            # Modified: Use select() with await for async
             result = await db.execute(
                 select(TestPlan).where(TestPlan.id == first_result.test_plan_id)
             )

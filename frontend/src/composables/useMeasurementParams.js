@@ -136,21 +136,13 @@ export function useMeasurementParams() {
       return 'number'
     }
 
-    // 下拉選單類型
-    if (name === 'baud') {
-      return 'select'
-    }
-
-    if (name === 'type' && typeof exampleValue === 'string') {
-      return 'select'
-    }
-
-    if (name === 'item' && typeof exampleValue === 'string') {
-      return 'select'
-    }
-
-    // 新增: operator_judgment → select (OPjudge YorN 模式的後備判定，僅 YorN 模式模板中有此欄位)
-    if (name === 'operator_judgment') {
+    // 修改: 優先從當前模板的 options 欄位判斷是否為下拉選單
+    // 原有程式碼: 硬編碼 baud/type/item/operator_judgment 為 select
+    // if (name === 'baud') return 'select'
+    // if (name === 'type' && typeof exampleValue === 'string') return 'select'
+    // if (name === 'item' && typeof exampleValue === 'string') return 'select'
+    // if (name === 'operator_judgment') return 'select'
+    if (currentTemplate.value?.options?.[paramName]?.length > 0) {
       return 'select'
     }
 
@@ -159,26 +151,17 @@ export function useMeasurementParams() {
   }
 
   // 取得參數選項（用於下拉選單）
+  // 修改: 優先從 API 模板的 options 欄位讀取，移除硬編碼常量
+  // 原有程式碼: 硬編碼 baud/type/item/operator_judgment 選項
+  // if (name === 'baud') return ['9600', '19200', '38400', '57600', '115200']
+  // if (name === 'type') return ['DC', 'AC', 'RES', 'TEMP']
+  // if (name === 'item') return ['volt', 'curr', 'res', 'temp', 'freq']
+  // if (name === 'operator_judgment') return ['PASS', 'FAIL']
   const getParamOptions = (paramName) => {
-    const name = paramName.toLowerCase()
-
-    if (name === 'baud') {
-      return ['9600', '19200', '38400', '57600', '115200']
+    const templateOptions = currentTemplate.value?.options?.[paramName]
+    if (templateOptions?.length > 0) {
+      return templateOptions
     }
-
-    if (name === 'type') {
-      return ['DC', 'AC', 'RES', 'TEMP']
-    }
-
-    if (name === 'item') {
-      return ['volt', 'curr', 'res', 'temp', 'freq']
-    }
-
-    // 新增: operator_judgment 選項（OPjudge YorN 後備判定值）
-    if (name === 'operator_judgment') {
-      return ['PASS', 'FAIL']
-    }
-
     return []
   }
 

@@ -96,13 +96,6 @@ async def get_current_user_info(
 ):
     """
     Get current authenticated user information
-
-    Original code:
-    user = auth_service.get_user_by_username(db, current_user["username"])
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    Refactored: Use get_entity_by_field_or_404 helper
     """
     user = await get_entity_by_field_or_404(
         db, UserModel, "username", current_user["username"], "User not found"

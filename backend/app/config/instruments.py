@@ -48,6 +48,9 @@ MEASUREMENT_TEMPLATES = {
         "DAQ973A": {
             "required": ["Instrument", "Channel", "Item"],
             "optional": ["Volt", "Curr", "Sense", "Range"],
+            "options": {
+                "Item": ["volt", "curr", "clos", "open"]
+            },
             "example": {
                 "Instrument": "daq973a_1",
                 "Channel": "101",
@@ -123,6 +126,9 @@ MEASUREMENT_TEMPLATES = {
         "34970A": {
             "required": ["Instrument", "Channel", "Item"],
             "optional": ["Range", "NPLC"],
+            "options": {
+                "Item": ["clos", "open", "volt", "curr"]
+            },
             "example": {
                 "Instrument": "34970a_1",
                 "Channel": "101",
@@ -134,6 +140,10 @@ MEASUREMENT_TEMPLATES = {
         "DAQ973A": {
             "required": ["Instrument", "Channel", "Item", "Type"],
             "optional": ["Range", "NPLC"],
+            "options": {
+                "Item": ["volt", "curr"],
+                "Type": ["DC", "AC", "RES", "TEMP", "FREQ"]
+            },
             "example": {
                 "Instrument": "daq973a_1",
                 "Channel": "101",
@@ -144,6 +154,9 @@ MEASUREMENT_TEMPLATES = {
         "34970A": {
             "required": ["Instrument", "Channel", "Item"],
             "optional": ["Range", "NPLC"],
+            "options": {
+                "Item": ["volt", "curr", "res", "temp", "freq"]
+            },
             "example": {
                 "Instrument": "34970a_1",
                 "Channel": "101",
@@ -169,6 +182,9 @@ MEASUREMENT_TEMPLATES = {
         "6510": {
             "required": ["Instrument", "Item"],
             "optional": ["Range", "NPLC"],
+            "options": {
+                "Item": ["volt", "curr", "res", "temp", "freq"]
+            },
             "example": {
                 "Instrument": "daq6510_1",
                 "Item": "volt"
@@ -177,14 +193,20 @@ MEASUREMENT_TEMPLATES = {
         "APS7050": {
             "required": ["Instrument", "Item"],
             "optional": ["Range"],
+            "options": {
+                "Item": ["volt", "curr"]
+            },
             "example": {
                 "Instrument": "aps7050_1",
-                "Item": "current"
+                "Item": "volt"
             }
         },
         "MDO34": {
             "required": ["Instrument", "Channel", "Item"],
             "optional": ["Range"],
+            "options": {
+                "Item": ["volt", "curr", "res", "freq", "amp"]
+            },
             "example": {
                 "Instrument": "mdo34_1",
                 "Channel": "1",
@@ -311,6 +333,9 @@ MEASUREMENT_TEMPLATES = {
         "YorN": {
             "required": ["ImagePath", "content"],
             "optional": ["WaitmSec", "Timeout", "operator_judgment"],
+            "options": {
+                "operator_judgment": ["PASS", "FAIL"]
+            },
             "example": {
                 "ImagePath": "/images/display.jpg",
                 "content": "Is display correct?",
@@ -350,6 +375,9 @@ MEASUREMENT_TEMPLATES = {
         "default": {
             "required": ["RelayName", "Action"],
             "optional": [],
+            "options": {
+                "Action": ["ON", "OFF"]
+            },
             "example": {
                 "RelayName": "RELAY_1",
                 "Action": "ON"
